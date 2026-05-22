@@ -1,5 +1,7 @@
 # llama.rs — LLaMA inference in Rust
 
+![llama](media/llama1-banner)
+
 A Rust port of [llama.cpp](https://github.com/ggml-org/llama.cpp), optimized for **AMD Opteron 3280** (bdver1) + **NVIDIA GTX 1050** (2GB VRAM).
 
 ## Project Structure & Module Organization
@@ -20,12 +22,28 @@ llama-rs/
 ├── .cargo/            # cargo config (target-cpu=bdver1)
 ├── .github/workflows/ # CI: format → clippy → test → deny → doc
 ├── test-models/       # Test GGUF files (downloaded separately, gitignored)
+├── media/             # Visual identity system and design assets
 ├── Cargo.toml         # Workspace root (9 members)
 ├── rustfmt.toml       # Formatting: max_width=100, 4-space indent
 └── deny.toml          # License policy (MIT, Apache-2.0, Unlicense)
 ```
 
 The architecture enforces **strict separation of concerns** — the GGUF parser (`gguf`) depends on zero internal crates; compute backends (`ggml-cpu`, `ggml-cuda`) depend only on `ggml`; the inference engine (`llama`) consumes all lower layers but never reaches into binaries.
+
+### Documentation & Design
+
+A complete visual identity system is available in the `media/` directory, showcasing the project's branding and design language:
+
+- **media/index.html** — Interactive design system demonstrating the Ethereal Glass aesthetic
+- **Media assets** — Logos, banners, and diagrams illustrating the architecture and performance
+- **Design principles** — Fluid motion, micro-interactions, and a vibrant color palette for each of the 8 crates
+
+The design features:
+- Distinct accent colors for each crate (gguf: purple, ggml: blue, ggml-cpu: emerald, ggml-cuda: pink, llama: amber, common: slate, llama-cli: orange, llama-server: indigo)
+- Asymmetrical Bento layout with Double-Bezel architecture
+- Fluid Island navigation with morphing hamburger icon
+- Scroll-triggered reveal animations with custom cubic-bezier curves
+- Performance-guardrailed animations using only transform and opacity
 
 ## Hardware Target
 

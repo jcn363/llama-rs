@@ -64,7 +64,9 @@ impl TensorInfo {
                                 let byte_idx = start + i * 4;
                                 // SAFETY: chunks_exact(4) guarantees 4 bytes available
                                 *out_val = f32::from_le_bytes(
-                                    raw[byte_idx..byte_idx + 4].try_into().expect("chunks_exact(4) verified"),
+                                    raw[byte_idx..byte_idx + 4]
+                                        .try_into()
+                                        .expect("chunks_exact(4) verified"),
                                 );
                             }
                         });
@@ -73,7 +75,8 @@ impl TensorInfo {
                     let mut out = Vec::with_capacity(num_elements);
                     for chunk in raw.chunks_exact(4) {
                         // SAFETY: chunks_exact(4) guarantees chunk.len() == 4
-                        let v = f32::from_le_bytes(chunk.try_into().expect("chunks_exact(4) verified"));
+                        let v =
+                            f32::from_le_bytes(chunk.try_into().expect("chunks_exact(4) verified"));
                         out.push(v);
                     }
                     Ok(out)
@@ -98,7 +101,9 @@ impl TensorInfo {
                                 let byte_idx = start + i * 2;
                                 // SAFETY: chunks_exact(2) guarantees 2 bytes available
                                 let bits = u16::from_le_bytes(
-                                    raw[byte_idx..byte_idx + 2].try_into().expect("chunks_exact(2) verified"),
+                                    raw[byte_idx..byte_idx + 2]
+                                        .try_into()
+                                        .expect("chunks_exact(2) verified"),
                                 );
                                 *out_val = half::f16::from_bits(bits).to_f32();
                             }
@@ -108,7 +113,8 @@ impl TensorInfo {
                     let mut out = Vec::with_capacity(num_elements);
                     for chunk in raw.chunks_exact(2) {
                         // SAFETY: chunks_exact(2) guarantees chunk.len() == 2
-                        let bits = u16::from_le_bytes(chunk.try_into().expect("chunks_exact(2) verified"));
+                        let bits =
+                            u16::from_le_bytes(chunk.try_into().expect("chunks_exact(2) verified"));
                         let f: f32 = half::f16::from_bits(bits).to_f32();
                         out.push(f);
                     }

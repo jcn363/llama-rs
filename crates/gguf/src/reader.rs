@@ -264,6 +264,8 @@ impl GgufReader {
             GgmlType::Iq2Xxs
             | GgmlType::Iq2Xs
             | GgmlType::Iq3Xxs
+            | GgmlType::Iq3M
+            | GgmlType::Iq3Xs
             | GgmlType::Iq1S
             | GgmlType::Iq4Nl
             | GgmlType::Iq3S

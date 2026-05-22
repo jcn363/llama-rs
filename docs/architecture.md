@@ -9,6 +9,7 @@ The **llama‑rs** repository implements a Rust‑based LLM inference stack.  It
 * **ggml** – the core tensor library handling low‑level math.
 * **gguf** – a format library for loading GGUF model files.
 * **common** – shared utilities and abstractions used across the crates.
+* **media** – visual identity system showcasing the project's branding and design language.
 
 These components are built as separate Cargo crates under the workspace and are linked together at compile time.
 

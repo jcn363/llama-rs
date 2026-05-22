@@ -56,9 +56,9 @@ pub fn dequantize_q4_0(raw: &[u8]) -> Result<Vec<f32>, GgufError> {
                         let v1 = (qs[i] >> 4) as i8 - 8;
                         if out_start + i * 2 < chunk.len() {
                             chunk[out_start + i * 2] = v0 as f32 * d;
-                            if out_start + i * 2 + 1 < chunk.len() {
-                                chunk[out_start + i * 2 + 1] = v1 as f32 * d;
-                            }
+                        }
+                        if out_start + i * 2 + 1 < chunk.len() {
+                            chunk[out_start + i * 2 + 1] = v1 as f32 * d;
                         }
                     }
                 }
@@ -84,6 +84,73 @@ pub fn dequantize_q4_0(raw: &[u8]) -> Result<Vec<f32>, GgufError> {
     }
 }
 
+/// ``Q8_K``: 8-bit K-quant.
+/// Block size: 256 elements.
+/// Layout: [scales: 16][qs: 128][ql: 64][qh: 64][d: f16] = 288 bytes
+pub fn dequantize_q8_k(raw: &[u8]) -> Result<Vec<f32>, GgufError> {
+    const QK_K: usize = 256;
+    const BLOCK_SIZE: usize = 16 + 128 + 64 + 64 + 2; // scales + qs + ql + qh + d
+    
+    if raw.len() % BLOCK_SIZE != 0 {
+        return Err(GgufError::DecodeError(
+            "Q8_K tensor size not multiple of block size".into(),
+        ));
+    }
+    
+    let num_blocks = raw.len() / BLOCK_SIZE;
+    let mut out = Vec::with_capacity(num_blocks * QK_K);
+    
+    for block in raw.chunks_exact(BLOCK_SIZE) {
+        let scales = &block[0..16];
+        let qs = &block[16..144]; // 128 bytes
+        let _ql = &block[144..208]; // 64 bytes
+        let _qh = &block[208..272]; // 64 bytes
+        let d = half::f16::from_bits(u16_from_le(&block[272..274])).to_f32();
+        
+        // Process 8-bit values (qs contains the 8-bit quantized values)
+        for i in 0..QK_K {
+            let q = qs[i] as i8 as f32;
+            let scale_idx = i / 16;
+            let scale = scales[scale_idx] as f32 / 32.0; // Scale factor for Q8_K
+            out.push(d * q * scale);
+        }
+    }
+    
+    Ok(out)
+}
+
+/// ``Q1_0``: 1-bit quantization.
+/// Block size: 256 elements.
+/// Layout: [scales: 32][qs: 32] = 64 bytes
+pub fn dequantize_q1_0(raw: &[u8]) -> Result<Vec<f32>, GgufError> {
+    const QK1_0: usize = 256;
+    const BLOCK_SIZE: usize = 32 + 32; // scales + qs
+    
+    if raw.len() % BLOCK_SIZE != 0 {
+        return Err(GgufError::DecodeError(
+            "Q1_0 tensor size not multiple of block size".into(),
+        ));
+    }
+    
+    let num_blocks = raw.len() / BLOCK_SIZE;
+    let mut out = Vec::with_capacity(num_blocks * QK1_0);
+    
+    for block in raw.chunks_exact(BLOCK_SIZE) {
+        let scales = &block[0..32];
+        let qs = &block[32..64];
+        let d = 1.0f32; // No explicit d factor in Q1_0 layout, assume 1.0
+        
+        for i in 0..QK1_0 {
+            let byte_idx = i / 8;
+            let bit_idx = i % 8;
+            let q = ((qs[byte_idx] >> bit_idx) & 1) as f32 * 2.0 - 1.0; // Convert 0/1 to -1/+1
+            let scale = scales[byte_idx] as f32 / 32.0;
+            out.push(d * q * scale);
+        }
+    }
+    
+    Ok(out)
+}
 /// ``Q4_1``: 4-bit quantization, variant 1.
 /// Block size: 32 elements.
 /// Layout: [d: f16][m: f16][qs: 16 bytes]
@@ -215,6 +282,38 @@ pub fn dequantize_q8_0(raw: &[u8]) -> Result<Vec<f32>, GgufError> {
 
     Ok(out)
 }
+
+/// ``Q8_1``: 8-bit quantization, variant 1.
+/// Block size: 32 elements.
+/// Layout: [d: f16][qs: 32 bytes] (same as Q8_0 but different interpretation)
+pub fn dequantize_q8_1(raw: &[u8]) -> Result<Vec<f32>, GgufError> {
+    const QK8_1: usize = 32;
+    const BLOCK_SIZE: usize = 2 + 32; // d (2) + qs (32)
+
+    if raw.len() % BLOCK_SIZE != 0 {
+        return Err(GgufError::DecodeError(
+            "Q8_1 tensor size not multiple of block size".into(),
+        ));
+    }
+
+    let num_blocks = raw.len() / BLOCK_SIZE;
+    let mut out = Vec::with_capacity(num_blocks * QK8_1);
+
+    for block in raw.chunks_exact(BLOCK_SIZE) {
+        let d = half::f16::from_bits(u16_from_le(&block[0..2])).to_f32();
+        let qs = &block[2..34];
+
+        for &q in qs {
+            // Q8_1 uses unsigned 8-bit values (0-255) mapped to [-1, 1] range
+            let val = q as f32 / 255.0 * 2.0 - 1.0;
+            out.push(val * d);
+        }
+    }
+
+    Ok(out)
+}
+
+
 
 /// `Q2_K`: 2-bit K-quant.
 /// Block size: 256 elements.

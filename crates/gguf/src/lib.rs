@@ -127,8 +127,10 @@ mod tests {
         assert_eq!(GgmlType::from_i32(0).unwrap(), GgmlType::F32);
         assert_eq!(GgmlType::from_i32(1).unwrap(), GgmlType::F16);
         assert_eq!(GgmlType::from_i32(2).unwrap(), GgmlType::Q4_0);
-        assert_eq!(GgmlType::from_i32(30).unwrap(), GgmlType::Bf16);
-        assert!(GgmlType::from_i32(31).is_err()); // removed type
+        assert_eq!(GgmlType::from_i32(30).unwrap(), GgmlType::I64);
+        assert_eq!(GgmlType::from_i32(31).unwrap(), GgmlType::F64);
+        assert_eq!(GgmlType::from_i32(32).unwrap(), GgmlType::Bf16);
+        assert!(GgmlType::from_i32(33).is_err()); // removed type
     }
 
     #[test]
