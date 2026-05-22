@@ -4,6 +4,5 @@ test-models/
 server.log
 .uncensored/
 checkpoints/
-media/
 models/
 rust_uncensored/

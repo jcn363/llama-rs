@@ -1,0 +1,1287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>llama.rs — LLaMA inference in Rust</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Clash+Display:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   ROOT — Ethereal Glass Vibe
+   ============================================================ */
+:root {
+  --bg-deep: #050505;
+  --bg-surface: #0a0a0a;
+  --glass-bg: rgba(255, 255, 255, 0.03);
+  --glass-border: rgba(255, 255, 255, 0.06);
+  --glass-hairline: rgba(255, 255, 255, 0.04);
+  --text-primary: rgba(255, 255, 255, 0.92);
+  --text-secondary: rgba(255, 255, 255, 0.55);
+  --text-tertiary: rgba(255, 255, 255, 0.30);
+
+  /* Crate colors — each part gets a distinct accent */
+  --crate-gguf:       #A78BFA;
+  --crate-ggml:       #60A5FA;
+  --crate-ggml-cpu:   #34D399;
+  --crate-ggml-cuda:  #F472B6;
+  --crate-llama:      #FBBF24;
+  --crate-common:     #94A3B8;
+  --crate-cli:        #FB923C;
+  --crate-server:     #818CF8;
+
+  --radius-outer: 2rem;
+  --radius-inner: calc(2rem - 0.375rem);
+  --radius-pill: 9999px;
+
+  --ease-spring: cubic-bezier(0.32, 0.72, 0, 1);
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --transition-slow: 800ms var(--ease-out);
+  --transition-med: 500ms var(--ease-out);
+}
+
+/* ============================================================
+   RESET & BASE
+   ============================================================ */
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+
+body {
+  font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+  background: var(--bg-deep);
+  color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
+}
+
+/* ============================================================
+   NOISE OVERLAY — fixed, pointer-events-none
+   ============================================================ */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  pointer-events: none;
+  opacity: 0.025;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-repeat: repeat;
+  background-size: 256px 256px;
+}
+
+/* ============================================================
+   FLUID ISLAND NAV
+   ============================================================ */
+.nav-island {
+  position: fixed;
+  top: 1.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  gap: 0.125rem;
+  padding: 0.5rem;
+  background: rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(24px) saturate(1.4);
+  -webkit-backdrop-filter: blur(24px) saturate(1.4);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-pill);
+  transition: all 500ms var(--ease-out);
+}
+
+.nav-island:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.nav-logo {
+  font-family: 'Clash Display', sans-serif;
+  font-weight: 600;
+  font-size: 0.95rem;
+  letter-spacing: -0.02em;
+  padding: 0.5rem 1rem 0.5rem 1.25rem;
+  color: var(--text-primary);
+  text-decoration: none;
+}
+
+.nav-logo span { color: var(--crate-llama); }
+
+.nav-links { display: flex; gap: 0.125rem; }
+
+.nav-links a {
+  padding: 0.45rem 1rem;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  text-decoration: none;
+  border-radius: var(--radius-pill);
+  transition: all 350ms var(--ease-out);
+  letter-spacing: 0.01em;
+}
+
+.nav-links a:hover {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+/* Hamburger — hidden on desktop */
+.nav-hamburger {
+  display: none;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0.5rem 0.75rem;
+  position: relative;
+  width: 44px;
+  height: 44px;
+}
+
+.nav-hamburger span {
+  display: block;
+  width: 20px;
+  height: 1.5px;
+  background: var(--text-primary);
+  border-radius: 2px;
+  position: absolute;
+  left: 12px;
+  transition: all 400ms var(--ease-spring);
+}
+
+.nav-hamburger span:nth-child(1) { top: 16px; }
+.nav-hamburger span:nth-child(2) { top: 22px; }
+
+/* Hamburger → X morph */
+.nav-hamburger.active span:nth-child(1) {
+  top: 22px;
+  transform: rotate(45deg);
+}
+.nav-hamburger.active span:nth-child(2) {
+  top: 22px;
+  transform: rotate(-45deg);
+}
+
+/* Mobile overlay menu */
+.mobile-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 99;
+  background: rgba(0, 0, 0, 0.85);
+  backdrop-filter: blur(48px) saturate(1.6);
+  -webkit-backdrop-filter: blur(48px) saturate(1.6);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1.5rem;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 500ms var(--ease-out);
+}
+
+.mobile-overlay.open {
+  opacity: 1;
+  pointer-events: all;
+}
+
+.mobile-overlay a {
+  font-family: 'Clash Display', sans-serif;
+  font-size: 1.75rem;
+  font-weight: 500;
+  color: var(--text-primary);
+  text-decoration: none;
+  opacity: 0;
+  transform: translateY(1.5rem);
+  transition: all 600ms var(--ease-out);
+  transition-delay: 0ms;
+}
+
+.mobile-overlay.open a {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.mobile-overlay.open a:nth-child(1) { transition-delay: 100ms; }
+.mobile-overlay.open a:nth-child(2) { transition-delay: 160ms; }
+.mobile-overlay.open a:nth-child(3) { transition-delay: 220ms; }
+.mobile-overlay.open a:nth-child(4) { transition-delay: 280ms; }
+.mobile-overlay.open a:nth-child(5) { transition-delay: 340ms; }
+
+/* ============================================================
+   HERO
+   ============================================================ */
+.hero {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 8rem 2rem 6rem;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Radial mesh orbs */
+.hero::before {
+  content: '';
+  position: absolute;
+  width: 80vw;
+  height: 80vw;
+  top: -20%;
+  right: -20%;
+  background: radial-gradient(circle at 30% 50%, rgba(167, 139, 250, 0.12) 0%, transparent 60%),
+              radial-gradient(circle at 70% 60%, rgba(251, 191, 36, 0.08) 0%, transparent 50%),
+              radial-gradient(circle at 50% 30%, rgba(96, 165, 250, 0.06) 0%, transparent 40%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.hero * { position: relative; z-index: 1; }
+
+.eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 1rem 0.35rem 0.5rem;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-pill);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  margin-bottom: 2rem;
+  transition: all 400ms var(--ease-out);
+}
+
+.eyebrow:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.eyebrow-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--crate-llama);
+  box-shadow: 0 0 12px rgba(251, 191, 36, 0.3);
+  animation: pulse-dot 2s ease-in-out infinite;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.6; transform: scale(0.85); }
+}
+
+.hero h1 {
+  font-family: 'Clash Display', sans-serif;
+  font-weight: 700;
+  font-size: clamp(3rem, 10vw, 7rem);
+  line-height: 0.95;
+  letter-spacing: -0.04em;
+  margin-bottom: 1.5rem;
+}
+
+.hero h1 .gradient {
+  background: linear-gradient(135deg, #FBBF24 0%, #F472B6 35%, #A78BFA 65%, #60A5FA 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.hero p {
+  font-size: 1.15rem;
+  color: var(--text-secondary);
+  max-width: 540px;
+  line-height: 1.7;
+  font-weight: 400;
+  margin-bottom: 2.5rem;
+}
+
+/* ============================================================
+   DOUBLE-BEZEL — Crate cards
+   ============================================================ */
+.double-bezel {
+  padding: 0.375rem;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-hairline);
+  border-radius: var(--radius-outer);
+  transition: all 500ms var(--ease-out);
+  position: relative;
+}
+
+.double-bezel:hover {
+  border-color: var(--glass-border);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.double-bezel-inner {
+  background: var(--bg-surface);
+  border-radius: var(--radius-inner);
+  padding: 1.75rem;
+  height: 100%;
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.06);
+  transition: all 500ms var(--ease-out);
+  display: flex;
+  flex-direction: column;
+}
+
+.double-bezel-inner:hover {
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.1);
+}
+
+/* ============================================================
+   SECTION — Architecture Crate Grid
+   ============================================================ */
+.section {
+  padding: 6rem 2rem;
+  max-width: 1280px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.section-header {
+  text-align: center;
+  margin-bottom: 4rem;
+}
+
+.section-header h2 {
+  font-family: 'Clash Display', sans-serif;
+  font-size: clamp(2rem, 5vw, 3.2rem);
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  margin-bottom: 0.75rem;
+}
+
+.section-header p {
+  color: var(--text-secondary);
+  font-size: 1rem;
+  max-width: 500px;
+  margin: 0 auto;
+  line-height: 1.7;
+}
+
+/* Asymmetrical Bento Grid */
+.bento-grid {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  gap: 0.75rem;
+}
+
+/* Crate accent border stripe */
+.crate-accent {
+  position: absolute;
+  top: -1px;
+  left: 2rem;
+  right: 2rem;
+  height: 2px;
+  border-radius: 0 0 2px 2px;
+  transition: all 500ms var(--ease-out);
+}
+
+.double-bezel:hover .crate-accent {
+  height: 3px;
+  box-shadow: 0 0 20px var(--accent-color);
+}
+
+/* Crate header inside card */
+.crate-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.crate-icon {
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 0.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 0.85rem;
+  flex-shrink: 0;
+  border: 1px solid rgba(255,255,255,0.06);
+  background: rgba(255,255,255,0.03);
+}
+
+.crate-name {
+  font-family: 'Clash Display', sans-serif;
+  font-weight: 600;
+  font-size: 1.1rem;
+  letter-spacing: -0.02em;
+}
+
+.crate-tag {
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 0.2rem 0.55rem;
+  border-radius: var(--radius-pill);
+  background: rgba(255,255,255,0.04);
+  color: var(--text-tertiary);
+  margin-left: auto;
+}
+
+.crate-desc {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  line-height: 1.6;
+  margin-bottom: 1rem;
+  flex: 1;
+}
+
+.crate-features {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: auto;
+}
+
+.crate-features span {
+  font-size: 0.65rem;
+  font-weight: 500;
+  padding: 0.2rem 0.55rem;
+  border-radius: var(--radius-pill);
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.04);
+  color: var(--text-tertiary);
+  letter-spacing: 0.02em;
+}
+
+/* Individual crate grid placements */
+.crate-gguf     { --accent-color: var(--crate-gguf);      --accent-rgb: 167, 139, 250; }
+.crate-ggml     { --accent-color: var(--crate-ggml);      --accent-rgb: 96, 165, 250; }
+.crate-cpu      { --accent-color: var(--crate-ggml-cpu);  --accent-rgb: 52, 211, 153; }
+.crate-cuda     { --accent-color: var(--crate-ggml-cuda); --accent-rgb: 244, 114, 182; }
+.crate-llama    { --accent-color: var(--crate-llama);     --accent-rgb: 251, 191, 36; }
+.crate-common   { --accent-color: var(--crate-common);    --accent-rgb: 148, 163, 184; }
+.crate-cli      { --accent-color: var(--crate-cli);       --accent-rgb: 251, 146, 60; }
+.crate-server   { --accent-color: var(--crate-server);    --accent-rgb: 129, 140, 248; }
+
+.crate-icon { background: rgba(var(--accent-rgb), 0.1); color: var(--accent-color); }
+.crate-accent { background: var(--accent-color); }
+
+/* Grid spans */
+.crate-gguf  { grid-column: span 4; }
+.crate-ggml  { grid-column: span 4; }
+.crate-cpu   { grid-column: span 4; }
+.crate-cuda  { grid-column: span 5; }
+.crate-llama { grid-column: span 7; }
+.crate-common { grid-column: span 4; }
+.crate-cli   { grid-column: span 4; }
+.crate-server { grid-column: span 4; }
+
+/* ============================================================
+   DEPENDENCY GRAPH — visual flow
+   ============================================================ */
+.dep-graph {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 4rem 2rem;
+  position: relative;
+}
+
+.dep-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.dep-node {
+  padding: 0.6rem 1.2rem;
+  border-radius: var(--radius-pill);
+  font-family: 'Clash Display', sans-serif;
+  font-weight: 500;
+  font-size: 0.85rem;
+  letter-spacing: -0.01em;
+  border: 1px solid rgba(255,255,255,0.06);
+  background: rgba(255,255,255,0.03);
+  backdrop-filter: blur(8px);
+  transition: all 400ms var(--ease-out);
+  cursor: default;
+}
+
+.dep-node:hover {
+  transform: translateY(-2px);
+  border-color: rgba(255,255,255,0.12);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+}
+
+.dep-arrow {
+  color: var(--text-tertiary);
+  font-size: 0.8rem;
+  opacity: 0.4;
+}
+
+.dep-connector {
+  width: 2px;
+  height: 1.5rem;
+  background: linear-gradient(to bottom, transparent, var(--glass-border), transparent);
+}
+
+/* ============================================================
+   SPECS & PERFORMANCE
+   ============================================================ */
+.specs-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.75rem;
+}
+
+.specs-grid .double-bezel-inner {
+  flex-direction: row;
+  align-items: center;
+  gap: 1rem;
+}
+
+.spec-label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+  min-width: 60px;
+}
+
+.spec-value {
+  font-family: 'Clash Display', sans-serif;
+  font-size: 1.1rem;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+}
+
+/* Performance table */
+.perf-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0 0.35rem;
+}
+
+.perf-table th {
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+  text-align: left;
+  padding: 0.5rem 0.75rem;
+}
+
+.perf-table td {
+  padding: 0.75rem;
+  font-size: 0.85rem;
+  background: rgba(255,255,255,0.02);
+  border-radius: 0.5rem;
+}
+
+.perf-table tr td:first-child { font-weight: 500; color: var(--text-primary); }
+.perf-table tr td:last-child { font-family: 'Clash Display', sans-serif; font-weight: 600; color: var(--crate-llama); text-align: right; }
+
+/* ============================================================
+   QUICK START — Code blocks
+   ============================================================ */
+.code-block {
+  background: rgba(0,0,0,0.4);
+  border: 1px solid rgba(255,255,255,0.04);
+  border-radius: 0.75rem;
+  padding: 1.25rem 1.5rem;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 0.8rem;
+  line-height: 1.8;
+  color: var(--text-secondary);
+  overflow-x: auto;
+  position: relative;
+}
+
+.code-block .cmd { color: var(--crate-llama); }
+.code-block .comment { color: var(--text-tertiary); font-style: italic; }
+.code-block .highlight { color: #60A5FA; }
+.code-block .path { color: #A78BFA; }
+
+/* ============================================================
+   LARGE DEPENDENCY FLOW GRAPH
+   ============================================================ */
+.flow-section {
+  padding: 6rem 2rem;
+  max-width: 1280px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.flow-diagram {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+  padding: 2rem 0;
+}
+
+.flow-layer {
+  display: flex;
+  justify-content: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  position: relative;
+}
+
+.flow-layer + .flow-layer {
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+}
+
+.flow-layer + .flow-layer::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 2px;
+  height: 0.75rem;
+  background: linear-gradient(to bottom, rgba(255,255,255,0.06), rgba(255,255,255,0.02));
+}
+
+.flow-card {
+  padding: 0.75rem 1.25rem;
+  border-radius: var(--radius-pill);
+  font-family: 'Clash Display', sans-serif;
+  font-weight: 500;
+  font-size: 0.8rem;
+  letter-spacing: -0.01em;
+  background: rgba(var(--accent-rgb, 255,255,255), 0.06);
+  border: 1px solid rgba(var(--accent-rgb, 255,255,255), 0.1);
+  color: var(--text-primary);
+  transition: all 400ms var(--ease-out);
+  cursor: default;
+}
+
+.flow-card:hover {
+  transform: translateY(-3px) scale(1.02);
+  box-shadow: 0 12px 40px rgba(0,0,0,0.4);
+}
+
+/* ============================================================
+   FOOTER
+   ============================================================ */
+.footer {
+  padding: 4rem 2rem 2.5rem;
+  text-align: center;
+  border-top: 1px solid var(--glass-hairline);
+  max-width: 1280px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.footer-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.5rem;
+}
+
+.footer-links {
+  display: flex;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.footer-links a {
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--text-tertiary);
+  text-decoration: none;
+  transition: color 300ms var(--ease-out);
+}
+
+.footer-links a:hover { color: var(--text-primary); }
+
+.footer-copy {
+  font-size: 0.7rem;
+  color: var(--text-tertiary);
+  letter-spacing: 0.02em;
+}
+
+/* ============================================================
+   SCROLL ENTRY ANIMATIONS (IntersectionObserver via CSS)
+   ============================================================ */
+.reveal {
+  opacity: 0;
+  transform: translateY(2rem);
+  transition: opacity 800ms var(--ease-out), transform 800ms var(--ease-out);
+}
+
+.reveal.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.reveal-delay-1 { transition-delay: 100ms; }
+.reveal-delay-2 { transition-delay: 200ms; }
+.reveal-delay-3 { transition-delay: 300ms; }
+
+/* ============================================================
+   BUTTON-IN-BUTTON — CTA
+   ============================================================ */
+.btn-island {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.625rem;
+  padding: 0.625rem 0.625rem 0.625rem 1.5rem;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-pill);
+  color: var(--text-primary);
+  font-size: 0.85rem;
+  font-weight: 500;
+  text-decoration: none;
+  transition: all 400ms var(--ease-out);
+  cursor: pointer;
+  position: relative;
+}
+
+.btn-island:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.15);
+  transform: scale(1.02);
+}
+
+.btn-island:active {
+  transform: scale(0.98);
+}
+
+.btn-icon-wrapper {
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 400ms var(--ease-out);
+}
+
+.btn-island:hover .btn-icon-wrapper {
+  background: rgba(255, 255, 255, 0.14);
+  transform: translateX(2px) translateY(-1px) scale(1.05);
+}
+
+.btn-icon-wrapper svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: var(--text-primary);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: transform 400ms var(--ease-out);
+}
+
+.btn-island:hover .btn-icon-wrapper svg {
+  transform: translateX(1px) translateY(-1px);
+}
+
+/* ============================================================
+   RESPONSIVE
+   ============================================================ */
+@media (max-width: 900px) {
+  .bento-grid {
+    grid-template-columns: repeat(6, 1fr);
+    gap: 0.625rem;
+  }
+
+  .crate-gguf,
+  .crate-ggml,
+  .crate-cpu,
+  .crate-cuda,
+  .crate-llama,
+  .crate-common,
+  .crate-cli,
+  .crate-server {
+    grid-column: span 6;
+  }
+
+  .specs-grid { grid-template-columns: 1fr; }
+  .section { padding: 4rem 1.25rem; }
+
+  .nav-links { display: none; }
+  .nav-hamburger { display: block; }
+}
+
+@media (max-width: 768px) {
+  .bento-grid {
+    grid-template-columns: 1fr;
+    gap: 0.625rem;
+  }
+
+  .crate-gguf,
+  .crate-ggml,
+  .crate-cpu,
+  .crate-cuda,
+  .crate-llama,
+  .crate-common,
+  .crate-cli,
+  .crate-server {
+    grid-column: 1;
+  }
+
+  .hero { padding: 6rem 1.25rem 4rem; }
+  .hero p { font-size: 1rem; }
+  .specs-grid { grid-template-columns: 1fr; }
+  .section { padding: 3rem 1rem; }
+  .perf-table { font-size: 0.75rem; }
+
+  .nav-island {
+    width: calc(100% - 2rem);
+    justify-content: space-between;
+    border-radius: 1.25rem;
+  }
+
+  .nav-links { display: none; }
+  .nav-hamburger { display: block; }
+
+  .dep-row { gap: 0.5rem; }
+  .flow-layer { gap: 0.5rem; }
+  .flow-card { font-size: 0.7rem; padding: 0.5rem 0.9rem; }
+}
+</style>
+</head>
+<body>
+
+<!-- ============================================================
+     FLUID ISLAND NAV
+     ============================================================ -->
+<nav class="nav-island" id="navbar">
+  <a href="#" class="nav-logo">llama<span>.rs</span></a>
+  <div class="nav-links">
+    <a href="#architecture">Architecture</a>
+    <a href="#crates">Crates</a>
+    <a href="#specs">Hardware</a>
+    <a href="#performance">Benchmarks</a>
+    <a href="#start">Quick Start</a>
+  </div>
+  <button class="nav-hamburger" id="hamburger" aria-label="Menu">
+    <span></span>
+    <span></span>
+  </button>
+</nav>
+
+<!-- Mobile overlay -->
+<div class="mobile-overlay" id="mobileOverlay">
+  <a href="#architecture" class="mobile-link">Architecture</a>
+  <a href="#crates" class="mobile-link">Crates</a>
+  <a href="#specs" class="mobile-link">Hardware</a>
+  <a href="#performance" class="mobile-link">Benchmarks</a>
+  <a href="#start" class="mobile-link">Quick Start</a>
+</div>
+
+<!-- ============================================================
+     HERO
+     ============================================================ -->
+<section class="hero">
+  <div class="eyebrow">
+    <span class="eyebrow-dot"></span>
+    Rust port of llama.cpp
+  </div>
+  <h1>
+    LLaMA inference<br>
+    <span class="gradient">in Rust</span>
+  </h1>
+  <p>
+    A minimal, high-performance inference engine optimized for
+    AMD Opteron 3280 + NVIDIA GTX 1050.
+    GGUF v3. AVX + SSE4.2. cuBLAS. 8 architectures.
+  </p>
+  <div style="display:flex;gap:0.75rem;flex-wrap:wrap;justify-content:center;">
+    <a href="#start" class="btn-island">
+      Get Started
+      <span class="btn-icon-wrapper">
+        <svg viewBox="0 0 24 24"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+      </span>
+    </a>
+    <a href="https://github.com/your-org/llama-rs" class="btn-island" style="background:rgba(255,255,255,0.02);">
+      GitHub
+      <span class="btn-icon-wrapper">
+        <svg viewBox="0 0 24 24"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"/></svg>
+      </span>
+    </a>
+  </div>
+</section>
+
+<!-- ============================================================
+     DEPENDENCY FLOW GRAPH
+     ============================================================ -->
+<section class="flow-section" id="architecture">
+  <div class="section-header reveal">
+    <h2>Architecture</h2>
+    <p>Eight crates. Strict separation of concerns. No circular dependencies.</p>
+  </div>
+  <div class="flow-diagram reveal reveal-delay-1">
+    <!-- Row 1: ggml (foundation) -->
+    <div class="flow-layer">
+      <div class="flow-card" style="--accent-rgb:96,165,250;">ggml</div>
+    </div>
+    <!-- Row 2: gguf + ggml-cpu + ggml-cuda -->
+    <div class="flow-layer">
+      <div class="flow-card" style="--accent-rgb:167,139,250;">gguf</div>
+      <div class="flow-card" style="--accent-rgb:52,211,153;">ggml-cpu</div>
+      <div class="flow-card" style="--accent-rgb:244,114,182;">ggml-cuda</div>
+    </div>
+    <!-- Row 3: llama -->
+    <div class="flow-layer">
+      <div class="flow-card" style="--accent-rgb:251,191,36;">llama</div>
+    </div>
+    <!-- Row 4: common + cli + server -->
+    <div class="flow-layer">
+      <div class="flow-card" style="--accent-rgb:148,163,184;">common</div>
+      <div class="flow-card" style="--accent-rgb:251,146,60;">llama-cli</div>
+      <div class="flow-card" style="--accent-rgb:129,140,248;">llama-server</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================
+     CRATE SHOWCASE — Asymmetrical Bento
+     ============================================================ -->
+<section class="section" id="crates">
+  <div class="section-header reveal">
+    <h2>Eight Parts,<br>One Engine</h2>
+    <p>Each crate owns a specific subsystem. Together they form the full inference pipeline.</p>
+  </div>
+
+  <div class="bento-grid">
+
+    <!-- gguf — Purple -->
+    <div class="double-bezel crate-gguf reveal reveal-delay-1">
+      <div class="crate-accent"></div>
+      <div class="double-bezel-inner">
+        <div class="crate-header">
+          <div class="crate-icon">GF</div>
+          <span class="crate-name">gguf</span>
+          <span class="crate-tag">parser</span>
+        </div>
+        <p class="crate-desc">GGUF v3 file format parser. Memory-mapped I/O, 13 metadata types, 42 tensor types, SIMD-parallelized dequantization.</p>
+        <div class="crate-features">
+          <span>v3 format</span>
+          <span>mmap I/O</span>
+          <span>42 dtypes</span>
+          <span>dequant</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ggml — Blue -->
+    <div class="double-bezel crate-ggml reveal reveal-delay-1">
+      <div class="crate-accent"></div>
+      <div class="double-bezel-inner">
+        <div class="crate-header">
+          <div class="crate-icon">GM</div>
+          <span class="crate-name">ggml</span>
+          <span class="crate-tag">core</span>
+        </div>
+        <p class="crate-desc">Core tensor library. Multi-dimensional arrays, DAG computation graphs. Foundation type for all backends.</p>
+        <div class="crate-features">
+          <span>Tensor</span>
+          <span>DType</span>
+          <span>Graph DAG</span>
+          <span>zero deps</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ggml-cpu — Emerald -->
+    <div class="double-bezel crate-cpu reveal reveal-delay-1">
+      <div class="crate-accent"></div>
+      <div class="double-bezel-inner">
+        <div class="crate-header">
+          <div class="crate-icon">CP</div>
+          <span class="crate-name">ggml-cpu</span>
+          <span class="crate-tag">backend</span>
+        </div>
+        <p class="crate-desc">CPU compute backend. Block-tiled matmul with AVX 8-wide → SSE4.2 4-wide → scalar fallback. std::thread::scope parallelism.</p>
+        <div class="crate-features">
+          <span>AVX</span>
+          <span>SSE4.2</span>
+          <span>block-tiled</span>
+          <span>16×16 tiles</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ggml-cuda — Pink -->
+    <div class="double-bezel crate-cuda reveal reveal-delay-2">
+      <div class="crate-accent"></div>
+      <div class="double-bezel-inner">
+        <div class="crate-header">
+          <div class="crate-icon">CU</div>
+          <span class="crate-name">ggml-cuda</span>
+          <span class="crate-tag">gpu</span>
+        </div>
+        <p class="crate-desc">CUDA backend via cuBLAS. GPU tensor operations, VRAM tracking, device transfer. GTX 1050 (sm_61, 2GB) target.</p>
+        <div class="crate-features">
+          <span>cuBLAS</span>
+          <span>VRAM tracking</span>
+          <span>sm_61</span>
+          <span>stub mode</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- llama — Amber (centerpiece, larger) -->
+    <div class="double-bezel crate-llama reveal reveal-delay-2">
+      <div class="crate-accent"></div>
+      <div class="double-bezel-inner">
+        <div class="crate-header">
+          <div class="crate-icon">LM</div>
+          <span class="crate-name">llama</span>
+          <span class="crate-tag">engine</span>
+        </div>
+        <p class="crate-desc">The inference engine. Full transformer forward pass — RMSNorm, RoPE, multi-head GQA attention, SwiGLU FFN, KV cache, flash attention. Supports Llama, Mistral, Phi, Gemma, Qwen2, StableLM.</p>
+        <div class="crate-features">
+          <span>transformer</span>
+          <span>flash attn</span>
+          <span>GQA</span>
+          <span>KV cache</span>
+          <span>8 archs</span>
+          <span>profile</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- common — Slate -->
+    <div class="double-bezel crate-common reveal reveal-delay-2">
+      <div class="crate-accent"></div>
+      <div class="double-bezel-inner">
+        <div class="crate-header">
+          <div class="crate-icon">CM</div>
+          <span class="crate-name">common</span>
+          <span class="crate-tag">utils</span>
+        </div>
+        <p class="crate-desc">Shared utilities — clap argument parsing, sampling config (temperature, top-k, top-p, repeat penalty), chat templates.</p>
+        <div class="crate-features">
+          <span>args</span>
+          <span>sampling</span>
+          <span>templates</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- llama-cli — Orange -->
+    <div class="double-bezel crate-cli reveal reveal-delay-3">
+      <div class="crate-accent"></div>
+      <div class="double-bezel-inner">
+        <div class="crate-header">
+          <div class="crate-icon">CL</div>
+          <span class="crate-name">llama-cli</span>
+          <span class="crate-tag">binary</span>
+        </div>
+        <p class="crate-desc">CLI binary. Interactive stdin mode, single-prompt mode, streaming token output, configurable context window.</p>
+        <div class="crate-features">
+          <span>interactive</span>
+          <span>streaming</span>
+          <span>single-prompt</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- llama-server — Indigo -->
+    <div class="double-bezel crate-server reveal reveal-delay-3">
+      <div class="crate-accent"></div>
+      <div class="double-bezel-inner">
+        <div class="crate-header">
+          <div class="crate-icon">SV</div>
+          <span class="crate-name">llama-server</span>
+          <span class="crate-tag">api</span>
+        </div>
+        <p class="crate-desc">Axum-based HTTP server. POST /completion (JSON + SSE streaming), GET /health. Tokio + futures async runtime.</p>
+        <div class="crate-features">
+          <span>REST API</span>
+          <span>SSE streaming</span>
+          <span>axum</span>
+          <span>/health</span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ============================================================
+     HARDWARE TARGET
+     ============================================================ -->
+<section class="section" id="specs">
+  <div class="section-header reveal">
+    <h2>Hardware Target</h2>
+    <p>Optimized for constrained hardware — low SIMD, limited VRAM.</p>
+  </div>
+  <div class="specs-grid reveal reveal-delay-1">
+    <div class="double-bezel">
+      <div class="double-bezel-inner" style="flex-direction:row;align-items:center;gap:1rem;">
+        <div class="spec-label">CPU</div>
+        <div class="spec-value">AMD Opteron 3280 — 8 cores, 32GB</div>
+      </div>
+    </div>
+    <div class="double-bezel">
+      <div class="double-bezel-inner" style="flex-direction:row;align-items:center;gap:1rem;">
+        <div class="spec-label">SIMD</div>
+        <div class="spec-value">SSE4.2 · AVX · no FMA/AVX2</div>
+      </div>
+    </div>
+    <div class="double-bezel">
+      <div class="double-bezel-inner" style="flex-direction:row;align-items:center;gap:1rem;">
+        <div class="spec-label">GPU</div>
+        <div class="spec-value">NVIDIA GTX 1050 — 640 cores, 2GB</div>
+      </div>
+    </div>
+    <div class="double-bezel">
+      <div class="double-bezel-inner" style="flex-direction:row;align-items:center;gap:1rem;">
+        <div class="spec-label">Compute</div>
+        <div class="spec-value">CUDA sm_61 · cuBLAS</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================
+     PERFORMANCE
+     ============================================================ -->
+<section class="section" id="performance">
+  <div class="section-header reveal">
+    <h2>Benchmarks</h2>
+    <p>Block-tiled matmul performance across matrix sizes.</p>
+  </div>
+  <div class="double-bezel reveal reveal-delay-1">
+    <div class="double-bezel-inner" style="padding:1.5rem;">
+      <table class="perf-table">
+        <thead>
+          <tr>
+            <th>Operation</th>
+            <th>Size</th>
+            <th>Single Thread</th>
+            <th>8 Cores</th>
+            <th>Speedup</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>Matmul</td><td>64×64</td><td>86µs</td><td>429µs</td><td>0.2×</td></tr>
+          <tr><td>Matmul</td><td>128×128</td><td>637µs</td><td>562µs</td><td>1.1×</td></tr>
+          <tr><td>Matmul</td><td>256×256</td><td>4.2ms</td><td>1.7ms</td><td>2.5×</td></tr>
+          <tr><td>Matmul</td><td>512×512</td><td>36.5ms</td><td>11.4ms</td><td>3.2×</td></tr>
+          <tr><td>Dot product</td><td>4096</td><td>1.1µs</td><td>—</td><td>—</td></tr>
+          <tr><td>Forward pass</td><td>1 token (13M)</td><td>~18µs</td><td>—</td><td>—</td></tr>
+          <tr><td>Generation</td><td>5 tokens (13M)</td><td>~84µs</td><td>—</td><td>—</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================
+     QUICK START
+     ============================================================ -->
+<section class="section" id="start">
+  <div class="section-header reveal">
+    <h2>Quick Start</h2>
+    <p>From clone to inference in four commands.</p>
+  </div>
+  <div style="display:flex;flex-direction:column;gap:0.625rem;">
+    <div class="double-bezel reveal reveal-delay-1">
+      <div class="double-bezel-inner" style="padding:0;">
+        <div class="code-block"><span class="comment"># Build (release, optimized)</span><br>$ cargo build <span class="highlight">--release</span> <span class="highlight">--workspace</span></div>
+      </div>
+    </div>
+    <div class="double-bezel reveal reveal-delay-1">
+      <div class="double-bezel-inner" style="padding:0;">
+        <div class="code-block"><span class="comment"># Run CLI inference</span><br>$ <span class="cmd">llama-cli</span> <span class="path">-m model.gguf</span> <span class="cmd">-p</span> <span class="highlight">"Hello, world!"</span> <span class="cmd">-n</span> 128</div>
+      </div>
+    </div>
+    <div class="double-bezel reveal reveal-delay-2">
+      <div class="double-bezel-inner" style="padding:0;">
+        <div class="code-block"><span class="comment"># Start HTTP server</span><br>$ <span class="cmd">llama-server</span> <span class="path">-m model.gguf</span> <span class="cmd">--host</span> 0.0.0.0 <span class="cmd">--port</span> 8080</div>
+      </div>
+    </div>
+    <div class="double-bezel reveal reveal-delay-2">
+      <div class="double-bezel-inner" style="padding:0;">
+        <div class="code-block"><span class="comment"># Run all tests</span><br>$ cargo test <span class="highlight">--workspace</span> <span class="highlight">--verbose</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================
+     FOOTER
+     ============================================================ -->
+<footer class="footer">
+  <div class="footer-inner">
+    <div class="footer-links">
+      <a href="https://github.com/your-org/llama-rs">GitHub</a>
+      <a href="https://github.com/ggml-org/llama.cpp">llama.cpp</a>
+      <a href="CONTRIBUTING.md">Contributing</a>
+      <a href="LICENSE">License</a>
+    </div>
+    <div class="footer-copy">
+      llama.rs — MIT License · Built with Rust edition 2024
+    </div>
+  </div>
+</footer>
+
+<!-- ============================================================
+     INTERSECTION OBSERVER — Scroll reveals
+     ============================================================ -->
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+
+  /* --- Scroll Reveal --- */
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        entry.target.classList.add('visible');
+        observer.unobserve(entry.target);
+      }
+    });
+  }, { threshold: 0.1, rootMargin: '0px 0px -40px 0px' });
+
+  document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+
+  /* --- Hamburger Menu --- */
+  const hamburger = document.getElementById('hamburger');
+  const overlay = document.getElementById('mobileOverlay');
+
+  hamburger.addEventListener('click', () => {
+    const isOpen = overlay.classList.contains('open');
+    hamburger.classList.toggle('active', !isOpen);
+    overlay.classList.toggle('open', !isOpen);
+    document.body.style.overflow = isOpen ? '' : 'hidden';
+  });
+
+  /* Close overlay on link click */
+  document.querySelectorAll('.mobile-link').forEach(link => {
+    link.addEventListener('click', () => {
+      hamburger.classList.remove('active');
+      overlay.classList.remove('open');
+      document.body.style.overflow = '';
+    });
+  });
+
+  /* Close overlay on escape */
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && overlay.classList.contains('open')) {
+      hamburger.classList.remove('active');
+      overlay.classList.remove('open');
+      document.body.style.overflow = '';
+    }
+  });
+
+});
+</script>
+</body>
+</html>
