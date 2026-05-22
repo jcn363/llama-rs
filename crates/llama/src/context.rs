@@ -106,113 +106,8 @@ impl InferenceContext {
     /// Run a single forward pass through the model for a given token.
     /// Returns logits of shape (vocab_size,).
     fn forward_pass(&self, token_id: usize) -> anyhow::Result<Vec<f32>> {
-        let token_embd = self.model.get_tensor("token_embd.weight")?;
-        let mut x = embed_token(token_id, &token_embd, self.model.n_embd)?;
-
-        let n_layers = self.model.n_layers();
-        if n_layers == 0 {
-            return Ok(vec![0.0; self.model.vocab_size]);
-        }
-
-        let n_head = self.model.n_head;
-        let n_head_kv = self.model.n_head_kv;
-        let head_dim = self.model.d_head;
-        let n_embd = self.model.n_embd;
-        let rope_theta = self.model.rope_theta;
-
-        for layer_idx in 0..n_layers {
-            let residual = x.clone();
-
-            let attn_norm_name = format!("blk.{}.attn_norm.weight", layer_idx);
-            if let Ok(attn_norm_weight) = self.model.get_tensor(&attn_norm_name) {
-                x = rms_norm(&x, &attn_norm_weight, self.model.norm_eps);
-            }
-
-            let q_proj_name = format!("blk.{}.attn_q.weight", layer_idx);
-            let k_proj_name = format!("blk.{}.attn_k.weight", layer_idx);
-            let v_proj_name = format!("blk.{}.attn_v.weight", layer_idx);
-
-            if let (Ok(q_weight), Ok(k_weight), Ok(v_weight)) = (
-                self.model.get_tensor(&q_proj_name),
-                self.model.get_tensor(&k_proj_name),
-                self.model.get_tensor(&v_proj_name),
-            ) {
-                let mut q = mat_vec(&q_weight, n_head * head_dim, n_embd, &x);
-                let mut k = mat_vec(&k_weight, n_head_kv * head_dim, n_embd, &x);
-                let v = mat_vec(&v_weight, n_head_kv * head_dim, n_embd, &x);
-
-                let kv_cache = self.model.kv_cache.write().expect("lock poisoned");
-                let position_offset = kv_cache.get_layer_ref(layer_idx).cur_len;
-                drop(kv_cache);
-
-                let mut kv_cache = self.model.kv_cache.write().expect("lock poisoned");
-                let attn_output = multi_head_attention_with_cache(
-                    n_head,
-                    n_head_kv,
-                    head_dim,
-                    1,
-                    position_offset,
-                    &mut q,
-                    &mut k,
-                    &v,
-                    kv_cache.get_layer(layer_idx),
-                    rope_theta,
-                );
-                drop(kv_cache);
-
-                let attn_out_name = format!("blk.{}.attn_output.weight", layer_idx);
-                if let Ok(attn_out_weight) = self.model.get_tensor(&attn_out_name) {
-                    let attn_proj =
-                        mat_vec(&attn_out_weight, n_embd, n_head * head_dim, &attn_output);
-                    x = add_vec(&residual, &attn_proj);
-                } else {
-                    x = add_vec(&residual, &attn_output);
-                }
-            } else {
-                x = residual;
-            }
-
-            let ffn_residual = x.clone();
-
-            let ffn_norm_name = format!("blk.{}.ffn_norm.weight", layer_idx);
-            if let Ok(ffn_norm_weight) = self.model.get_tensor(&ffn_norm_name) {
-                x = rms_norm(&x, &ffn_norm_weight, self.model.norm_eps);
-            }
-
-            let gate_name = format!("blk.{}.ffn_gate.weight", layer_idx);
-            let up_name = format!("blk.{}.ffn_up.weight", layer_idx);
-            let down_name = format!("blk.{}.ffn_down.weight", layer_idx);
-
-            if let (Ok(gate), Ok(up), Ok(down)) = (
-                self.model.get_tensor(&gate_name),
-                self.model.get_tensor(&up_name),
-                self.model.get_tensor(&down_name),
-            ) {
-                let gate_proj = mat_vec(&gate, self.model.n_ff, n_embd, &x);
-                let up_proj = mat_vec(&up, self.model.n_ff, n_embd, &x);
-                let activated_gate = match self.model.architecture.as_str() {
-                    "gemma" | "gemma2" => gelu(&gate_proj),
-                    _ => silu(&gate_proj),
-                };
-                let ffn_hidden = mul_vec(&activated_gate, &up_proj);
-                let ffn_output = mat_vec(&down, n_embd, self.model.n_ff, &ffn_hidden);
-                x = add_vec(&ffn_residual, &ffn_output);
-            } else {
-                x = ffn_residual;
-            }
-        }
-
-        if let Ok(final_norm) = self.model.get_tensor("output_norm.weight") {
-            x = rms_norm(&x, &final_norm, self.model.norm_eps);
-        }
-
-        if let Ok(output_weight) = self.model.get_tensor("output.weight") {
-            let logits = mat_vec(&output_weight, self.model.vocab_size, n_embd, &x);
-            Ok(logits)
-        } else {
-            let logits = mat_vec(&token_embd, self.model.vocab_size, n_embd, &x);
-            Ok(logits)
-        }
+        self.forward_pass_with_profile(token_id)
+            .map(|(logits, _profile)| logits)
     }
 
     /// Run a single forward pass with per-layer profiling.
@@ -265,11 +160,8 @@ impl InferenceContext {
                 let mut k = mat_vec(&k_weight, n_head_kv * head_dim, n_embd, &x);
                 let v = mat_vec(&v_weight, n_head_kv * head_dim, n_embd, &x);
 
-                let kv_cache = self.model.kv_cache.write().expect("lock poisoned");
-                let position_offset = kv_cache.get_layer_ref(layer_idx).cur_len;
-                drop(kv_cache);
-
                 let mut kv_cache = self.model.kv_cache.write().expect("lock poisoned");
+                let position_offset = kv_cache.get_layer_ref(layer_idx).cur_len;
                 let attn_output = multi_head_attention_with_cache(
                     n_head,
                     n_head_kv,
@@ -282,7 +174,6 @@ impl InferenceContext {
                     kv_cache.get_layer(layer_idx),
                     rope_theta,
                 );
-                drop(kv_cache);
 
                 let attn_out_name = format!("blk.{}.attn_output.weight", layer_idx);
                 if let Ok(attn_out_weight) = self.model.get_tensor(&attn_out_name) {

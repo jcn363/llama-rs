@@ -62,14 +62,6 @@ pub fn gelu(x: &[f32]) -> Vec<f32> {
         .collect()
 }
 
-/// Compute softmax over a vector.
-#[expect(dead_code)]
-pub fn softmax(x: &[f32]) -> Vec<f32> {
-    let max = x.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
-    let exp_sum: f32 = x.iter().map(|v| (v - max).exp()).sum();
-    x.iter().map(|v| (v - max).exp() / exp_sum).collect()
-}
-
 /// Sample the next token from logits using argmax (greedy sampling).
 pub fn sample_argmax(logits: &[f32]) -> usize {
     logits
@@ -183,24 +175,6 @@ pub fn add_vec(a: &[f32], b: &[f32]) -> Vec<f32> {
     }
 }
 
-/// Multiply a vector by a scalar.
-#[expect(dead_code)]
-pub fn scale_vec(v: &[f32], scale: f32) -> Vec<f32> {
-    use rayon::prelude::*;
-    let len = v.len();
-
-    if len < 1024 {
-        v.iter().map(|x| x * scale).collect()
-    } else {
-        let mut result = vec![0.0f32; len];
-        result
-            .par_iter_mut()
-            .zip(v.par_iter())
-            .for_each(|(out, x)| *out = x * scale);
-        result
-    }
-}
-
 /// Apply temperature to logits and compute softmax.
 ///
 /// Temperature controls the randomness of the distribution:
@@ -305,23 +279,32 @@ pub fn apply_top_p(logits: &[f32], p: f32) -> Vec<f32> {
     result
 }
 
-/// Sample from a categorical distribution.
+/// Sample from a categorical distribution using binary search.
 ///
-/// Uses a simple linear search through cumulative probabilities.
+/// Pre-computes cumulative probabilities, then binary-searches for the
+/// random threshold — O(log n) instead of O(n) linear scan.
 /// `probs` should sum to 1.0.
 pub fn sample_categorical(probs: &[f32], rng: &mut fastrand::Rng) -> usize {
-    let rand_val = rng.f32();
-    let mut cumsum = 0.0f32;
-
-    for (i, &p) in probs.iter().enumerate() {
-        cumsum += p;
-        if rand_val <= cumsum {
-            return i;
-        }
+    // Pre-compute cumulative distribution
+    let mut cumsum: Vec<f32> = Vec::with_capacity(probs.len());
+    let mut acc = 0.0f32;
+    for &p in probs {
+        acc += p;
+        cumsum.push(acc);
+    }
+    // Normalize so the last entry is exactly 1.0
+    if let Some(last) = cumsum.last_mut() {
+        *last = 1.0;
     }
 
-    // Fallback to last token (shouldn't happen with valid probabilities)
-    probs.len() - 1
+    let rand_val = rng.f32();
+    match cumsum.binary_search_by(|&c| {
+        c.partial_cmp(&rand_val)
+            .unwrap_or(std::cmp::Ordering::Greater)
+    }) {
+        Ok(i) => i,
+        Err(i) => i.min(probs.len() - 1),
+    }
 }
 
 /// Sampling configuration for text generation.

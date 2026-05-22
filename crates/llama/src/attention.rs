@@ -13,23 +13,25 @@ use crate::kv_cache::KvCache;
 ///
 /// # Arguments
 /// * `q` - Query vector of shape (1, head_dim) for current token
-/// * `k_cache` - Cached keys as slice of slices: each element is a head_dim-length slice
-/// * `v_cache` - Cached values as slice of slices: each element is a head_dim-length slice
+/// * `keys` - Flat key cache, shape (seq_len, n_head_kv, head_dim) row-major
+/// * `values` - Flat value cache, shape (seq_len, n_head_kv, head_dim) row-major
 /// * `seq_len` - Current sequence length (number of cached tokens)
 /// * `head_dim` - Dimension of each head
+/// * `n_head_kv` - Number of KV heads
+/// * `head` - KV head index
 ///
 /// # Returns
 /// Output vector of shape (1, head_dim)
 fn flash_attention_head(
     q: &[f32],
-    k_cache: &[&[f32]],
-    v_cache: &[&[f32]],
+    keys: &[f32],
+    values: &[f32],
     seq_len: usize,
     head_dim: usize,
+    n_head_kv: usize,
+    head: usize,
 ) -> Vec<f32> {
     assert_eq!(q.len(), head_dim);
-    assert_eq!(k_cache.len(), seq_len);
-    assert_eq!(v_cache.len(), seq_len);
 
     let scale = 1.0 / (head_dim as f32).sqrt();
 
@@ -40,7 +42,8 @@ fn flash_attention_head(
 
     // Single pass: compute scores, update max/sum, accumulate weighted V
     for j in 0..seq_len {
-        let k_row = k_cache[j];
+        let base = (j * n_head_kv + head) * head_dim;
+        let k_row = &keys[base..base + head_dim];
         let score = dot_product(q, k_row) * scale;
 
         // Update running max and sum
@@ -58,7 +61,7 @@ fn flash_attention_head(
         }
 
         // Add weighted V
-        let v_row = v_cache[j];
+        let v_row = &values[base..base + head_dim];
         for d in 0..head_dim {
             output[d] += exp_val * v_row[d];
         }
@@ -233,16 +236,16 @@ pub fn multi_head_attention_with_cache(
             let q_offset = pos * n_head * head_dim + h * head_dim;
             let q_vec = &q[q_offset..q_offset + head_dim];
 
-            // Get cached keys and values for the corresponding KV head
-            let k_cache = kv_cache.get_head_keys(kv_head, total_seq_len);
-            let v_cache = kv_cache.get_head_values(kv_head, total_seq_len);
-
-            // Convert to slice-of-slices for flash attention
-            let k_refs: Vec<&[f32]> = k_cache.iter().map(|s| &s[..]).collect();
-            let v_refs: Vec<&[f32]> = v_cache.iter().map(|s| &s[..]).collect();
-
-            // Use flash attention: single pass, O(N) memory
-            let out = flash_attention_head(q_vec, &k_refs, &v_refs, total_seq_len, head_dim);
+            // Use flash attention directly on flat cache arrays (no Vec allocation)
+            let out = flash_attention_head(
+                q_vec,
+                &kv_cache.keys,
+                &kv_cache.values,
+                total_seq_len,
+                head_dim,
+                n_head_kv,
+                kv_head,
+            );
 
             // Store output
             let out_offset = pos * n_head * head_dim + h * head_dim;

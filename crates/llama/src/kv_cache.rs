@@ -62,32 +62,6 @@ impl KvCache {
             &self.values[base..base + self.head_dim],
         )
     }
-
-    /// Get all keys for a specific KV head up to current length.
-    /// Returns a flattened vector of shape (cur_len, head_dim).
-    pub fn get_head_keys(&self, head: usize, len: usize) -> Vec<&[f32]> {
-        assert!(head < self.n_head_kv);
-        assert!(len <= self.cur_len);
-        (0..len)
-            .map(|pos| {
-                let base = (pos * self.n_head_kv + head) * self.head_dim;
-                &self.keys[base..base + self.head_dim]
-            })
-            .collect()
-    }
-
-    /// Get all values for a specific KV head up to current length.
-    /// Returns a flattened vector of shape (cur_len, head_dim).
-    pub fn get_head_values(&self, head: usize, len: usize) -> Vec<&[f32]> {
-        assert!(head < self.n_head_kv);
-        assert!(len <= self.cur_len);
-        (0..len)
-            .map(|pos| {
-                let base = (pos * self.n_head_kv + head) * self.head_dim;
-                &self.values[base..base + self.head_dim]
-            })
-            .collect()
-    }
 }
 
 /// Multi-layer KV cache manager.
