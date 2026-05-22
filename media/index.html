@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>llama.rs — LLaMA inference in Rust</title>
+<title>LLaMa.rs — LLaMa inference in Rust</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Clash+Display:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
@@ -20,15 +20,15 @@
   --text-secondary: rgba(255, 255, 255, 0.55);
   --text-tertiary: rgba(255, 255, 255, 0.30);
 
-  /* Crate colors — each part gets a distinct accent */
-  --crate-gguf:       #A78BFA;
-  --crate-ggml:       #60A5FA;
-  --crate-ggml-cpu:   #34D399;
-  --crate-ggml-cuda:  #F472B6;
-  --crate-llama:      #FBBF24;
-  --crate-common:     #94A3B8;
-  --crate-cli:        #FB923C;
-  --crate-server:     #818CF8;
+  /* Crate colors — each part gets a distinct pastel accent */
+  --crate-gguf:       #C9B1FF;
+  --crate-ggml:       #93C5FD;
+  --crate-ggml-cpu:   #6EE7B7;
+  --crate-ggml-cuda:  #F9A8D4;
+  --crate-LLaMa:      #FCD34D;
+  --crate-common:     #CBD5E1;
+  --crate-cli:        #FDBA74;
+  --crate-server:     #A5B4FC;
 
   --radius-outer: 2rem;
   --radius-inner: calc(2rem - 0.375rem);
@@ -106,7 +106,7 @@ body::after {
   text-decoration: none;
 }
 
-.nav-logo span { color: var(--crate-llama); }
+.nav-logo span { color: var(--crate-LLaMa); }
 
 .nav-links { display: flex; gap: 0.125rem; }
 
@@ -266,7 +266,7 @@ body::after {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: var(--crate-llama);
+  background: var(--crate-LLaMa);
   box-shadow: 0 0 12px rgba(251, 191, 36, 0.3);
   animation: pulse-dot 2s ease-in-out infinite;
 }
@@ -455,14 +455,14 @@ body::after {
 }
 
 /* Individual crate grid placements */
-.crate-gguf     { --accent-color: var(--crate-gguf);      --accent-rgb: 167, 139, 250; }
-.crate-ggml     { --accent-color: var(--crate-ggml);      --accent-rgb: 96, 165, 250; }
-.crate-cpu      { --accent-color: var(--crate-ggml-cpu);  --accent-rgb: 52, 211, 153; }
-.crate-cuda     { --accent-color: var(--crate-ggml-cuda); --accent-rgb: 244, 114, 182; }
-.crate-llama    { --accent-color: var(--crate-llama);     --accent-rgb: 251, 191, 36; }
-.crate-common   { --accent-color: var(--crate-common);    --accent-rgb: 148, 163, 184; }
-.crate-cli      { --accent-color: var(--crate-cli);       --accent-rgb: 251, 146, 60; }
-.crate-server   { --accent-color: var(--crate-server);    --accent-rgb: 129, 140, 248; }
+.crate-gguf     { --accent-color: var(--crate-gguf);      --accent-rgb: 201, 177, 255; }
+.crate-ggml     { --accent-color: var(--crate-ggml);      --accent-rgb: 147, 197, 253; }
+.crate-cpu      { --accent-color: var(--crate-ggml-cpu);  --accent-rgb: 110, 231, 183; }
+.crate-cuda     { --accent-color: var(--crate-ggml-cuda); --accent-rgb: 249, 168, 212; }
+.crate-LLaMa    { --accent-color: var(--crate-LLaMa);     --accent-rgb: 252, 211, 77; }
+.crate-common   { --accent-color: var(--crate-common);    --accent-rgb: 203, 213, 225; }
+.crate-cli      { --accent-color: var(--crate-cli);       --accent-rgb: 253, 186, 116; }
+.crate-server   { --accent-color: var(--crate-server);    --accent-rgb: 165, 180, 252; }
 
 .crate-icon { background: rgba(var(--accent-rgb), 0.1); color: var(--accent-color); }
 .crate-accent { background: var(--accent-color); }
@@ -472,7 +472,7 @@ body::after {
 .crate-ggml  { grid-column: span 4; }
 .crate-cpu   { grid-column: span 4; }
 .crate-cuda  { grid-column: span 5; }
-.crate-llama { grid-column: span 7; }
+.crate-LLaMa { grid-column: span 7; }
 .crate-common { grid-column: span 4; }
 .crate-cli   { grid-column: span 4; }
 .crate-server { grid-column: span 4; }
@@ -585,7 +585,7 @@ body::after {
 }
 
 .perf-table tr td:first-child { font-weight: 500; color: var(--text-primary); }
-.perf-table tr td:last-child { font-family: 'Clash Display', sans-serif; font-weight: 600; color: var(--crate-llama); text-align: right; }
+.perf-table tr td:last-child { font-family: 'Clash Display', sans-serif; font-weight: 600; color: var(--crate-LLaMa); text-align: right; }
 
 /* ============================================================
    QUICK START — Code blocks
@@ -603,7 +603,7 @@ body::after {
   position: relative;
 }
 
-.code-block .cmd { color: var(--crate-llama); }
+.code-block .cmd { color: var(--crate-LLaMa); }
 .code-block .comment { color: var(--text-tertiary); font-style: italic; }
 .code-block .highlight { color: #60A5FA; }
 .code-block .path { color: #A78BFA; }
@@ -657,7 +657,7 @@ body::after {
   font-weight: 500;
   font-size: 0.8rem;
   letter-spacing: -0.01em;
-  background: rgba(var(--accent-rgb, 255,255,255), 0.06);
+  background: rgba(var(--accent-rgb, 255,255,255), 0.5);
   border: 1px solid rgba(var(--accent-rgb, 255,255,255), 0.1);
   color: var(--text-primary);
   transition: all 400ms var(--ease-out);
@@ -665,7 +665,7 @@ body::after {
 }
 
 .flow-card:hover {
-  transform: translateY(-3px) scale(1.02);
+  transform: translateY(-3px) scale(1.06);
   box-shadow: 0 12px 40px rgba(0,0,0,0.4);
 }
 
@@ -803,7 +803,7 @@ body::after {
   .crate-ggml,
   .crate-cpu,
   .crate-cuda,
-  .crate-llama,
+  .crate-LLaMa,
   .crate-common,
   .crate-cli,
   .crate-server {
@@ -827,7 +827,7 @@ body::after {
   .crate-ggml,
   .crate-cpu,
   .crate-cuda,
-  .crate-llama,
+  .crate-LLaMa,
   .crate-common,
   .crate-cli,
   .crate-server {
@@ -861,7 +861,7 @@ body::after {
      FLUID ISLAND NAV
      ============================================================ -->
 <nav class="nav-island" id="navbar">
-  <a href="#" class="nav-logo">llama<span>.rs</span></a>
+  <a href="#" class="nav-logo">LLaMa<span>.rs</span></a>
   <div class="nav-links">
     <a href="#architecture">Architecture</a>
     <a href="#crates">Crates</a>
@@ -890,10 +890,10 @@ body::after {
 <section class="hero">
   <div class="eyebrow">
     <span class="eyebrow-dot"></span>
-    Rust port of llama.cpp
+    Rust port of LLaMa.cpp
   </div>
   <h1>
-    LLaMA inference<br>
+    LLaMa inference<br>
     <span class="gradient">in Rust</span>
   </h1>
   <p>
@@ -908,7 +908,7 @@ body::after {
         <svg viewBox="0 0 24 24"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
       </span>
     </a>
-    <a href="https://github.com/your-org/llama-rs" class="btn-island" style="background:rgba(255,255,255,0.02);">
+    <a href="https://github.com/your-org/LLaMa-rs" class="btn-island" style="background:rgba(255,255,255,0.02);">
       GitHub
       <span class="btn-icon-wrapper">
         <svg viewBox="0 0 24 24"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"/></svg>
@@ -925,28 +925,28 @@ body::after {
     <h2>Architecture</h2>
     <p>Eight crates. Strict separation of concerns. No circular dependencies.</p>
   </div>
-  <div class="flow-diagram reveal reveal-delay-1">
-    <!-- Row 1: ggml (foundation) -->
-    <div class="flow-layer">
-      <div class="flow-card" style="--accent-rgb:96,165,250;">ggml</div>
-    </div>
-    <!-- Row 2: gguf + ggml-cpu + ggml-cuda -->
-    <div class="flow-layer">
-      <div class="flow-card" style="--accent-rgb:167,139,250;">gguf</div>
-      <div class="flow-card" style="--accent-rgb:52,211,153;">ggml-cpu</div>
-      <div class="flow-card" style="--accent-rgb:244,114,182;">ggml-cuda</div>
-    </div>
-    <!-- Row 3: llama -->
-    <div class="flow-layer">
-      <div class="flow-card" style="--accent-rgb:251,191,36;">llama</div>
-    </div>
-    <!-- Row 4: common + cli + server -->
-    <div class="flow-layer">
-      <div class="flow-card" style="--accent-rgb:148,163,184;">common</div>
-      <div class="flow-card" style="--accent-rgb:251,146,60;">llama-cli</div>
-      <div class="flow-card" style="--accent-rgb:129,140,248;">llama-server</div>
-    </div>
+<div class="flow-diagram reveal reveal-delay-1">
+  <!-- Row 1: ggml (foundation) -->
+  <div class="flow-layer">
+    <div class="flow-card" style="--accent-rgb:147,197,253;">ggml</div>
   </div>
+  <!-- Row 2: gguf + ggml-cpu + ggml-cuda -->
+  <div class="flow-layer">
+    <div class="flow-card" style="--accent-rgb:201,177,255;">gguf</div>
+    <div class="flow-card" style="--accent-rgb:110,231,183;">ggml-cpu</div>
+    <div class="flow-card" style="--accent-rgb:249,168,212;">ggml-cuda</div>
+  </div>
+  <!-- Row 3: LLaMa -->
+  <div class="flow-layer">
+    <div class="flow-card" style="--accent-rgb:252,211,77;">LLaMa</div>
+  </div>
+  <!-- Row 4: common + cli + server -->
+  <div class="flow-layer">
+    <div class="flow-card" style="--accent-rgb:203,213,225;">common</div>
+    <div class="flow-card" style="--accent-rgb:253,186,116;">LLaMa-cli</div>
+    <div class="flow-card" style="--accent-rgb:165,180,252;">LLaMa-server</div>
+  </div>
+</div>
 </section>
 
 <!-- ============================================================
@@ -1036,16 +1036,16 @@ body::after {
       </div>
     </div>
 
-    <!-- llama — Amber (centerpiece, larger) -->
-    <div class="double-bezel crate-llama reveal reveal-delay-2">
+    <!-- LLaMa — Amber (centerpiece, larger) -->
+    <div class="double-bezel crate-LLaMa reveal reveal-delay-2">
       <div class="crate-accent"></div>
       <div class="double-bezel-inner">
         <div class="crate-header">
           <div class="crate-icon">LM</div>
-          <span class="crate-name">llama</span>
+          <span class="crate-name">LLaMa</span>
           <span class="crate-tag">engine</span>
         </div>
-        <p class="crate-desc">The inference engine. Full transformer forward pass — RMSNorm, RoPE, multi-head GQA attention, SwiGLU FFN, KV cache, flash attention. Supports Llama, Mistral, Phi, Gemma, Qwen2, StableLM.</p>
+        <p class="crate-desc">The inference engine. Full transformer forward pass — RMSNorm, RoPE, multi-head GQA attention, SwiGLU FFN, KV cache, flash attention. Supports LLaMa, Mistral, Phi, Gemma, Qwen2, StableLM.</p>
         <div class="crate-features">
           <span>transformer</span>
           <span>flash attn</span>
@@ -1075,13 +1075,13 @@ body::after {
       </div>
     </div>
 
-    <!-- llama-cli — Orange -->
+    <!-- LLaMa-cli — Orange -->
     <div class="double-bezel crate-cli reveal reveal-delay-3">
       <div class="crate-accent"></div>
       <div class="double-bezel-inner">
         <div class="crate-header">
           <div class="crate-icon">CL</div>
-          <span class="crate-name">llama-cli</span>
+          <span class="crate-name">LLaMa-cli</span>
           <span class="crate-tag">binary</span>
         </div>
         <p class="crate-desc">CLI binary. Interactive stdin mode, single-prompt mode, streaming token output, configurable context window.</p>
@@ -1093,13 +1093,13 @@ body::after {
       </div>
     </div>
 
-    <!-- llama-server — Indigo -->
+    <!-- LLaMa-server — Indigo -->
     <div class="double-bezel crate-server reveal reveal-delay-3">
       <div class="crate-accent"></div>
       <div class="double-bezel-inner">
         <div class="crate-header">
           <div class="crate-icon">SV</div>
-          <span class="crate-name">llama-server</span>
+          <span class="crate-name">LLaMa-server</span>
           <span class="crate-tag">api</span>
         </div>
         <p class="crate-desc">Axum-based HTTP server. POST /completion (JSON + SSE streaming), GET /health. Tokio + futures async runtime.</p>
@@ -1201,12 +1201,12 @@ body::after {
     </div>
     <div class="double-bezel reveal reveal-delay-1">
       <div class="double-bezel-inner" style="padding:0;">
-        <div class="code-block"><span class="comment"># Run CLI inference</span><br>$ <span class="cmd">llama-cli</span> <span class="path">-m model.gguf</span> <span class="cmd">-p</span> <span class="highlight">"Hello, world!"</span> <span class="cmd">-n</span> 128</div>
+        <div class="code-block"><span class="comment"># Run CLI inference</span><br>$ <span class="cmd">LLaMa-cli</span> <span class="path">-m model.gguf</span> <span class="cmd">-p</span> <span class="highlight">"Hello, world!"</span> <span class="cmd">-n</span> 128</div>
       </div>
     </div>
     <div class="double-bezel reveal reveal-delay-2">
       <div class="double-bezel-inner" style="padding:0;">
-        <div class="code-block"><span class="comment"># Start HTTP server</span><br>$ <span class="cmd">llama-server</span> <span class="path">-m model.gguf</span> <span class="cmd">--host</span> 0.0.0.0 <span class="cmd">--port</span> 8080</div>
+        <div class="code-block"><span class="comment"># Start HTTP server</span><br>$ <span class="cmd">LLaMa-server</span> <span class="path">-m model.gguf</span> <span class="cmd">--host</span> 0.0.0.0 <span class="cmd">--port</span> 8080</div>
       </div>
     </div>
     <div class="double-bezel reveal reveal-delay-2">
@@ -1223,13 +1223,13 @@ body::after {
 <footer class="footer">
   <div class="footer-inner">
     <div class="footer-links">
-      <a href="https://github.com/your-org/llama-rs">GitHub</a>
-      <a href="https://github.com/ggml-org/llama.cpp">llama.cpp</a>
+      <a href="https://github.com/your-org/LLaMa-rs">GitHub</a>
+      <a href="https://github.com/ggml-org/LLaMa.cpp">LLaMa.cpp</a>
       <a href="CONTRIBUTING.md">Contributing</a>
       <a href="LICENSE">License</a>
     </div>
     <div class="footer-copy">
-      llama.rs — MIT License · Built with Rust edition 2024
+      LLaMa.rs — MIT License · Built with Rust edition 2024
     </div>
   </div>
 </footer>
