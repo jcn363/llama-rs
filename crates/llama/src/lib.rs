@@ -56,12 +56,12 @@ pub struct TensorData {
 impl TensorData {
     /// Return the de‑quantized data, performing lazy de‑quantization if needed.
     pub fn get(&self) -> Result<Arc<[f32]>, gguf::GgufError> {
-        if let Some(ref d) = *self.data.read().unwrap() {
+        if let Some(ref d) = *self.data.read().expect("lock poisoned") {
             return Ok(d.clone());
         }
         let deq = self.mmap_tensor.dequantize(&self.info)?;
         let arc: Arc<[f32]> = Arc::from(deq.into_boxed_slice());
-        let mut write = self.data.write().unwrap();
+        let mut write = self.data.write().expect("lock poisoned");
         *write = Some(arc.clone());
         Ok(arc)
     }

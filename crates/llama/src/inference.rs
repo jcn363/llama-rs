@@ -63,7 +63,7 @@ pub fn gelu(x: &[f32]) -> Vec<f32> {
 }
 
 /// Compute softmax over a vector.
-#[allow(dead_code)]
+#[expect(dead_code)]
 pub fn softmax(x: &[f32]) -> Vec<f32> {
     let max = x.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
     let exp_sum: f32 = x.iter().map(|v| (v - max).exp()).sum();
@@ -75,7 +75,7 @@ pub fn sample_argmax(logits: &[f32]) -> usize {
     logits
         .iter()
         .enumerate()
-        .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
+        .max_by(|(_, a), (_, b)| a.total_cmp(b))
         .map(|(idx, _)| idx)
         .unwrap_or(0)
 }
@@ -184,7 +184,7 @@ pub fn add_vec(a: &[f32], b: &[f32]) -> Vec<f32> {
 }
 
 /// Multiply a vector by a scalar.
-#[allow(dead_code)]
+#[expect(dead_code)]
 pub fn scale_vec(v: &[f32], scale: f32) -> Vec<f32> {
     use rayon::prelude::*;
     let len = v.len();
@@ -250,7 +250,7 @@ pub fn apply_top_k(logits: &[f32], k: usize) -> Vec<f32> {
 
     // Find the k-th largest value
     let mut sorted: Vec<f32> = logits.to_vec();
-    sorted.sort_by(|a, b| b.partial_cmp(a).unwrap_or(std::cmp::Ordering::Equal));
+    sorted.sort_by(|a, b| b.total_cmp(a));
     let threshold = sorted[k - 1];
 
     // Set all values below threshold to -infinity
@@ -274,7 +274,7 @@ pub fn apply_top_p(logits: &[f32], p: f32) -> Vec<f32> {
 
     // Create index-value pairs and sort by value descending
     let mut indexed: Vec<(usize, f32)> = logits.iter().enumerate().map(|(i, &v)| (i, v)).collect();
-    indexed.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+    indexed.sort_by(|a, b| b.1.total_cmp(&a.1));
 
     // Compute cumulative sum and find cutoff
     let mut cumsum = 0.0f32;

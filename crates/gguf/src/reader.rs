@@ -6,7 +6,9 @@
 
 use std::sync::Arc;
 
-use super::{GgufError, GgufResult, GgufReader, GgufType, GgufValue, GgmlType, MmapTensor, TensorInfo};
+use super::{
+    GgmlType, GgufError, GgufReader, GgufResult, GgufType, GgufValue, MmapTensor, TensorInfo,
+};
 
 impl GgufReader {
     // ─── Metadata convenience getters ─────────────────────────────────────────
@@ -196,9 +198,7 @@ impl GgufReader {
             GgmlType::F64 | GgmlType::I64 => element_count * 8,
             GgmlType::I8 | GgmlType::Q8_0 | GgmlType::Q8_1 | GgmlType::Q8_K => element_count,
             GgmlType::Q4_0 | GgmlType::Q4_1 => element_count / 2,
-            GgmlType::Q5_0 | GgmlType::Q5_1 => {
-                (element_count / 2) + (element_count / 32) * 2
-            }
+            GgmlType::Q5_0 | GgmlType::Q5_1 => (element_count / 2) + (element_count / 32) * 2,
             GgmlType::Q2_K | GgmlType::Q3_K => {
                 element_count / 4 + element_count / 64 + element_count / 64
             }
@@ -254,9 +254,7 @@ impl GgufReader {
             GgmlType::F64 | GgmlType::I64 => element_count * 8,
             GgmlType::I8 | GgmlType::Q8_0 | GgmlType::Q8_1 | GgmlType::Q8_K => element_count,
             GgmlType::Q4_0 | GgmlType::Q4_1 => element_count / 2,
-            GgmlType::Q5_0 | GgmlType::Q5_1 => {
-                (element_count / 2) + (element_count / 32) * 2
-            }
+            GgmlType::Q5_0 | GgmlType::Q5_1 => (element_count / 2) + (element_count / 32) * 2,
             GgmlType::Q2_K | GgmlType::Q3_K => {
                 element_count / 4 + element_count / 64 + element_count / 64
             }

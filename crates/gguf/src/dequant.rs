@@ -42,8 +42,9 @@ pub fn dequantize_q4_0(raw: &[u8]) -> Result<Vec<f32>, GgufError> {
                 for block_idx in start_block..end_block.min(num_blocks) {
                     let block_start = block_idx * BLOCK_SIZE;
                     let block = &raw[block_start..block_start + BLOCK_SIZE];
-                    let d = half::f16::from_bits(u16::from_le_bytes(block[0..2].try_into().unwrap()))
-                        .to_f32();
+                    let d =
+                        half::f16::from_bits(u16::from_le_bytes(block[0..2].try_into().unwrap()))
+                            .to_f32();
                     let qs = &block[2..18];
 
                     let out_start = block_idx * QK4_0 - start_block * QK4_0;
@@ -65,8 +66,8 @@ pub fn dequantize_q4_0(raw: &[u8]) -> Result<Vec<f32>, GgufError> {
         let mut out = Vec::with_capacity(num_blocks * QK4_0);
 
         for block in raw.chunks_exact(BLOCK_SIZE) {
-            let d = half::f16::from_bits(u16::from_le_bytes(block[0..2].try_into().unwrap()))
-                .to_f32();
+            let d =
+                half::f16::from_bits(u16::from_le_bytes(block[0..2].try_into().unwrap())).to_f32();
             let qs = &block[2..18];
 
             for &q in qs.iter().take(16) {
@@ -99,10 +100,8 @@ pub fn dequantize_q4_1(raw: &[u8]) -> Result<Vec<f32>, GgufError> {
     let mut out = Vec::with_capacity(num_blocks * QK4_1);
 
     for block in raw.chunks_exact(BLOCK_SIZE) {
-        let d = half::f16::from_bits(u16::from_le_bytes(block[0..2].try_into().unwrap()))
-            .to_f32();
-        let m = half::f16::from_bits(u16::from_le_bytes(block[2..4].try_into().unwrap()))
-            .to_f32();
+        let d = half::f16::from_bits(u16::from_le_bytes(block[0..2].try_into().unwrap())).to_f32();
+        let m = half::f16::from_bits(u16::from_le_bytes(block[2..4].try_into().unwrap())).to_f32();
         let qs = &block[4..20];
 
         for &q in qs.iter().take(16) {
@@ -133,8 +132,7 @@ pub fn dequantize_q5_0(raw: &[u8]) -> Result<Vec<f32>, GgufError> {
     let mut out = Vec::with_capacity(num_blocks * QK5_0);
 
     for block in raw.chunks_exact(BLOCK_SIZE) {
-        let d = half::f16::from_bits(u16::from_le_bytes(block[0..2].try_into().unwrap()))
-            .to_f32();
+        let d = half::f16::from_bits(u16::from_le_bytes(block[0..2].try_into().unwrap())).to_f32();
         let qh = &block[2..6];
         let qs = &block[6..22];
 
@@ -169,10 +167,8 @@ pub fn dequantize_q5_1(raw: &[u8]) -> Result<Vec<f32>, GgufError> {
     let mut out = Vec::with_capacity(num_blocks * QK5_1);
 
     for block in raw.chunks_exact(BLOCK_SIZE) {
-        let d = half::f16::from_bits(u16::from_le_bytes(block[0..2].try_into().unwrap()))
-            .to_f32();
-        let m = half::f16::from_bits(u16::from_le_bytes(block[2..4].try_into().unwrap()))
-            .to_f32();
+        let d = half::f16::from_bits(u16::from_le_bytes(block[0..2].try_into().unwrap())).to_f32();
+        let m = half::f16::from_bits(u16::from_le_bytes(block[2..4].try_into().unwrap())).to_f32();
         let qh = &block[4..8];
         let qs = &block[8..24];
 
@@ -207,8 +203,7 @@ pub fn dequantize_q8_0(raw: &[u8]) -> Result<Vec<f32>, GgufError> {
     let mut out = Vec::with_capacity(num_blocks * QK8_0);
 
     for block in raw.chunks_exact(BLOCK_SIZE) {
-        let d = half::f16::from_bits(u16::from_le_bytes(block[0..2].try_into().unwrap()))
-            .to_f32();
+        let d = half::f16::from_bits(u16::from_le_bytes(block[0..2].try_into().unwrap())).to_f32();
         let qs = &block[2..34];
 
         for &q in qs {
@@ -238,10 +233,10 @@ pub fn dequantize_q2_k(raw: &[u8]) -> Result<Vec<f32>, GgufError> {
     for block in raw.chunks_exact(BLOCK_SIZE) {
         let scales = &block[0..16];
         let qs = &block[16..80];
-        let d = half::f16::from_bits(u16::from_le_bytes(block[80..82].try_into().unwrap()))
-            .to_f32();
-        let min = half::f16::from_bits(u16::from_le_bytes(block[82..84].try_into().unwrap()))
-            .to_f32();
+        let d =
+            half::f16::from_bits(u16::from_le_bytes(block[80..82].try_into().unwrap())).to_f32();
+        let min =
+            half::f16::from_bits(u16::from_le_bytes(block[82..84].try_into().unwrap())).to_f32();
 
         let mut is = 0;
         let mut q_offset = 0;
@@ -296,8 +291,7 @@ pub fn dequantize_q3_k(raw: &[u8]) -> Result<Vec<f32>, GgufError> {
         let qs = &block[32..96];
         let scales_raw = &block[96..108];
         let d_all =
-            half::f16::from_bits(u16::from_le_bytes(block[108..110].try_into().unwrap()))
-                .to_f32();
+            half::f16::from_bits(u16::from_le_bytes(block[108..110].try_into().unwrap())).to_f32();
 
         // Unpack scales from 12 bytes into 16 signed scale values
         let kmask1: u32 = 0x03030303;
@@ -344,7 +338,11 @@ pub fn dequantize_q3_k(raw: &[u8]) -> Result<Vec<f32>, GgufError> {
                 is += 1;
                 for l in 0..16 {
                     let q = ((qs[q_offset + l] >> shift) & 3) as i8;
-                    let hm = if hmask[q_offset + l] & m != 0 { 0i8 } else { 4i8 };
+                    let hm = if hmask[q_offset + l] & m != 0 {
+                        0i8
+                    } else {
+                        4i8
+                    };
                     out.push(dl * (q - hm) as f32);
                 }
 
@@ -352,7 +350,11 @@ pub fn dequantize_q3_k(raw: &[u8]) -> Result<Vec<f32>, GgufError> {
                 is += 1;
                 for l in 0..16 {
                     let q = ((qs[q_offset + l + 16] >> shift) & 3) as i8;
-                    let hm = if hmask[q_offset + l + 16] & m != 0 { 0i8 } else { 4i8 };
+                    let hm = if hmask[q_offset + l + 16] & m != 0 {
+                        0i8
+                    } else {
+                        4i8
+                    };
                     out.push(dl * (q - hm) as f32);
                 }
 
@@ -394,11 +396,9 @@ pub fn dequantize_q4_k(raw: &[u8]) -> Result<Vec<f32>, GgufError> {
     let mut out = Vec::with_capacity(num_blocks * QK_K);
 
     for block in raw.chunks_exact(BLOCK_SIZE) {
-        let d = half::f16::from_bits(u16::from_le_bytes(block[0..2].try_into().unwrap()))
-            .to_f32();
+        let d = half::f16::from_bits(u16::from_le_bytes(block[0..2].try_into().unwrap())).to_f32();
         let dmin =
-            half::f16::from_bits(u16::from_le_bytes(block[2..4].try_into().unwrap()))
-                .to_f32();
+            half::f16::from_bits(u16::from_le_bytes(block[2..4].try_into().unwrap())).to_f32();
         let scales = &block[4..16];
         let qs = &block[16..144];
 
@@ -443,11 +443,9 @@ pub fn dequantize_q5_k(raw: &[u8]) -> Result<Vec<f32>, GgufError> {
     let mut out = Vec::with_capacity(num_blocks * QK_K);
 
     for block in raw.chunks_exact(BLOCK_SIZE) {
-        let d = half::f16::from_bits(u16::from_le_bytes(block[0..2].try_into().unwrap()))
-            .to_f32();
+        let d = half::f16::from_bits(u16::from_le_bytes(block[0..2].try_into().unwrap())).to_f32();
         let dmin =
-            half::f16::from_bits(u16::from_le_bytes(block[2..4].try_into().unwrap()))
-                .to_f32();
+            half::f16::from_bits(u16::from_le_bytes(block[2..4].try_into().unwrap())).to_f32();
         let scales = &block[4..16];
         let qh = &block[16..48];
         let qs = &block[48..176];
@@ -503,8 +501,8 @@ pub fn dequantize_q6_k(raw: &[u8]) -> Result<Vec<f32>, GgufError> {
         let ql = &block[0..128];
         let qh = &block[128..192];
         let scales_raw = &block[192..208];
-        let d = half::f16::from_bits(u16::from_le_bytes(block[208..210].try_into().unwrap()))
-            .to_f32();
+        let d =
+            half::f16::from_bits(u16::from_le_bytes(block[208..210].try_into().unwrap())).to_f32();
 
         let mut ql_offset = 0;
         let mut qh_offset = 0;
@@ -513,14 +511,14 @@ pub fn dequantize_q6_k(raw: &[u8]) -> Result<Vec<f32>, GgufError> {
             for l in 0..32 {
                 let is = l / 16;
                 let q1 = ((ql[ql_offset + l] & 0xF) | ((qh[qh_offset + l] & 0x03) << 4)) as i8 - 32;
-                let q2 = ((ql[ql_offset + l + 32] & 0xF)
-                    | (((qh[qh_offset + l] >> 2) & 0x03) << 4)) as i8
+                let q2 = ((ql[ql_offset + l + 32] & 0xF) | (((qh[qh_offset + l] >> 2) & 0x03) << 4))
+                    as i8
                     - 32;
-                let q3 = ((ql[ql_offset + l] >> 4)
-                    | (((qh[qh_offset + l] >> 4) & 0x03) << 4)) as i8
+                let q3 = ((ql[ql_offset + l] >> 4) | (((qh[qh_offset + l] >> 4) & 0x03) << 4))
+                    as i8
                     - 32;
-                let q4 = ((ql[ql_offset + l + 32] >> 4)
-                    | (((qh[qh_offset + l] >> 6) & 0x03) << 4)) as i8
+                let q4 = ((ql[ql_offset + l + 32] >> 4) | (((qh[qh_offset + l] >> 6) & 0x03) << 4))
+                    as i8
                     - 32;
 
                 let s0 = scales_raw[sc_offset + is * 2] as i8;
@@ -541,4 +539,3 @@ pub fn dequantize_q6_k(raw: &[u8]) -> Result<Vec<f32>, GgufError> {
 
     Ok(out)
 }
-

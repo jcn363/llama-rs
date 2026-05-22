@@ -72,7 +72,11 @@ impl Tensor {
     pub fn from_f32(shape: &[usize], values: &[f32]) -> Self {
         let dtype = DType::F32;
         let elem_count = shape.iter().product::<usize>();
-        assert_eq!(elem_count, values.len(), "shape does not match values length");
+        assert_eq!(
+            elem_count,
+            values.len(),
+            "shape does not match values length"
+        );
         // Convert f32 slice to bytes (little‑endian).
         let mut bytes = Vec::with_capacity(elem_count * dtype.size_of());
         for &v in values {

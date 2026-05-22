@@ -7,12 +7,12 @@
 use std::sync::Arc;
 use std::time::Instant;
 
+use crate::Model;
 use crate::attention::multi_head_attention_with_cache;
 use crate::inference::{
-    add_vec, embed_token, gelu, mat_vec, mul_vec, rms_norm, sample_logits, silu, SamplingConfig,
+    SamplingConfig, add_vec, embed_token, gelu, mat_vec, mul_vec, rms_norm, sample_logits, silu,
 };
 use crate::profile::ProfileResult;
-use crate::Model;
 
 /// Configuration for inference.
 #[derive(Debug, Clone)]
@@ -141,11 +141,11 @@ impl InferenceContext {
                 let mut k = mat_vec(&k_weight, n_head_kv * head_dim, n_embd, &x);
                 let v = mat_vec(&v_weight, n_head_kv * head_dim, n_embd, &x);
 
-                let kv_cache = self.model.kv_cache.write().unwrap();
+                let kv_cache = self.model.kv_cache.write().expect("lock poisoned");
                 let position_offset = kv_cache.get_layer_ref(layer_idx).cur_len;
                 drop(kv_cache);
 
-                let mut kv_cache = self.model.kv_cache.write().unwrap();
+                let mut kv_cache = self.model.kv_cache.write().expect("lock poisoned");
                 let attn_output = multi_head_attention_with_cache(
                     n_head,
                     n_head_kv,
@@ -265,11 +265,11 @@ impl InferenceContext {
                 let mut k = mat_vec(&k_weight, n_head_kv * head_dim, n_embd, &x);
                 let v = mat_vec(&v_weight, n_head_kv * head_dim, n_embd, &x);
 
-                let kv_cache = self.model.kv_cache.write().unwrap();
+                let kv_cache = self.model.kv_cache.write().expect("lock poisoned");
                 let position_offset = kv_cache.get_layer_ref(layer_idx).cur_len;
                 drop(kv_cache);
 
-                let mut kv_cache = self.model.kv_cache.write().unwrap();
+                let mut kv_cache = self.model.kv_cache.write().expect("lock poisoned");
                 let attn_output = multi_head_attention_with_cache(
                     n_head,
                     n_head_kv,

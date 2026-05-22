@@ -7,7 +7,7 @@
 use std::sync::Arc;
 
 use crate::dequant::*;
-use crate::{GgufError, GgmlType};
+use crate::{GgmlType, GgufError};
 
 // ─── Tensor Info ─────────────────────────────────────────────────────────────
 

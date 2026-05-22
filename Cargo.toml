@@ -48,6 +48,10 @@ criterion = { version = "0.5", features = ["html_reports"] }
 # CUDA (optional, feature-gated per-crate)
 cudarc = "0.16"
 
+[workspace.lints.clippy]
+# Require pedantic lint group for all workspace crates
+pedantic = { level = "allow", priority = -1 }
+
 [profile.release]
 opt-level = 3
 lto = "thin"

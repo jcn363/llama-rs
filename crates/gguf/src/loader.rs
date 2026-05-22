@@ -10,17 +10,8 @@ use std::path::Path;
 use std::sync::Arc;
 
 use super::{
-    GgufError,
-    GgufResult,
-    GgufReader,
-    GgufType,
-    GgufValue,
-    GgmlType,
-    TensorInfo,
-    GGUF_MAGIC,
-    GGUF_VERSION,
-    GGUF_DEFAULT_ALIGNMENT,
-    align_up,
+    GGUF_DEFAULT_ALIGNMENT, GGUF_MAGIC, GGUF_VERSION, GgmlType, GgufError, GgufReader, GgufResult,
+    GgufType, GgufValue, TensorInfo, align_up,
 };
 use crate::cursor::CursorReader;
 
@@ -119,4 +110,3 @@ impl GgufReader {
         })
     }
 }
-

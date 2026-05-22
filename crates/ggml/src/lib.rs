@@ -27,4 +27,3 @@ pub use tensor::Tensor;
 // The crate is deliberately minimal at this stage.  Additional functionality
 // should be implemented in the appropriate sub‑module and then re‑exported
 // above if it forms part of the public API.
-

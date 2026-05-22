@@ -120,7 +120,7 @@ pub fn apply_rope(
 
 /// Compute scaled dot-product attention for a single head with causal masking.
 /// (Legacy implementation, kept for reference. Flash attention is preferred.)
-#[allow(dead_code)]
+#[expect(dead_code)]
 fn attention_head_with_cache(
     q: &[f32],
     k_cache: &[f32],
@@ -187,7 +187,7 @@ fn attention_head_with_cache(
 ///
 /// # Returns
 /// Attention output of shape (seq_len, n_head * head_dim)
-#[allow(clippy::too_many_arguments)]
+#[expect(clippy::too_many_arguments)]
 pub fn multi_head_attention_with_cache(
     n_head: usize,
     n_head_kv: usize,
@@ -271,7 +271,8 @@ pub fn multi_head_attention_with_cache(
 ///
 /// # Returns
 /// Attention output of shape (seq_len, n_head * head_dim)
-#[allow(dead_code, clippy::too_many_arguments)]
+#[expect(clippy::too_many_arguments)]
+#[allow(dead_code)]
 pub fn multi_head_attention_prefill(
     n_head: usize,
     n_head_kv: usize,

@@ -176,7 +176,7 @@ impl Model {
             .map(|info| {
                 let mmap_tensor = reader.mmap_tensor(info, shared_mmap.clone())?;
                 let shape = info.shape.iter().map(|&d| d as usize).collect();
-                let mut guard = interned.lock().unwrap();
+                let mut guard = interned.lock().expect("lock poisoned");
                 let id = guard.intern(&info.name);
                 drop(guard);
                 Ok((
@@ -193,7 +193,7 @@ impl Model {
         let interned = Arc::try_unwrap(interned)
             .expect("no other references to interner")
             .into_inner()
-            .unwrap();
+            .expect("mutex not poisoned after try_unwrap");
 
         let kv_cache = RwLock::new(KvCacheManager::new(
             n_layers,

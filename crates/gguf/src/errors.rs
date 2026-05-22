@@ -1,7 +1,7 @@
 // ─── Errors ──────────────────────────────────────────────────────────────────
 
-use thiserror::Error;
 use std::io;
+use thiserror::Error;
 
 /// Errors that can occur when reading or writing GGUF files.
 #[derive(Debug, Error)]

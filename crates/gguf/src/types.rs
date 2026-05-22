@@ -104,7 +104,7 @@ impl GgufType {
 /// GGML tensor data types (stored as i32 in GGUF files).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(i32)]
-#[allow(non_camel_case_types)]
+#[expect(non_camel_case_types)]
 pub enum GgmlType {
     /// 32-bit float.
     F32 = 0,

@@ -31,14 +31,7 @@ impl Graph {
     pub fn add_node(&mut self, tensor: Tensor, inputs: Vec<usize>) -> usize {
         let id = self.next_id;
         self.next_id += 1;
-        self.nodes.insert(
-            id,
-            Node {
-                id,
-                tensor,
-                inputs,
-            },
-        );
+        self.nodes.insert(id, Node { id, tensor, inputs });
         id
     }
 
@@ -47,4 +40,3 @@ impl Graph {
         self.nodes.get(&id)
     }
 }
-

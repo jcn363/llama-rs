@@ -1,5 +1,8 @@
 edition = "2024"
 
+reorder_imports = true
+reorder_modules = true
+
 [format]
 max_width = 100
 tab_spaces = 4
