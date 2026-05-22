@@ -84,7 +84,7 @@ Parses the GGUF file format (v3). Minimal external dependencies: `memmap2`, `ray
 | `value.rs` | `GgufValue` enum — typed metadata value representation |
 | `tensor.rs` | `TensorInfo` (metadata) + `MmapTensor` (lazy mmap reference) |
 | `reader.rs` | `GgufReader` method impls: `get_kv()`, `find_tensor()`, array accessors |
-| `dequant.rs` | Dequantization functions: Q4_0..Q6_K, K-quants (Q2_K..Q6_K) |
+| `dequant.rs` | Dequantization functions: Q4_0..Q6_K, K-quants (Q2_K..Q6_K), Ollama quantizations (Q8_K, Q1_0) |
 | `errors.rs` | `GgufError` enum, `GgufResult<T>` alias |
 | `constants.rs` | `GGUF_MAGIC`, `GGUF_VERSION`, `GGUF_DEFAULT_ALIGNMENT` |
 
