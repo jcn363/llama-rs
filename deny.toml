@@ -1,0 +1,22 @@
+# Configuration for cargo-deny license checks
+# Allow only permissive open-source licenses
+
+[licenses]
+# List of allowed licenses
+allow = ["MIT", "Apache-2.0", "Unlicense"]
+
+# Optional: treat unknown licenses as denied
+deny = []
+
+[advisories]
+# No specific advisory configuration needed for now
+ignore = []
+
+[sources]
+# No specific source configuration needed
+allow = []
+
+[warnings]
+# Treat warnings as errors to enforce strict compliance
+allow = []
+
