@@ -1,6 +1,6 @@
 # llama.rs — LLaMA inference in Rust
 
-![llama](media/llama1-banner)
+![llama](media/llama1-banner.png)
 
 A Rust port of [llama.cpp](https://github.com/ggml-org/llama.cpp), optimized for **AMD Opteron 3280** (bdver1) + **NVIDIA GTX 1050** (2GB VRAM).
 
