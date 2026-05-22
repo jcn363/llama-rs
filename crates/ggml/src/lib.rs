@@ -1,3 +1,5 @@
+#![deny(missing_docs)]
+
 //! Core tensor library and computation graph for the `ggml` crate.
 //!
 //! This module currently provides the public API surface for the ggml core.

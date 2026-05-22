@@ -23,6 +23,9 @@ impl GgufReader {
     /// GGUF file.
     pub fn from_file(path: impl AsRef<Path>) -> GgufResult<Self> {
         let file = std::fs::File::open(path)?;
+        // SAFETY: memmap2::Mmap::map is unsafe because it creates a mutable
+        // mapping of the file; the resulting data is treated as immutable here
+        // (read-only) and the file handle is dropped after mapping.
         let mmap = unsafe { memmap2::Mmap::map(&file)? };
         Self::from_mmap(Arc::new(mmap))
     }

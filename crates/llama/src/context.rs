@@ -17,9 +17,13 @@ use crate::profile::ProfileResult;
 /// Configuration for inference.
 #[derive(Debug, Clone)]
 pub struct ModelConfig {
+    /// Number of inference threads.
     pub n_threads: usize,
+    /// Whether to use CUDA for matmul.
     pub use_cuda: bool,
+    /// Context window size.
     pub n_ctx: usize,
+    /// Batch size for prompt processing.
     pub n_batch: usize,
 }
 
@@ -37,9 +41,13 @@ impl Default for ModelConfig {
 /// Inference context holding state for a model.
 #[derive(Debug)]
 pub struct InferenceContext {
+    /// Shared reference to the loaded model.
     pub model: Arc<Model>,
+    /// Inference configuration.
     pub config: ModelConfig,
+    /// Tokenizer instance.
     pub tokenizer: crate::SimpleTokenizer,
+    /// Sampling configuration.
     pub sampling: SamplingConfig,
 }
 

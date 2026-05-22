@@ -16,7 +16,7 @@ thiserror = { workspace = true }
 
 [features]
 default = ["cuda"]
-cuda = ["dep:cudarc"]
+cuda = ["dep:cudarc", "cudarc/cuda-version-from-build-system"]
 
 [dev-dependencies]
 criterion = { workspace = true }

@@ -1,3 +1,5 @@
+#![deny(missing_docs)]
+
 //! LLaMA inference engine.
 //!
 //! This crate provides model loading, tokenization, and inference
@@ -109,12 +111,19 @@ pub struct Model {
     pub architecture: String,
     /// Model hyper‑parameters extracted from GGUF metadata.
     pub n_embd: usize,
+    /// Number of attention heads.
     pub n_head: usize,
+    /// Number of key/value heads (GQA).
     pub n_head_kv: usize,
+    /// Dimension per attention head.
     pub d_head: usize,
+    /// Maximum sequence length.
     pub max_seq_len: usize,
+    /// Vocabulary size.
     pub vocab_size: usize,
+    /// Feed-forward hidden dimension.
     pub n_ff: usize,
+    /// Number of transformer layers.
     pub n_layers: usize,
     /// RoPE base frequency.
     pub rope_theta: f32,

@@ -205,7 +205,7 @@ if !model_path.exists() {
 | 9 | ✅ | Flash attention and memory-mapped tensors |
 | 10 | ✅ | Profiling and per-layer timing benchmarks |
 
-**53 tests pass** across all crates.
+**46 tests pass** across all crates (43 unit/integration + 3 doctests).
 
 ## License
 

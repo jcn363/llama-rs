@@ -70,6 +70,12 @@ fn dot_f32_avx(x: &[f32], y: &[f32]) -> f32 {
     let n = x.len();
     let np = n & !(AVX_F32_STEP - 1);
 
+    // SAFETY:
+    // - AVX2 requires aligned(32) — we use `_mm256_loadu_ps` (unaligned load)
+    //   so alignment is not required.
+    // - x.as_ptr().add(idx) is valid because idx < x.len() as verified by
+    //   the loop bounds (np = n & !(AVX_F32_STEP - 1)).
+    // - Same invariant holds for y.as_ptr().add(idx).
     unsafe {
         let mut sum: [__m256; DOT_ARR] = [_mm256_setzero_ps(); DOT_ARR];
         let mut ax: [__m256; DOT_ARR] = [_mm256_setzero_ps(); DOT_ARR];
@@ -118,6 +124,10 @@ fn dot_f32_sse(x: &[f32], y: &[f32]) -> f32 {
     let n = x.len();
     let np = n & !(SSE_F32_STEP - 1);
 
+    // SAFETY:
+    // - x.as_ptr().add(idx) is valid because idx < x.len() as verified by
+    //   the loop bounds (np = n & !(SSE_F32_STEP - 1)).
+    // - Same invariant holds for y.as_ptr().add(idx).
     unsafe {
         let mut sum: [__m128; DOT_ARR] = [_mm_setzero_ps(); DOT_ARR];
         let mut ax: [__m128; DOT_ARR] = [_mm_setzero_ps(); DOT_ARR];

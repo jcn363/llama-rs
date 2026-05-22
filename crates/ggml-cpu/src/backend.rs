@@ -59,9 +59,12 @@ impl CpuBackend {
         // Get raw f32 slices
         let a_bytes = a.data();
         let b_bytes = b.data();
+        // SAFETY: Tensor data is stored as F32, and the byte length is verified
+        // to be a multiple of 4 by `assert_eq!(k * 4, a_bytes.len())` above.
         let a_f32 = unsafe {
             std::slice::from_raw_parts(a_bytes.as_ptr().cast::<f32>(), a_bytes.len() / 4)
         };
+        // SAFETY: Same invariant for `b` — verified by shape dimension assertion.
         let b_f32 = unsafe {
             std::slice::from_raw_parts(b_bytes.as_ptr().cast::<f32>(), b_bytes.len() / 4)
         };

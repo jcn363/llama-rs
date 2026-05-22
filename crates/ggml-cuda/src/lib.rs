@@ -256,6 +256,9 @@ impl CudaBackend {
                 ldc: n as i32,
             };
 
+            // SAFETY: cuBLAS gemm operates on device pointers that are valid
+            // and have sufficient capacity. dev_a, dev_b, dev_c are allocated
+            // with matching dimensions (verified by the config above).
             unsafe {
                 blas.gemm(config, dev_a, dev_b, &dev_c)
                     .map_err(|e| CudaError::RuntimeError(format!("cuBLAS gemm failed: {e}")))?;

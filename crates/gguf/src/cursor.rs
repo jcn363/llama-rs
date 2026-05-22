@@ -5,6 +5,13 @@
 
 use crate::{GgufError, GgufResult, GgufType, GgufValue};
 
+/// Helper: convert exactly `N` bytes from a slice into a fixed-size array.
+/// SAFETY: caller must have verified `bytes.len() >= N` via `ensure()`.
+#[inline]
+fn array_from_slice<const N: usize>(bytes: &[u8]) -> [u8; N] {
+    bytes[..N].try_into().expect("ensure() verified length")
+}
+
 /// Little-endian binary reader over a byte slice.
 pub(crate) struct CursorReader<'a> {
     data: &'a [u8],
@@ -44,56 +51,56 @@ impl<'a> CursorReader<'a> {
 
     pub(crate) fn read_u16(&mut self) -> GgufResult<u16> {
         self.ensure(2)?;
-        let v = u16::from_le_bytes(self.data[self.pos..self.pos + 2].try_into().unwrap());
+        let v = u16::from_le_bytes(array_from_slice(&self.data[self.pos..self.pos + 2]));
         self.pos += 2;
         Ok(v)
     }
 
     pub(crate) fn read_i16(&mut self) -> GgufResult<i16> {
         self.ensure(2)?;
-        let v = i16::from_le_bytes(self.data[self.pos..self.pos + 2].try_into().unwrap());
+        let v = i16::from_le_bytes(array_from_slice(&self.data[self.pos..self.pos + 2]));
         self.pos += 2;
         Ok(v)
     }
 
     pub(crate) fn read_u32(&mut self) -> GgufResult<u32> {
         self.ensure(4)?;
-        let v = u32::from_le_bytes(self.data[self.pos..self.pos + 4].try_into().unwrap());
+        let v = u32::from_le_bytes(array_from_slice(&self.data[self.pos..self.pos + 4]));
         self.pos += 4;
         Ok(v)
     }
 
     pub(crate) fn read_i32(&mut self) -> GgufResult<i32> {
         self.ensure(4)?;
-        let v = i32::from_le_bytes(self.data[self.pos..self.pos + 4].try_into().unwrap());
+        let v = i32::from_le_bytes(array_from_slice(&self.data[self.pos..self.pos + 4]));
         self.pos += 4;
         Ok(v)
     }
 
     pub(crate) fn read_u64(&mut self) -> GgufResult<u64> {
         self.ensure(8)?;
-        let v = u64::from_le_bytes(self.data[self.pos..self.pos + 8].try_into().unwrap());
+        let v = u64::from_le_bytes(array_from_slice(&self.data[self.pos..self.pos + 8]));
         self.pos += 8;
         Ok(v)
     }
 
     pub(crate) fn read_i64(&mut self) -> GgufResult<i64> {
         self.ensure(8)?;
-        let v = i64::from_le_bytes(self.data[self.pos..self.pos + 8].try_into().unwrap());
+        let v = i64::from_le_bytes(array_from_slice(&self.data[self.pos..self.pos + 8]));
         self.pos += 8;
         Ok(v)
     }
 
     pub(crate) fn read_f32(&mut self) -> GgufResult<f32> {
         self.ensure(4)?;
-        let v = f32::from_le_bytes(self.data[self.pos..self.pos + 4].try_into().unwrap());
+        let v = f32::from_le_bytes(array_from_slice(&self.data[self.pos..self.pos + 4]));
         self.pos += 4;
         Ok(v)
     }
 
     pub(crate) fn read_f64(&mut self) -> GgufResult<f64> {
         self.ensure(8)?;
-        let v = f64::from_le_bytes(self.data[self.pos..self.pos + 8].try_into().unwrap());
+        let v = f64::from_le_bytes(array_from_slice(&self.data[self.pos..self.pos + 8]));
         self.pos += 8;
         Ok(v)
     }

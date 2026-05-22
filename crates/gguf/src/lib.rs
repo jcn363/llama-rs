@@ -1,3 +1,5 @@
+#![deny(missing_docs)]
+
 //! GGUF (GGML Universal File) format reader and writer.
 //!
 //! This crate provides safe Rust bindings for reading and writing GGUF files,

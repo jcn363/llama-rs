@@ -275,7 +275,8 @@ pub fn multi_head_attention_with_cache(
 /// # Returns
 /// Attention output of shape (seq_len, n_head * head_dim)
 #[expect(clippy::too_many_arguments)]
-#[allow(dead_code)]
+// Used in tests and for benchmarking; not referenced in production forward pass.
+#[cfg_attr(not(test), expect(dead_code))]
 pub fn multi_head_attention_prefill(
     n_head: usize,
     n_head_kv: usize,
