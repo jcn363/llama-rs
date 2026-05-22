@@ -153,7 +153,9 @@ rustflags = ["-C", "target-cpu=bdver1"]
 
 ## Code Style & Best Practices
 
-See [`CODE_STYLE.md`](./CODE_STYLE.md) for full conventions. Key rules:
+See [`CODE_STYLE.md`](./CODE_STYLE.md) for full project conventions. For a deeper reference on Rust best practices (borrowing, error handling, testing, unsafe, async, workspace management), see [`docs/RBP.md`](./docs/RBP.md). For contribution workflow, see [`CONTRIBUTING.md`](./CONTRIBUTING.md).
+
+Key rules from `CODE_STYLE.md`:
 
 - **Naming**: `snake_case` for files/functions/variables, `PascalCase` for types/enums
 - **Errors**: `thiserror` for libraries, `anyhow` for binaries; never `.unwrap()` outside tests

@@ -63,6 +63,23 @@ cargo fmt --all -- --check
 cargo clippy --workspace -- -D warnings
 ```
 
+## Code Conventions
+
+Before writing code, familiarize yourself with the project's conventions:
+
+- **[`CODE_STYLE.md`](./CODE_STYLE.md)** — code organization, naming, error handling, unsafe rules, testing patterns
+- **[`docs/RBP.md`](./docs/RBP.md)** — broader Rust best practices (borrowing, error handling, async, workspace management, API guidelines)
+- **[`ARCHITECTURE.md`](./ARCHITECTURE.md)** — crate dependency graph, data flow, per-crate file breakdown
+
+### Commit Messages
+
+See `README.md#Commit-Guidelines` for the project's commit message format. In short:
+
+- Format: `phase [N]: [description]` for feature phases, plain titles for fixes/refactors
+- Keep commits focused on a single logical concern
+- Messages must be imperative and descriptive
+- All commits must pass `cargo fmt --all -- --check` and `cargo clippy --workspace -- -D warnings`
+
 ## License Policy
 
 License compliance is managed with **deny**. The policy is defined in `deny.toml`. To audit licenses locally:

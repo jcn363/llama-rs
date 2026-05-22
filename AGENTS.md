@@ -21,7 +21,7 @@
 - Runs on Ubuntu with Rust stable toolchain; installs `clippy` and `rustfmt`.
 - Sets `RUSTFLAGS="-C target-cpu=bdver1"` and `CARGO_TERM_COLOR=always`.
 - Caches `~/.cargo/registry`, `~/.cargo/git`, and `target` between runs.
-- CI steps: format check → clippy (warnings as errors) → build → test → doctest.
+- CI steps: format check → clippy (warnings as errors) → test → license audit → doc build.
 
 ## Formatting
 - `rustfmt.toml`: `max_width = 100`, `tab_spaces = 4`, `newline_style = "Unix"`.
@@ -40,7 +40,13 @@
   - `list`
   - `validate --name <name>`
 
+## Documentation References
+- [`ARCHITECTURE.md`](./ARCHITECTURE.md) – crate dependency graph, data flow, per-crate breakdown
+- [`CODE_STYLE.md`](./CODE_STYLE.md) – naming, error handling, unsafe rules, testing conventions
+- [`docs/RBP.md`](./docs/RBP.md) – broader Rust best practices reference
+- [`CONTRIBUTING.md`](./CONTRIBUTING.md) – build, test, lint commands; contribution workflow
+
 ## Common Gotchas
 - CUDA backend is enabled by default; requires CUDA toolkit at build time.
-- CI enforces `cargo clippy -- -D warnings`; code must be lint‑clean.
+- CI enforces `cargo fmt --all -- --check` and `cargo clippy -- -D warnings`; code must be both formatted and lint‑clean.
 - Release builds require `--release` for performance‑critical runs.

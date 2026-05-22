@@ -2,6 +2,8 @@
 
 This documents the conventions and patterns used throughout the codebase. Follow these when contributing.
 
+For a broader Rust best practices reference (borrowing, error handling, testing, unsafe, async, workspace management), see [`docs/RBP.md`](./docs/RBP.md).
+
 ## Naming Conventions
 
 | Category | Convention | Example |
@@ -16,6 +18,8 @@ This documents the conventions and patterns used throughout the codebase. Follow
 | **Variables** | `snake_case` | `n_layers`, `head_dim`, `max_seq_len` |
 | **Constants** | `SCREAMING_SNAKE_CASE` | `GGUF_MAGIC`, `GGUF_DEFAULT_ALIGNMENT`, `BLOCK_M` |
 | **Module-level** | `snake_case` | `pub mod tensor;` |
+| **Conversion methods** | `as_` (free, borrowed→borrowed), `to_` (expensive, borrowed→owned), `into_` (variable, owned→owned) | `to_vec()`, `as_slice()` (per Rust API Guidelines C-CONV) |
+| **Getters** | Omit `get_` prefix | `tensor.byte_size()` not `get_byte_size()` (per C-GETTER) |
 | **Private items** | Leading `_` for intentionally unused | `_j_start`, `_layer_total` |
 
 ## File Organization
@@ -250,7 +254,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_function_name() {
+    fn dot_f32_should_compute_correct_result() {
         // Arrange
         let input = ...;
         let expected = ...;
@@ -292,13 +296,20 @@ criterion_group!(benches, my_benchmark);
 criterion_main!(benches);
 ```
 
+### Test Naming
+
+Use `describe_should_expected_behavior` format for clear failure messages:
+- `dot_f32_should_compute_correct_result`
+- `model_should_reject_invalid_magic`
+- `context_generation_should_stream_tokens`
+
 ### Conditional Test Execution
 
 For tests that require external resources (model files):
 
 ```rust
 #[test]
-fn test_needs_model_file() {
+fn some_operation_should_work_when_model_exists() {
     let model_path = ...;
     if !model_path.exists() {
         println!("Skipping: test model not found");
@@ -306,6 +317,17 @@ fn test_needs_model_file() {
     }
     // ... actual test
 }
+```
+
+### Skipping Slow Tests
+
+Use `#[ignore]` for benchmarks or tests that take more than a few seconds:
+
+```rust
+/// Full forward pass benchmark — run with `cargo test -- --ignored`.
+#[test]
+#[ignore]
+fn full_forward_pass_should_produce_logits() { ... }
 ```
 
 ## Feature Gates
@@ -341,8 +363,29 @@ CUDA code is conditionally compiled:
 - Don't use `#[allow(...)]` without a comment explaining why (use `#[expect(...)]` if possible)
 - Don't mix `tracing` and `log` — use `tracing` consistently
 - Don't add dependencies without checking `deny.toml` license policy
-- Don't use `unsafe` without `// Safety: ...` comment
+- Don't use `unsafe` without `// SAFETY:` comment
 - Don't hardcode architecture-specific constants — detect at runtime or use `#[cfg(...)]`
+
+### The Three Rules of Sound Unsafe
+
+Follow the Rust API Guidelines' three rules for every `unsafe` block (see `docs/RBP.md#a5-unsafe-code--ffi-guidelines`):
+
+1. **Document invariants** — every `// SAFETY:` comment explains why the operation is valid. Justify each safety invariant explicitly.
+2. **Encapsulate** — unsafe lives inside a safe API; callers must not be able to trigger UB through safe code.
+3. **Minimize** — only the smallest possible block is `unsafe`; avoid `unsafe fn` when a safe wrapper suffices.
+
+```rust
+// ✅ Good: minimal unsafe block, documented, encapsulated in safe API
+pub fn compute_dot(a: &[f32], b: &[f32]) -> f32 {
+    #[cfg(target_arch = "x86_64")]
+    if has_avx() {
+        // SAFETY: AVX requires aligned(32), verified by data layout above.
+        // Caller provides valid vectors of equal length.
+        return unsafe { avx_dot_f32(a, b) };
+    }
+    scalar_dot_f32(a, b)
+}
+```
 
 ## Formatting Rules
 
