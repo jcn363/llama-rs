@@ -11,7 +11,7 @@
 - `cargo test --workspace --verbose` – run all unit tests.
 - `cargo test --workspace --doc` – run doctests.
 - `cargo bench -p ggml-cpu --bench cpu_bench` – run CPU benchmark.
-- Enable CUDA backend: `cargo build --release -p ggml-cuda --features cuda`.
+- CUDA backend is enabled by default (requires CUDA toolkit). Disable with: `--no-default-features -p ggml-cuda`.
 
 ## Binaries / Entry Points
 - CLI: `./target/release/llama-cli -m model.gguf -p "prompt" -n 128`
@@ -41,6 +41,6 @@
   - `validate --name <name>`
 
 ## Common Gotchas
-- CUDA backend is feature‑gated; must enable with `--features cuda`.
+- CUDA backend is enabled by default; requires CUDA toolkit at build time.
 - CI enforces `cargo clippy -- -D warnings`; code must be lint‑clean.
 - Release builds require `--release` for performance‑critical runs.

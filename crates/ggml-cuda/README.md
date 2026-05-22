@@ -11,6 +11,6 @@ CUDA‑accelerated backend for GGML, enabling GPU inference.
 
 ```bash
 cd crates/ggml-cuda
-# Enable CUDA feature
-cargo build --release -p ggml-cuda --features cuda
+# CUDA is enabled by default (requires CUDA toolkit)
+cargo build --release
 ```

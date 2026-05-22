@@ -1,0 +1,254 @@
+# llama-rs Architecture
+
+## Overview
+
+A Rust port of [llama.cpp](https://github.com/ggml-org/llama.cpp) — inference engine for LLaMA-family large language models. Targets **AMD Opteron 3280** (bdver1, 8 cores, no FMA) and **NVIDIA GTX 1050** (2GB VRAM, Compute 6.1). Uses GGUF v3 as the model format.
+
+## Tech Stack
+
+| Layer | Technology |
+|-------|-----------|
+| Language | Rust, edition 2024, MSRV 1.85 |
+| Parallelism | `rayon` (data-parallel), `std::thread::scope` (task-parallel), `std::sync::Arc` |
+| SIMD | AVX (8-wide) → SSE4.2 (4-wide) → scalar fallback (no FMA, no AVX2) |
+| GPU | `cudarc` bindings, cuBLAS matmul (enabled by default) |
+| Serialization | `byteorder` (LE binary), `memmap2` (memory-mapped I/O) |
+| Async | `tokio` + `axum` + `futures` (server binary only) |
+| CLI | `clap` v4 derive |
+| Errors | `thiserror` (libs), `anyhow` (binaries) |
+| Benchmarking | `criterion` with HTML reports |
+| Testing | `#[cfg(test)] mod tests` + integration tests in `tests/` |
+
+## Directory Structure
+
+```
+llama-rs/
+├── Cargo.toml                  # Workspace root (9 members)
+├── rustfmt.toml                # max_width=100, tab_spaces=4, reorder_imports
+├── deny.toml                   # License policy (MIT, Apache-2.0, Unlicense)
+├── .cargo/config.toml          # --target-cpu=bdver1
+├── .github/workflows/ci.yml    # format → clippy → test → deny → doc
+├── crates/
+│   ├── gguf/                   # GGUF v3 file parser (no deps on other internal crates)
+│   ├── ggml/                   # Core tensor types + computation graph (depends on nothing)
+│   ├── ggml-cpu/               # CPU backend: SIMD matmul (depends on ggml)
+│   ├── ggml-cuda/              # CUDA backend: cuBLAS (depends on ggml, requires CUDA toolkit)
+│   ├── llama/                  # Inference engine: transformer, attention, KV cache (depends on gguf, ggml, ggml-cpu)
+│   ├── common/                 # Shared utils: args, sampling config, chat templates
+│   ├── llama-cli/              # CLI binary (depends on llama, common)
+│   └── llama-server/           # HTTP server binary (depends on llama, common, axum)
+├── test-models/                 # Test GGUF files (gitignored, downloaded separately)
+├── docs/                        # Additional documentation
+└── media/                       # Screenshots, diagrams
+```
+
+## Crate Dependency Graph
+
+```
+                    ┌─────────────┐
+                    │    ggml     │  (Tensor, DType, Graph)
+                    └──────┬──────┘
+                           │
+              ┌────────────┼────────────┐
+              ▼            ▼            ▼
+        ┌──────────┐ ┌──────────┐ ┌──────────┐
+        │ ggml-cpu │ │ggml-cuda │ │   gguf   │  (GGUF v3 parser)
+        └─────┬────┘ └─────┬────┘ └─────┬────┘
+              │            │            │
+              └──────┬─────┘            │
+                     ▼                  ▼
+              ┌─────────────────────────────────┐
+              │            llama                │  (Inference engine)
+              └──────────────┬──────────────────┘
+                             │
+              ┌──────────────┼──────────────┐
+              ▼              ▼              ▼
+        ┌──────────┐  ┌──────────┐  ┌──────────┐
+        │  common  │  │llama-cli │  │llama-    │
+        │          │  │          │  │server    │
+        └──────────┘  └──────────┘  └──────────┘
+```
+
+## Core Components
+
+### 1. `gguf` — GGUF v3 Parser (`crates/gguf/src/`)
+
+Parses the GGUF file format (v3). Minimal external dependencies: `memmap2`, `rayon`, `half`, `thiserror`.
+
+| File | Responsibility |
+|------|---------------|
+| `lib.rs` | `GgufReader` struct definition, top-level re-exports |
+| `loader.rs` | `GgufReader::from_file()`, `from_mmap()` — parses header, KV pairs, tensor info |
+| `cursor.rs` | `CursorReader` — little-endian binary reader over `&[u8]` |
+| `types.rs` | `GgufType` (13 value types), `GgmlType` (42 tensor types) |
+| `value.rs` | `GgufValue` enum — typed metadata value representation |
+| `tensor.rs` | `TensorInfo` (metadata) + `MmapTensor` (lazy mmap reference) |
+| `reader.rs` | `GgufReader` method impls: `get_kv()`, `find_tensor()`, array accessors |
+| `dequant.rs` | Dequantization functions: Q4_0..Q6_K, K-quants (Q2_K..Q6_K) |
+| `errors.rs` | `GgufError` enum, `GgufResult<T>` alias |
+| `constants.rs` | `GGUF_MAGIC`, `GGUF_VERSION`, `GGUF_DEFAULT_ALIGNMENT` |
+
+**Data flow:**
+1. `from_file()` memory-maps the file → `CursorReader` parses header + KV pairs + tensor info → stores aligned data offset
+2. Tensor data is accessed lazily via `MmapTensor::dequantize()`
+3. `dequantize()` dispatches to SIMD-parallelized per-dtype dequant functions
+
+### 2. `ggml` — Core Tensor Library (`crates/ggml/src/`)
+
+Foundation types used by all compute backends.
+
+| File | Responsibility |
+|------|---------------|
+| `lib.rs` | Re-exports `Tensor`, `DType`, `Graph` |
+| `tensor.rs` | `Tensor` struct — multi-dimensional array with `Arc<[u8]>` data |
+| `dtype.rs` | `DType` enum — F32, F16, I8, U8, I32, I64 |
+| `graph.rs` | `Graph` — simple DAG of tensor operations |
+
+### 3. `ggml-cpu` — CPU Backend (`crates/ggml-cpu/src/`)
+
+Optimized for AMD Opteron 3280 (bdver1: SSE4.2 + AVX, no FMA/AVX2).
+
+| File | Responsibility |
+|------|---------------|
+| `lib.rs` | Public API: `dot_f32`, `matmul_f32`, `CpuBackend`, feature detection |
+| `backend.rs` | `CpuBackend` — matmul + add operations on `Tensor` |
+| `matmul.rs` | Block-tiled `matmul_f32()` (16x16 tiles, parallel via `std::thread::scope`) |
+| `simd.rs` | `dot_f32()`: AVX 8-wide → SSE4.2 4-wide → scalar fallback |
+| `cpu_features.rs` | Runtime detection: `has_sse4_2()`, `has_avx()`, `has_aes()`, `has_popcnt()` |
+
+**Key design decisions:**
+- Threadpool: uses `std::thread::scope` (not rayon) for raw pointer access to output matrix
+- SIMD: 4 accumulators × SIMD width per iteration for instruction-level parallelism
+- Small-matrix threshold: parallel below 64 rows is slower than sequential
+
+### 4. `ggml-cuda` — CUDA Backend (`crates/ggml-cuda/src/`)
+
+Enabled by default (requires NVIDIA GPU + CUDA toolkit). Targets GTX 1050 (sm_61, 2GB VRAM).
+
+| Responsibility | Details |
+|---------------|---------|
+| `CudaBackend` | Initializes CUDA device, provides `matmul()` via cuBLAS |
+| `DeviceTensor` | GPU-side tensor with `copy_to_device()` / `to_host()` |
+| Error types | `CudaError::NotAvailable`, `OutOfMemory`, `RuntimeError` |
+| Stub mode | When `cuda` feature disabled, returns `available=false` but doesn't crash |
+
+### 5. `llama` — Inference Engine (`crates/llama/src/`)
+
+The core crate. Implements the full transformer forward pass.
+
+| File | Lines | Responsibility |
+|------|-------|---------------|
+| `lib.rs` | 139 | `Model` struct definition, `TensorData` (lazy dequant), `InternedStrings` |
+| `model.rs` | 263 | `Model::load_from_gguf()` — parses GGUF metadata, builds tensor map |
+| `context.rs` | 432 | `InferenceContext` — ties model + tokenizer + sampling; `generate()`, `forward_pass()` |
+| `inference.rs` | 385 | Math ops: `rms_norm`, `silu`, `gelu`, `mat_vec`, `dot_product`, `sample_logits`, top-k/p |
+| `attention.rs` | 393 | `multi_head_attention_with_cache()`, `flash_attention_head()`, `apply_rope()` |
+| `kv_cache.rs` | 129 | `KvCache` (per-layer) + `KvCacheManager` (multi-layer) |
+| `tokenizer.rs` | 318 | `SimpleTokenizer` — greedy longest-match tokenizer from GGUF vocab |
+| `profile.rs` | 63 | `ProfileResult` — per-layer timing data |
+
+**Forward pass flow (`InferenceContext::forward_pass`):**
+1. Embed lookup: `token_embd.weight[token_id]`
+2. For each layer:
+   a. RMSNorm → Q/K/V projections → RoPE → KV cache store
+   b. Flash attention (online softmax, O(N) memory)
+   c. Attention output projection → residual add
+   d. RMSNorm → SiLU-gated FFN (or GELU for Gemma) → residual add
+3. Final RMSNorm → output projection → logits
+
+**Inference modes:**
+- `generate()` — standard greedy/sampling generation
+- `generate_with_profile()` — per-layer timing for benchmarking
+
+### 6. `common` — Shared Utilities (`crates/common/src/`)
+
+| Module | Content |
+|--------|---------|
+| `args` | `CommonArgs` — clap args for model path, threads, ctx size, CUDA flag |
+| `sampling` | `SamplingConfig` — temperature, top-k, top-p, repeat_penalty |
+
+### 7. `llama-cli` — CLI Binary (`crates/llama-cli/src/main.rs`)
+
+Single-file binary. Interactive mode (reads from stdin) or single-prompt mode (`-p`).
+
+### 8. `llama-server` — HTTP Server (`crates/llama-server/src/main.rs`)
+
+Axum-based HTTP server with two endpoints:
+- `GET /health` → `{"status": "ok"}`
+- `POST /completion` → JSON body with `prompt`, `max_tokens`, `stream`, `temperature`
+  - Non-streaming: returns `CompletionResponse { content, model }`
+  - Streaming: SSE with `StreamChunk { content, stop }` events
+
+## Data Flow
+
+```
+GGUF file on disk
+    │
+    ▼
+GgufReader::from_file()  ───►  mmap file, parse header/KV/tensors
+    │
+    ▼
+Model::load_from_gguf()  ───►  Build tensor map (parallel dequant),
+    │                           populate hyperparameters
+    ▼
+InferenceContext::new()  ───►  Create tokenizer, config
+    │
+    ▼
+encode(prompt)           ───►  Tokenize input text → Vec<usize>
+    │
+    ▼
+forward_pass(token_id)   ───►  Embed → N transformer layers → logits
+    │                           (each layer: attn + FFN w/ residuals)
+    ▼
+sample_logits(logits)    ───►  temperature → top-k → top-p → categorical
+    │
+    ▼
+decode(tokens)           ───►  Token IDs → text string
+```
+
+## External Integrations
+
+| Integration | What it does |
+|-------------|-------------|
+| Filesystem | Reads GGUF model files via `memmap2` |
+| CUDA (optional) | GPU matmul via `cudarc` + cuBLAS |
+| HTTP | Axum server for inference API |
+| Criterion | Benchmarking framework |
+
+## Configuration
+
+| File | Purpose |
+|------|---------|
+| `.cargo/config.toml` | `target-cpu=bdver1` for all builds |
+| `rustfmt.toml` | max_width=100, tab_spaces=4, reorder_imports |
+| `deny.toml` | License policy: MIT, Apache-2.0, Unlicense |
+| `.github/workflows/ci.yml` | CI pipeline definition |
+
+## Build & Deploy
+
+```bash
+# Debug build
+cargo build --workspace --verbose
+
+# Release build (optimized: -O3, LTO thin, codegen-units=1, strip debuginfo)
+cargo build --release --workspace
+
+# CUDA is included by default (requires CUDA toolkit)
+# To build without CUDA:
+#   cargo build --release --no-default-features -p ggml-cuda
+
+# Test
+cargo test --workspace --verbose
+cargo test --workspace --doc
+
+# CI pipeline (5 steps — `cargo test` compiles, no separate build step)
+cargo fmt --all -- --check          # 1. Format check
+cargo clippy --workspace -- -D warnings  # 2. Lint (warnings as errors)
+cargo test --workspace --verbose    # 3. Unit + integration tests (compiles first)
+cargo deny check licenses           # 4. License audit (uses EmbarkStudios/cargo-deny-action)
+cargo doc --no-deps --document-private-items  # 5. Documentation build
+
+# Benchmarks
+cargo bench -p ggml-cpu --bench cpu_bench
+cargo bench -p llama --bench profiling
+```

@@ -2,22 +2,30 @@
 
 A Rust port of [llama.cpp](https://github.com/ggml-org/llama.cpp), optimized for **AMD Opteron 3280** (bdver1) + **NVIDIA GTX 1050** (2GB VRAM).
 
-## Architecture
+## Project Structure & Module Organization
+
+The workspace splits concerns across 8 domain crates, each handling a specific subsystem:
 
 ```
 llama-rs/
 ├── crates/
-│   ├── gguf/          # GGUF v3 parser (13 value types, 42 tensor types)
-│   ├── ggml/          # Core tensor library and computation graphs
-│   ├── ggml-cpu/      # CPU backend: AVX + SSE4.2 SIMD matmul
-│   ├── ggml-cuda/     # CUDA backend: cuBLAS matmul (feature-gated)
-│   ├── llama/         # Inference engine: transformer forward pass
-│   ├── common/        # Shared utilities (sampling config, etc.)
-│   ├── llama-cli/     # CLI binary for interactive generation
-│   └── llama-server/  # HTTP server with /completion endpoint
-├── .github/workflows/ # CI: build, test, clippy, release
-└── Cargo.toml         # Workspace definition
+│   ├── gguf/          # GGUF v3 parser — file format, tensor info, dequantization
+│   ├── ggml/          # Core tensor library — Tensor, DType, computation graphs
+│   ├── ggml-cpu/      # CPU backend — AVX/SSE4.2 SIMD matmul, block-tiling
+│   ├── ggml-cuda/     # CUDA backend — cuBLAS matmul, VRAM tracking (requires CUDA toolkit)
+│   ├── llama/         # Inference engine — transformer forward pass, attention, KV cache
+│   ├── common/        # Shared utilities — argument parsing, sampling config
+│   ├── llama-cli/     # CLI binary for interactive text generation
+│   └── llama-server/  # HTTP server with /completion and /health endpoints
+├── .cargo/            # cargo config (target-cpu=bdver1)
+├── .github/workflows/ # CI: format → clippy → test → deny → doc
+├── test-models/       # Test GGUF files (downloaded separately, gitignored)
+├── Cargo.toml         # Workspace root (9 members)
+├── rustfmt.toml       # Formatting: max_width=100, 4-space indent
+└── deny.toml          # License policy (MIT, Apache-2.0, Unlicense)
 ```
+
+The architecture enforces **strict separation of concerns** — the GGUF parser (`gguf`) depends on zero internal crates; compute backends (`ggml-cpu`, `ggml-cuda`) depend only on `ggml`; the inference engine (`llama`) consumes all lower layers but never reaches into binaries.
 
 ## Hardware Target
 
@@ -42,7 +50,10 @@ llama-rs/
 ## Quick Start
 
 ```bash
-# Build
+# Build (debug)
+cargo build --workspace
+
+# Build (release, optimized)
 cargo build --release --workspace
 
 # Run CLI
@@ -62,14 +73,75 @@ cargo bench -p ggml-cpu --bench cpu_bench
 
 - **GGUF v3 parser**: Full support for 13 metadata types, 42 tensor types, memory-mapped I/O
 - **SIMD matmul**: AVX 8-wide (32 floats/iter) → SSE4.2 4-wide (16 floats/iter) → scalar fallback
-- **CUDA backend**: cuBLAS matmul, VRAM tracking, feature-gated (disabled by default)
+- **CUDA backend**: cuBLAS matmul, VRAM tracking (enabled by default, requires CUDA toolkit)
 - **Inference engine**: RMSNorm, RoPE, multi-head attention with GQA, SwiGLU FFN, KV cache, flash attention
 - **Sampling**: Greedy, temperature, top-k, top-p (nucleus)
 - **Multi-architecture support**: Llama, Mistral, Phi2/3, Gemma/Gemma2, Qwen2, StableLM
 - **Profiling**: Per-layer timing benchmarks with `generate_with_profile()` method
 - **Memory-mapped tensors**: Lazy loading via `MmapTensor` for reduced memory footprint
 - **CLI**: Interactive mode, single prompt, streaming token output
-- **Server**: POST `/completion`, GET `/health`, JSON API
+- **Server**: POST `/completion`, GET `/health`, JSON API, SSE streaming
+
+## CLI Commands
+
+**llama-cli** — Interactive text generation:
+```
+llama-cli -m model.gguf [-p "prompt"] [-n 128] [-t 0] [-c 512]
+```
+- `-m, --model` — Path to GGUF model file (required)
+- `-p, --prompt` — Input prompt (empty for interactive mode)
+- `-n, --n-predict` — Maximum tokens to generate (default: 128)
+- `-t, --threads` — Worker threads (0 = auto-detect)
+- `-c, --ctx-size` — Context window size (default: 512)
+- `--verbose` — Enable debug logging
+
+**llama-server** — HTTP inference API:
+```
+llama-server -m model.gguf [--host 127.0.0.1] [--port 8080]
+```
+- `-m, --model` — Path to GGUF model file (required)
+- `--host` — Bind address (default: 127.0.0.1)
+- `-p, --port` — Listen port (default: 8080)
+- `-t, --threads` — Worker threads (0 = auto-detect)
+- `-c, --ctx-size` — Context window size (default: 512)
+
+**Endpoints:**
+- `GET /health` — Health check, returns `{"status": "ok"}`
+- `POST /completion` — Generate text (`prompt`, `max_tokens`, `stream`, `temperature`)
+
+## Development
+
+### Build & Test
+
+| Command | Purpose |
+|---------|---------|
+| `cargo build --workspace` | Debug build |
+| `cargo build --release --workspace` | Release build (LTO thin, codegen-units=1) |
+| `cargo check` | Type-check without producing binaries |
+| `cargo test --workspace` | Run all unit + integration tests |
+| `cargo test --workspace --doc` | Run doctests |
+| `cargo test [test_name] -- --nocapture` | Run a single test with output |
+| `cargo bench -p ggml-cpu --bench cpu_bench` | Run CPU benchmarks |
+| `cargo bench -p llama --bench profiling` | Run profiling benchmarks |
+
+### Linting & Formatting
+
+| Command | Purpose |
+|---------|---------|
+| `cargo fmt --all -- --check` | Verify formatting (CI enforces this) |
+| `cargo fmt --all` | Auto-format all code |
+| `cargo clippy --workspace -- -D warnings` | Lint with warnings-as-errors |
+| `cargo deny check licenses` | Audit dependency licenses |
+
+**CI pipeline** runs: format check → clippy (warnings as errors) → test → license audit → doc build.
+
+### CUDA Build
+
+CUDA is enabled by default (requires NVIDIA GPU + CUDA toolkit). To build without CUDA:
+
+```bash
+cargo build --release --no-default-features -p ggml-cuda
+```
 
 ## Build Configuration
 
@@ -79,10 +151,41 @@ cargo bench -p ggml-cpu --bench cpu_bench
 rustflags = ["-C", "target-cpu=bdver1"]
 ```
 
-CUDA is disabled by default. Enable with:
-```bash
-cargo build --release -p ggml-cuda --features cuda
+## Code Style & Best Practices
+
+See [`CODE_STYLE.md`](./CODE_STYLE.md) for full conventions. Key rules:
+
+- **Naming**: `snake_case` for files/functions/variables, `PascalCase` for types/enums
+- **Errors**: `thiserror` for libraries, `anyhow` for binaries; never `.unwrap()` outside tests
+- **Concurrency**: `Arc` for shared ownership, `RwLock` for read-mostly state, `rayon` for data parallelism
+- **SIMD**: AVX → SSE4.2 → scalar fallback (no FMA, no AVX2 — bdver1 target)
+- **Unsafe**: Every `unsafe` block must have a `// SAFETY:` comment
+- **Clippy**: The workspace allows pedantic lints globally; individual crates opt in with `#![deny(clippy::pedantic)]` and explicit allow-list
+
+## Testing Guidelines
+
+Tests are organized as:
+- **Unit tests**: Inline in source files under `#[cfg(test)] mod tests { ... }`
+- **Integration tests**: `crates/<name>/tests/<name>_test.rs`
+- **Benchmarks**: `crates/<name>/benches/<name>.rs` (criterion)
+- **Doctests**: In doc comments (`/// ```no_run ...`)
+
+Naming convention: `describe_should_expected_behavior` — e.g., `dot_f32_should_compute_correct_result`.
+
+Tests that require external model files skip gracefully when the file is absent:
+```rust
+if !model_path.exists() {
+    println!("Skipping: test model not found");
+    return;
+}
 ```
+
+## Commit Guidelines
+
+- Format: `phase [N]: [description]` for feature phases, plain titles for fixes/refactors
+- Keep commits focused on a single logical concern
+- Messages should be imperative and descriptive enough to understand the change without reading the diff
+- All commits must pass `cargo fmt --all -- --check` and `cargo clippy --workspace -- -D warnings`
 
 ## Status
 

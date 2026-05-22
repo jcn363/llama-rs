@@ -30,10 +30,10 @@ For an optimized release build:
 cargo build --release --workspace
 ```
 
-If you need CUDA support, enable the feature when building the `ggml-cuda` crate:
+CUDA support is enabled by default (requires CUDA toolkit). To build without CUDA:
 
 ```bash
-cargo build --release -p ggml-cuda --features cuda
+cargo build --release --no-default-features -p ggml-cuda
 ```
 
 ## Testing

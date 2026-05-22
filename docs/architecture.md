@@ -39,7 +39,7 @@ graph LR
 
 ## Deployment
 
-* Build the binaries with `cargo build --release` (or `cargo build --release -p ggml-cuda --features cuda` for GPU support).
+* Build the binaries with `cargo build --release` (CUDA is enabled by default, requires CUDA toolkit).
 * Deploy the `llama‑server` binary to a host with the desired model file (`model.gguf`).
 * Optionally expose the server behind a reverse proxy (e.g., Nginx) for TLS termination.
 
