@@ -37,3 +37,11 @@ harness = false
 [[bench]]
 name = "profiling"
 harness = false
+
+[[bench]]
+name = "kv_cache"
+harness = false
+
+[[bench]]
+name = "attention"
+harness = false

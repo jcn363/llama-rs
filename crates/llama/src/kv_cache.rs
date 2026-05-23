@@ -19,11 +19,17 @@ pub enum CacheStrategy {
 /// Flattened in row‑major order (seq -> head -> dim).
 #[derive(Debug, Clone)]
 pub struct KvCache {
+    /// Maximum sequence length this cache can hold.
     pub max_seq: usize,
+    /// Number of key/value heads (for GQA/MQA).
     pub n_head_kv: usize,
+    /// Dimension per head.
     pub head_dim: usize,
+    /// Flattened key cache: [max_seq, n_head_kv, head_dim].
     pub keys: Vec<f32>,
+    /// Flattened value cache: [max_seq, n_head_kv, head_dim].
     pub values: Vec<f32>,
+    /// Current number of cached positions.
     pub cur_len: usize,
 }
 
@@ -97,7 +103,9 @@ impl KvCache {
 /// Holds one KvCache per transformer layer.
 #[derive(Debug)]
 pub struct KvCacheManager {
+    /// Per-layer KV caches, indexed by layer index.
     pub caches: Vec<KvCache>,
+    /// Number of transformer layers.
     pub n_layers: usize,
 }
 

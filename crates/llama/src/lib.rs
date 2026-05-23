@@ -32,9 +32,10 @@ pub mod tokenizer;
 
 // ─── Re-exports ──────────────────────────────────────────────────────────────
 
+pub use attention::{apply_rope_with_config, multi_head_attention_with_cache};
 pub use context::{InferenceContext, ModelConfig};
 pub use inference::dot_product;
-pub use kv_cache::CacheStrategy;
+pub use kv_cache::{CacheStrategy, KvCache, KvCacheManager};
 pub use profile::ProfileResult;
 pub use tokenizer::SimpleTokenizer;
 
