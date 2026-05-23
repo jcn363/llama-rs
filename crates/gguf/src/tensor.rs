@@ -131,6 +131,17 @@ impl TensorInfo {
             GgmlType::Q4_K => dequantize_q4_k(raw),
             GgmlType::Q5_K => dequantize_q5_k(raw),
             GgmlType::Q6_K => dequantize_q6_k(raw),
+            GgmlType::Iq1S => dequantize_iq1_s(raw),
+            GgmlType::Iq1M => dequantize_iq1_m(raw),
+            GgmlType::Iq2S => dequantize_iq2_s(raw),
+            GgmlType::Iq2Xxs => dequantize_iq2_xxs(raw),
+            GgmlType::Iq2Xs => dequantize_iq2_xs(raw),
+            GgmlType::Iq3S => dequantize_iq3_s(raw),
+            GgmlType::Iq3Xxs => dequantize_iq3_xxs(raw),
+            GgmlType::Iq3Xs => dequantize_iq3_xs(raw),
+            GgmlType::Iq3M => dequantize_iq3_m(raw),
+            GgmlType::Iq4Nl => dequantize_iq4_nl(raw),
+            GgmlType::Iq4Xs => dequantize_iq4_xs(raw),
             _ => Err(GgufError::DecodeError(format!(
                 "unsupported dtype for dequantize: {:?}",
                 self.dtype

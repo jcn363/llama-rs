@@ -124,7 +124,7 @@ To achieve complete Ollama model support, llama-rs should:
   - ✅ Q6_K
   - ✅ Q2_K, Q3_K, Q4_K, Q5_K, Q6_K (K-quants)
   - ✅ Q8_K, Q1_0
-  - ❏ IQ1_S, IQ1_M, IQ2_S, IQ2_XS, IQ3_S, IQ3_M, IQ3_XS, IQ4_NL, IQ4_XS (imatrix quantizations)
+  - ✅ IQ1_S, IQ1_M, IQ2_S, IQ2_XXS, IQ2_XS, IQ3_S, IQ3_XXS, IQ3_XS, IQ3_M, IQ4_NL, IQ4_XS (imatrix quantizations)
   - ❏ 1.5-bit, 2-bit, 3-bit, 4.5-bit, 5-bit, 6-bit, 8-bit variants
   - ❏ Binary and ternary quantization (1-bit, 1.58-bit)
 

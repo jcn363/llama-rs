@@ -205,6 +205,18 @@ impl GgufReader {
             GgmlType::Q4_K | GgmlType::Q5_K | GgmlType::Q6_K => {
                 element_count / 2 + element_count / 64 + element_count / 64
             }
+            // IQ (importance-matrix) quantization types
+            GgmlType::Iq1S => element_count / 256 * 50,
+            GgmlType::Iq1M => element_count / 256 * 56,
+            GgmlType::Iq2S => element_count / 256 * 82,
+            GgmlType::Iq2Xxs => element_count / 256 * 66,
+            GgmlType::Iq2Xs => element_count / 256 * 74,
+            GgmlType::Iq3S => element_count / 256 * 110,
+            GgmlType::Iq3Xxs => element_count / 256 * 98,
+            GgmlType::Iq3Xs => element_count / 256 * 98,
+            GgmlType::Iq3M => element_count / 256 * 112,
+            GgmlType::Iq4Nl => element_count / 32 * 18,
+            GgmlType::Iq4Xs => element_count / 256 * 136,
             _ => {
                 return Err(GgufError::DecodeError(format!(
                     "unsupported dtype for size calculation: {:?}",
@@ -261,18 +273,19 @@ impl GgufReader {
             GgmlType::Q4_K | GgmlType::Q5_K | GgmlType::Q6_K => {
                 element_count / 2 + element_count / 64 + element_count / 64
             }
-            GgmlType::Iq2Xxs
-            | GgmlType::Iq2Xs
-            | GgmlType::Iq3Xxs
-            | GgmlType::Iq3M
-            | GgmlType::Iq3Xs
-            | GgmlType::Iq1S
-            | GgmlType::Iq4Nl
-            | GgmlType::Iq3S
-            | GgmlType::Iq2S
-            | GgmlType::Iq4Xs
-            | GgmlType::Iq1M
-            | GgmlType::Tq1_0
+            // IQ (importance-matrix) quantization types
+            GgmlType::Iq1S => element_count / 256 * 50,
+            GgmlType::Iq1M => element_count / 256 * 56,
+            GgmlType::Iq2S => element_count / 256 * 82,
+            GgmlType::Iq2Xxs => element_count / 256 * 66,
+            GgmlType::Iq2Xs => element_count / 256 * 74,
+            GgmlType::Iq3S => element_count / 256 * 110,
+            GgmlType::Iq3Xxs => element_count / 256 * 98,
+            GgmlType::Iq3Xs => element_count / 256 * 98,
+            GgmlType::Iq3M => element_count / 256 * 112,
+            GgmlType::Iq4Nl => element_count / 32 * 18,
+            GgmlType::Iq4Xs => element_count / 256 * 136,
+            GgmlType::Tq1_0
             | GgmlType::Tq2_0
             | GgmlType::Mxfp4
             | GgmlType::Nvfp4
