@@ -17,7 +17,7 @@ fn bench_forward_pass_profile(c: &mut Criterion) {
         return;
     }
 
-    let model = Model::load_from_gguf(&model_path).expect("Failed to load model");
+    let model = Model::load_from_gguf(&model_path, false).expect("Failed to load model");
     let ctx = InferenceContext::new(Arc::new(model), ModelConfig::default());
 
     c.bench_function("forward_pass_with_profile", |b| {
@@ -25,7 +25,10 @@ fn bench_forward_pass_profile(c: &mut Criterion) {
             let (toks, profile) = ctx
                 .generate_with_profile("Hello", 1)
                 .expect("Failed to generate");
-            black_box((toks, profile.report()))
+            // Test both human-readable report and JSON export
+            let report = profile.report();
+            let json = profile.to_json().expect("Failed to export to JSON");
+            black_box((toks, report, json))
         })
     });
 }
@@ -44,7 +47,7 @@ fn bench_generate_profile(c: &mut Criterion) {
         return;
     }
 
-    let model = Model::load_from_gguf(&model_path).expect("Failed to load model");
+    let model = Model::load_from_gguf(&model_path, false).expect("Failed to load model");
     let ctx = InferenceContext::new(Arc::new(model), ModelConfig::default());
 
     c.bench_function("generate_5_tokens_profile", |b| {

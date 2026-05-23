@@ -1,7 +1,9 @@
-//! Profiling structures and utilities for the Llama crate.
+/// Profiling structures and utilities for the Llama crate.
+
+use serde::{Deserialize, Serialize};
 
 /// Profiling results for a single forward pass.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ProfileResult {
     /// Time to load embedding (ms).
     pub embed_ms: f64,
@@ -59,5 +61,10 @@ impl ProfileResult {
             ));
         }
         s
+    }
+
+    /// Export profiling results as JSON.
+    pub fn to_json(&self) -> Result<String, serde_json::Error> {
+        serde_json::to_string_pretty(self)
     }
 }
