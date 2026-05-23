@@ -101,84 +101,84 @@ impl GgufType {
 
 // ─── GGML Tensor Types ───────────────────────────────────────────────────────
 
-    /// GGML tensor data types (stored as i32 in GGUF files).
-    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-    #[repr(i32)]
-    #[expect(non_camel_case_types)]
-    pub enum GgmlType {
-        /// 32-bit float.
-        F32 = 0,
-        /// 16-bit float.
-        F16 = 1,
-        /// 4-bit quantized (variant 0).
-        Q4_0 = 2,
-        /// 4-bit quantized (variant 1).
-        Q4_1 = 3,
-        /// 5-bit quantized (variant 0).
-        Q5_0 = 6,
-        /// 5-bit quantized (variant 1).
-        Q5_1 = 7,
-        /// 8-bit quantized (variant 0).
-        Q8_0 = 8,
-        /// 8-bit quantized (variant 1).
-        Q8_1 = 9,
-        /// 2-bit K-quants.
-        Q2_K = 10,
-        /// 3-bit K-quants.
-        Q3_K = 11,
-        /// 4-bit K-quants.
-        Q4_K = 12,
-        /// 5-bit K-quants.
-        Q5_K = 13,
-        /// 6-bit K-quants.
-        Q6_K = 14,
-        /// 8-bit K-quants.
-        Q8_K = 15,
-        /// IQ2 XXS.
-        Iq2Xxs = 16,
-        /// IQ2 XS.
-        Iq2Xs = 17,
-        /// IQ3 XXS.
-        Iq3Xxs = 18,
-        /// IQ1 S.
-        Iq1S = 19,
-        /// IQ4 NL.
-        Iq4Nl = 20,
-        /// IQ3 S.
-        Iq3S = 21,
-        /// IQ2 S.
-        Iq2S = 22,
-        /// IQ4 XS.
-        Iq4Xs = 23,
-        /// IQ1 M.
-        Iq1M = 24,
-        /// IQ3 M.
-        Iq3M = 25,
-        /// IQ3 XS.
-        Iq3Xs = 26,
-        /// 8-bit integer.
-        I8 = 27,
-        /// 16-bit integer.
-        I16 = 28,
-        /// 32-bit integer.
-        I32 = 29,
-        /// 64-bit integer.
-        I64 = 30,
-        /// 64-bit float.
-        F64 = 31,
-        /// Brain float 16.
-        Bf16 = 32,
-        /// Ternary quantized 1.0.
-        Tq1_0 = 34,
-        /// Ternary quantized 2.0.
-        Tq2_0 = 35,
-        /// MXFP4.
-        Mxfp4 = 39,
-        /// NVFP4.
-        Nvfp4 = 40,
-        /// 1-bit quantized.
-        Q1_0 = 41,
-    }
+/// GGML tensor data types (stored as i32 in GGUF files).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(i32)]
+#[expect(non_camel_case_types)]
+pub enum GgmlType {
+    /// 32-bit float.
+    F32 = 0,
+    /// 16-bit float.
+    F16 = 1,
+    /// 4-bit quantized (variant 0).
+    Q4_0 = 2,
+    /// 4-bit quantized (variant 1).
+    Q4_1 = 3,
+    /// 5-bit quantized (variant 0).
+    Q5_0 = 6,
+    /// 5-bit quantized (variant 1).
+    Q5_1 = 7,
+    /// 8-bit quantized (variant 0).
+    Q8_0 = 8,
+    /// 8-bit quantized (variant 1).
+    Q8_1 = 9,
+    /// 2-bit K-quants.
+    Q2_K = 10,
+    /// 3-bit K-quants.
+    Q3_K = 11,
+    /// 4-bit K-quants.
+    Q4_K = 12,
+    /// 5-bit K-quants.
+    Q5_K = 13,
+    /// 6-bit K-quants.
+    Q6_K = 14,
+    /// 8-bit K-quants.
+    Q8_K = 15,
+    /// IQ2 XXS.
+    Iq2Xxs = 16,
+    /// IQ2 XS.
+    Iq2Xs = 17,
+    /// IQ3 XXS.
+    Iq3Xxs = 18,
+    /// IQ1 S.
+    Iq1S = 19,
+    /// IQ4 NL.
+    Iq4Nl = 20,
+    /// IQ3 S.
+    Iq3S = 21,
+    /// IQ2 S.
+    Iq2S = 22,
+    /// IQ4 XS.
+    Iq4Xs = 23,
+    /// IQ1 M.
+    Iq1M = 24,
+    /// IQ3 M.
+    Iq3M = 25,
+    /// IQ3 XS.
+    Iq3Xs = 26,
+    /// 8-bit integer.
+    I8 = 27,
+    /// 16-bit integer.
+    I16 = 28,
+    /// 32-bit integer.
+    I32 = 29,
+    /// 64-bit integer.
+    I64 = 30,
+    /// 64-bit float.
+    F64 = 31,
+    /// Brain float 16.
+    Bf16 = 32,
+    /// Ternary quantized 1.0.
+    Tq1_0 = 34,
+    /// Ternary quantized 2.0.
+    Tq2_0 = 35,
+    /// MXFP4.
+    Mxfp4 = 39,
+    /// NVFP4.
+    Nvfp4 = 40,
+    /// 1-bit quantized.
+    Q1_0 = 41,
+}
 
 impl GgmlType {
     /// Try to convert from a raw i32 value.

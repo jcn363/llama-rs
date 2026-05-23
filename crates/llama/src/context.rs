@@ -13,7 +13,7 @@ use crate::inference::{
     sample_logits, silu,
 };
 use crate::profile::ProfileResult;
-use crate::{NormType, Model};
+use crate::{Model, NormType};
 
 /// Configuration for inference.
 #[derive(Debug, Clone)]

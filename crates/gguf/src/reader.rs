@@ -191,40 +191,7 @@ impl GgufReader {
 
     /// Calculate the byte size of a tensor from its shape and dtype.
     pub fn tensor_byte_size(&self, info: &TensorInfo) -> GgufResult<usize> {
-        let element_count: usize = info.shape.iter().map(|&d| d as usize).product();
-        let byte_size = match info.dtype {
-            GgmlType::F32 | GgmlType::I32 => element_count * 4,
-            GgmlType::F16 | GgmlType::I16 | GgmlType::Bf16 => element_count * 2,
-            GgmlType::F64 | GgmlType::I64 => element_count * 8,
-            GgmlType::I8 | GgmlType::Q8_0 | GgmlType::Q8_1 | GgmlType::Q8_K => element_count,
-            GgmlType::Q4_0 | GgmlType::Q4_1 => element_count / 2,
-            GgmlType::Q5_0 | GgmlType::Q5_1 => (element_count / 2) + (element_count / 32) * 2,
-            GgmlType::Q2_K | GgmlType::Q3_K => {
-                element_count / 4 + element_count / 64 + element_count / 64
-            }
-            GgmlType::Q4_K | GgmlType::Q5_K | GgmlType::Q6_K => {
-                element_count / 2 + element_count / 64 + element_count / 64
-            }
-            // IQ (importance-matrix) quantization types
-            GgmlType::Iq1S => element_count / 256 * 50,
-            GgmlType::Iq1M => element_count / 256 * 56,
-            GgmlType::Iq2S => element_count / 256 * 82,
-            GgmlType::Iq2Xxs => element_count / 256 * 66,
-            GgmlType::Iq2Xs => element_count / 256 * 74,
-            GgmlType::Iq3S => element_count / 256 * 110,
-            GgmlType::Iq3Xxs => element_count / 256 * 98,
-            GgmlType::Iq3Xs => element_count / 256 * 98,
-            GgmlType::Iq3M => element_count / 256 * 112,
-            GgmlType::Iq4Nl => element_count / 32 * 18,
-            GgmlType::Iq4Xs => element_count / 256 * 136,
-            _ => {
-                return Err(GgufError::DecodeError(format!(
-                    "unsupported dtype for size calculation: {:?}",
-                    info.dtype
-                )));
-            }
-        };
-        Ok(byte_size)
+        tensor_byte_size_for_type(info.dtype, &info.shape)
     }
 
     /// Create a memory-mapped tensor reference for lazy loading.
@@ -259,43 +226,7 @@ impl GgufReader {
             )));
         }
 
-        let element_count: usize = tensor.shape.iter().map(|&d| d as usize).product();
-        let byte_size = match tensor.dtype {
-            GgmlType::F32 | GgmlType::I32 => element_count * 4,
-            GgmlType::F16 | GgmlType::I16 | GgmlType::Bf16 => element_count * 2,
-            GgmlType::F64 | GgmlType::I64 => element_count * 8,
-            GgmlType::I8 | GgmlType::Q8_0 | GgmlType::Q8_1 | GgmlType::Q8_K => element_count,
-            GgmlType::Q4_0 | GgmlType::Q4_1 => element_count / 2,
-            GgmlType::Q5_0 | GgmlType::Q5_1 => (element_count / 2) + (element_count / 32) * 2,
-            GgmlType::Q2_K | GgmlType::Q3_K => {
-                element_count / 4 + element_count / 64 + element_count / 64
-            }
-            GgmlType::Q4_K | GgmlType::Q5_K | GgmlType::Q6_K => {
-                element_count / 2 + element_count / 64 + element_count / 64
-            }
-            // IQ (importance-matrix) quantization types
-            GgmlType::Iq1S => element_count / 256 * 50,
-            GgmlType::Iq1M => element_count / 256 * 56,
-            GgmlType::Iq2S => element_count / 256 * 82,
-            GgmlType::Iq2Xxs => element_count / 256 * 66,
-            GgmlType::Iq2Xs => element_count / 256 * 74,
-            GgmlType::Iq3S => element_count / 256 * 110,
-            GgmlType::Iq3Xxs => element_count / 256 * 98,
-            GgmlType::Iq3Xs => element_count / 256 * 98,
-            GgmlType::Iq3M => element_count / 256 * 112,
-            GgmlType::Iq4Nl => element_count / 32 * 18,
-            GgmlType::Iq4Xs => element_count / 256 * 136,
-            GgmlType::Tq1_0
-            | GgmlType::Tq2_0
-            | GgmlType::Mxfp4
-            | GgmlType::Nvfp4
-            | GgmlType::Q1_0 => {
-                return Err(GgufError::DecodeError(format!(
-                    "unsupported quantized dtype for direct read: {:?}",
-                    tensor.dtype
-                )));
-            }
-        };
+        let byte_size = tensor_byte_size_for_type(tensor.dtype, &tensor.shape)?;
 
         let end = start + byte_size;
         if end > self.data.len() {
@@ -422,4 +353,44 @@ impl GgufReader {
     pub fn raw_data(&self) -> &[u8] {
         &self.data
     }
+}
+
+// ─── Private helpers ──────────────────────────────────────────────────────────
+
+/// Compute the byte size of a tensor from its dtype and shape.
+/// Shared by `tensor_byte_size()` and `read_tensor_data()` to avoid DRY.
+fn tensor_byte_size_for_type(dtype: GgmlType, shape: &[i64]) -> GgufResult<usize> {
+    let element_count: usize = shape.iter().map(|&d| d as usize).product();
+    let byte_size = match dtype {
+        GgmlType::F32 | GgmlType::I32 => element_count * 4,
+        GgmlType::F16 | GgmlType::I16 | GgmlType::Bf16 => element_count * 2,
+        GgmlType::F64 | GgmlType::I64 => element_count * 8,
+        GgmlType::I8 | GgmlType::Q8_0 | GgmlType::Q8_1 | GgmlType::Q8_K => element_count,
+        GgmlType::Q4_0 | GgmlType::Q4_1 => element_count / 2,
+        GgmlType::Q5_0 | GgmlType::Q5_1 => (element_count / 2) + (element_count / 32) * 2,
+        GgmlType::Q2_K | GgmlType::Q3_K => {
+            element_count / 4 + element_count / 64 + element_count / 64
+        }
+        GgmlType::Q4_K | GgmlType::Q5_K | GgmlType::Q6_K => {
+            element_count / 2 + element_count / 64 + element_count / 64
+        }
+        // IQ (importance-matrix) quantization types
+        GgmlType::Iq1S => element_count / 256 * 50,
+        GgmlType::Iq1M => element_count / 256 * 56,
+        GgmlType::Iq2S => element_count / 256 * 82,
+        GgmlType::Iq2Xxs => element_count / 256 * 66,
+        GgmlType::Iq2Xs => element_count / 256 * 74,
+        GgmlType::Iq3S => element_count / 256 * 110,
+        GgmlType::Iq3Xxs => element_count / 256 * 98,
+        GgmlType::Iq3Xs => element_count / 256 * 98,
+        GgmlType::Iq3M => element_count / 256 * 112,
+        GgmlType::Iq4Nl => element_count / 32 * 18,
+        GgmlType::Iq4Xs => element_count / 256 * 136,
+        _ => {
+            return Err(GgufError::DecodeError(format!(
+                "unsupported dtype for size calculation: {dtype:?}"
+            )));
+        }
+    };
+    Ok(byte_size)
 }
