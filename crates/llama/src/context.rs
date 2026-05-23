@@ -7,12 +7,13 @@
 use std::sync::Arc;
 use std::time::Instant;
 
-use crate::Model;
 use crate::attention::multi_head_attention_with_cache;
 use crate::inference::{
-    SamplingConfig, add_vec, embed_token, gelu, mat_vec, mul_vec, rms_norm, sample_logits, silu,
+    SamplingConfig, add_vec, embed_token, gelu, layer_norm, mat_vec, mul_vec, rms_norm,
+    sample_logits, silu,
 };
 use crate::profile::ProfileResult;
+use crate::{NormType, Model};
 
 /// Configuration for inference.
 #[derive(Debug, Clone)]
@@ -143,30 +144,54 @@ impl InferenceContext {
         let head_dim = self.model.d_head;
         let n_embd = self.model.n_embd;
         let rope_theta = self.model.rope_theta;
+        let arch = self.model.architecture.as_str();
+        let norm_type = self.model.norm_type;
+
+        // Helper: apply the correct norm for the architecture.
+        let apply_norm = |x: &[f32], weight: &[f32], eps: f32| -> Vec<f32> {
+            match norm_type {
+                NormType::RmsNorm => rms_norm(x, weight, eps),
+                NormType::LayerNorm => layer_norm(x, weight, None, eps),
+            }
+        };
 
         for layer_idx in 0..n_layers {
             let layer_start = Instant::now();
             let residual = x.clone();
 
+            // ─── Pre-attention norm ───
             let attn_norm_name = format!("blk.{}.attn_norm.weight", layer_idx);
             if let Ok(attn_norm_weight) = self.model.get_tensor(&attn_norm_name) {
-                x = rms_norm(&x, &attn_norm_weight, self.model.norm_eps);
+                x = apply_norm(&x, &attn_norm_weight, self.model.norm_eps);
             }
 
+            // ─── QKV projections ───
             let q_proj_name = format!("blk.{}.attn_q.weight", layer_idx);
             let k_proj_name = format!("blk.{}.attn_k.weight", layer_idx);
             let v_proj_name = format!("blk.{}.attn_v.weight", layer_idx);
 
             let mut attn_ms = 0.0;
+            let ffn_ms;
+            let mut attn_output_vec = None;
+            let mut ffn_output_vec = None;
+
+            // StableLM parallel residual: compute attention and FFN from the same norm_x.
+            let (attn_input, ffn_input) = if arch == "stablelm" {
+                (x.clone(), x.clone())
+            } else {
+                (x.clone(), x.clone())
+            };
+
+            // ─── Attention ───
             if let (Ok(q_weight), Ok(k_weight), Ok(v_weight)) = (
                 self.model.get_tensor(&q_proj_name),
                 self.model.get_tensor(&k_proj_name),
                 self.model.get_tensor(&v_proj_name),
             ) {
                 let attn_start = Instant::now();
-                let mut q = mat_vec(&q_weight, n_head * head_dim, n_embd, &x);
-                let mut k = mat_vec(&k_weight, n_head_kv * head_dim, n_embd, &x);
-                let v = mat_vec(&v_weight, n_head_kv * head_dim, n_embd, &x);
+                let mut q = mat_vec(&q_weight, n_head * head_dim, n_embd, &attn_input);
+                let mut k = mat_vec(&k_weight, n_head_kv * head_dim, n_embd, &attn_input);
+                let v = mat_vec(&v_weight, n_head_kv * head_dim, n_embd, &attn_input);
 
                 let mut kv_cache = self.model.kv_cache.write().expect("lock poisoned");
                 let position_offset = kv_cache.get_layer_ref(layer_idx).cur_len;
@@ -181,28 +206,33 @@ impl InferenceContext {
                     &v,
                     kv_cache.get_layer(layer_idx),
                     rope_theta,
+                    self.model.sliding_window,
                 );
 
                 let attn_out_name = format!("blk.{}.attn_output.weight", layer_idx);
                 if let Ok(attn_out_weight) = self.model.get_tensor(&attn_out_name) {
                     let attn_proj =
                         mat_vec(&attn_out_weight, n_embd, n_head * head_dim, &attn_output);
-                    x = add_vec(&residual, &attn_proj);
+                    attn_output_vec = Some(attn_proj);
                 } else {
-                    x = add_vec(&residual, &attn_output);
+                    attn_output_vec = Some(attn_output);
                 }
                 attn_ms = attn_start.elapsed().as_secs_f64() * 1000.0;
-            } else {
-                x = residual;
             }
 
+            // ─── FFN ───
             let ffn_start = Instant::now();
-            let ffn_residual = x.clone();
-
             let ffn_norm_name = format!("blk.{}.ffn_norm.weight", layer_idx);
-            if let Ok(ffn_norm_weight) = self.model.get_tensor(&ffn_norm_name) {
-                x = rms_norm(&x, &ffn_norm_weight, self.model.norm_eps);
-            }
+
+            // For StableLM, FFN uses the same pre-normed input as attention.
+            // For standard architectures, FFN has its own norm.
+            let ffn_input = if arch == "stablelm" {
+                ffn_input // already normed alongside attention
+            } else if let Ok(ffn_norm_weight) = self.model.get_tensor(&ffn_norm_name) {
+                apply_norm(&x, &ffn_norm_weight, self.model.norm_eps)
+            } else {
+                x.clone()
+            };
 
             let gate_name = format!("blk.{}.ffn_gate.weight", layer_idx);
             let up_name = format!("blk.{}.ffn_up.weight", layer_idx);
@@ -213,19 +243,58 @@ impl InferenceContext {
                 self.model.get_tensor(&up_name),
                 self.model.get_tensor(&down_name),
             ) {
-                let gate_proj = mat_vec(&gate, self.model.n_ff, n_embd, &x);
-                let up_proj = mat_vec(&up, self.model.n_ff, n_embd, &x);
-                let activated_gate = match self.model.architecture.as_str() {
+                let gate_proj = mat_vec(&gate, self.model.n_ff, n_embd, &ffn_input);
+                let up_proj = mat_vec(&up, self.model.n_ff, n_embd, &ffn_input);
+                let activated_gate = match arch {
                     "gemma" | "gemma2" => gelu(&gate_proj),
                     _ => silu(&gate_proj),
                 };
                 let ffn_hidden = mul_vec(&activated_gate, &up_proj);
                 let ffn_output = mat_vec(&down, n_embd, self.model.n_ff, &ffn_hidden);
-                x = add_vec(&ffn_residual, &ffn_output);
-            } else {
-                x = ffn_residual;
+                ffn_output_vec = Some(ffn_output);
             }
-            let ffn_ms = ffn_start.elapsed().as_secs_f64() * 1000.0;
+            ffn_ms = ffn_start.elapsed().as_secs_f64() * 1000.0;
+
+            // ─── Residual connection ───
+            match arch {
+                // StableLM: parallel residual -- x = x + attn_out + ffn_out
+                "stablelm" => {
+                    if let Some(attn_out) = &attn_output_vec {
+                        x = add_vec(&residual, attn_out);
+                    }
+                    if let Some(ffn_out) = &ffn_output_vec {
+                        x = add_vec(&x, ffn_out);
+                    }
+                }
+                // Standard sequential residual (Llama, Mistral, Qwen2, etc.)
+                _ => {
+                    // Attention residual
+                    if let Some(attn_out) = attn_output_vec {
+                        x = add_vec(&residual, &attn_out);
+                    } else {
+                        x = residual.clone();
+                    }
+
+                    // Post-attention norm (Gemma/Gemma2)
+                    if matches!(arch, "gemma" | "gemma2") {
+                        let post_attn_norm_name =
+                            format!("blk.{}.post_attention_norm.weight", layer_idx);
+                        if let Ok(post_attn_norm_weight) =
+                            self.model.get_tensor(&post_attn_norm_name)
+                        {
+                            x = rms_norm(&x, &post_attn_norm_weight, self.model.norm_eps);
+                        }
+                    }
+
+                    // FFN residual
+                    let ffn_residual = x.clone();
+                    if let Some(ffn_out) = ffn_output_vec {
+                        x = add_vec(&ffn_residual, &ffn_out);
+                    } else {
+                        x = ffn_residual;
+                    }
+                }
+            }
 
             profile.layer_times.push((layer_idx, attn_ms, ffn_ms));
             let _layer_total = layer_start.elapsed();
@@ -233,7 +302,7 @@ impl InferenceContext {
 
         let output_start = Instant::now();
         if let Ok(final_norm) = self.model.get_tensor("output_norm.weight") {
-            x = rms_norm(&x, &final_norm, self.model.norm_eps);
+            x = apply_norm(&x, &final_norm, self.model.norm_eps);
         }
 
         let logits = if let Ok(output_weight) = self.model.get_tensor("output.weight") {

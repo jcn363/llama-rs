@@ -11,6 +11,9 @@ use crate::kv_cache::KvCache;
 /// Memory complexity: O(N * head_dim) instead of O(N²)
 /// where N = seq_len (context length)
 ///
+/// Supports sliding window attention: when `window_size` is Some(n), only the
+/// last `n` KV positions are attended to (Mistral/Mixtral architectures).
+///
 /// # Arguments
 /// * `q` - Query vector of shape (1, head_dim) for current token
 /// * `keys` - Flat key cache, shape (seq_len, n_head_kv, head_dim) row-major
@@ -19,6 +22,7 @@ use crate::kv_cache::KvCache;
 /// * `head_dim` - Dimension of each head
 /// * `n_head_kv` - Number of KV heads
 /// * `head` - KV head index
+/// * `window_size` - Optional sliding window size (None = full attention)
 ///
 /// # Returns
 /// Output vector of shape (1, head_dim)
@@ -30,10 +34,17 @@ fn flash_attention_head(
     head_dim: usize,
     n_head_kv: usize,
     head: usize,
+    window_size: Option<usize>,
 ) -> Vec<f32> {
     assert_eq!(q.len(), head_dim);
 
     let scale = 1.0 / (head_dim as f32).sqrt();
+
+    // Sliding window: only attend to the last `window_size` positions
+    let start = match window_size {
+        Some(w) => seq_len.saturating_sub(w),
+        None => 0,
+    };
 
     // Online softmax: track running max and sum
     let mut max_val = f32::NEG_INFINITY;
@@ -41,7 +52,7 @@ fn flash_attention_head(
     let mut output = vec![0.0f32; head_dim];
 
     // Single pass: compute scores, update max/sum, accumulate weighted V
-    for j in 0..seq_len {
+    for j in start..seq_len {
         let base = (j * n_head_kv + head) * head_dim;
         let k_row = &keys[base..base + head_dim];
         let score = dot_product(q, k_row) * scale;
@@ -187,6 +198,7 @@ fn attention_head_with_cache(
 /// * `v` - Value projections, shape (seq_len, n_head_kv * head_dim)
 /// * `kv_cache` - KV cache to store/retrieve keys and values
 /// * `rope_theta` - RoPE base frequency
+/// * `window_size` - Optional sliding window size (None = full attention)
 ///
 /// # Returns
 /// Attention output of shape (seq_len, n_head * head_dim)
@@ -202,6 +214,7 @@ pub fn multi_head_attention_with_cache(
     v: &[f32],
     kv_cache: &mut KvCache,
     rope_theta: f32,
+    window_size: Option<usize>,
 ) -> Vec<f32> {
     assert_eq!(q.len(), seq_len * n_head * head_dim);
     assert_eq!(k.len(), seq_len * n_head_kv * head_dim);
@@ -245,6 +258,7 @@ pub fn multi_head_attention_with_cache(
                 head_dim,
                 n_head_kv,
                 kv_head,
+                window_size,
             );
 
             // Store output

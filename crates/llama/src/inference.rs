@@ -38,6 +38,29 @@ pub fn rms_norm(x: &[f32], weight: &[f32], eps: f32) -> Vec<f32> {
         .collect()
 }
 
+/// Apply LayerNorm to a vector.
+///
+/// LayerNorm(x) = (x - mean(x)) / sqrt(var(x) + eps) * weight + bias
+/// Used by Phi-2 and some other architectures.
+pub fn layer_norm(x: &[f32], weight: &[f32], bias: Option<&[f32]>, eps: f32) -> Vec<f32> {
+    let len = x.len();
+    assert_eq!(weight.len(), len, "LayerNorm: weight dimension mismatch");
+
+    let mean: f32 = x.iter().sum::<f32>() / len as f32;
+    let variance: f32 = x.iter().map(|v| (v - mean).powi(2)).sum::<f32>() / len as f32;
+    let std = (variance + eps).sqrt();
+
+    x.iter()
+        .enumerate()
+        .map(|(i, v)| {
+            let normalized = (v - mean) / std;
+            let w = weight[i];
+            let b = bias.and_then(|b| b.get(i).copied()).unwrap_or(0.0);
+            normalized * w + b
+        })
+        .collect()
+}
+
 /// Apply SiLU (Swish) activation: x * sigmoid(x)
 pub fn silu(x: &[f32]) -> Vec<f32> {
     x.iter()

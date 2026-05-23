@@ -13,7 +13,7 @@ use rayon::prelude::*;
 
 use crate::kv_cache::KvCacheManager;
 use crate::tokenizer;
-use crate::{InternedStrings, Model, TensorData};
+use crate::{InternedStrings, Model, NormType, TensorData};
 
 impl Model {
     /// Return a short summary string for debugging.
@@ -168,6 +168,26 @@ impl Model {
             _ => 1e-5,
         };
 
+        // Sliding window attention (Mistral/Mixtral)
+        let sliding_window_keys = [
+            format!("{arch_prefix}attention.sliding_window"),
+            "mistral.attention.sliding_window".to_string(),
+            "mixtral.attention.sliding_window".to_string(),
+        ];
+        let sliding_window = reader
+            .get_usize_any(
+                &sliding_window_keys
+                    .iter()
+                    .map(|s| s.as_str())
+                    .collect::<Vec<_>>(),
+            )
+            .ok();
+
+        let norm_type = match architecture.as_str() {
+            "phi2" => NormType::LayerNorm,
+            _ => NormType::RmsNorm,
+        };
+
         let interned = Arc::new(std::sync::Mutex::new(InternedStrings::default()));
         let shared_mmap = reader.mmap_arc().clone();
         let tensors: HashMap<usize, TensorData> = reader
@@ -253,6 +273,8 @@ impl Model {
             unk_token_id,
             add_bos_token,
             kv_cache,
+            sliding_window,
+            norm_type,
         })
     }
 

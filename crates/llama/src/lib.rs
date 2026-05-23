@@ -37,6 +37,17 @@ pub use inference::dot_product;
 pub use profile::ProfileResult;
 pub use tokenizer::SimpleTokenizer;
 
+// ─── Architecture Support Types ───────────────────────────────────────────────
+
+/// Normalization type used by different model architectures.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NormType {
+    /// RMSNorm (default for Llama, Mistral, Gemma, Qwen2, etc.)
+    RmsNorm,
+    /// LayerNorm (used by Phi-2)
+    LayerNorm,
+}
+
 // ─── TensorData ──────────────────────────────────────────────────────────────
 
 /// Lazy-loaded tensor data backed by memory-mapped file access.
@@ -145,4 +156,8 @@ pub struct Model {
     pub add_bos_token: bool,
     /// KV cache used during inference (one per layer).
     pub kv_cache: RwLock<kv_cache::KvCacheManager>,
+    /// Sliding window size for Mistral/Mixtral (None = full attention).
+    pub sliding_window: Option<usize>,
+    /// Normalization type used by this architecture.
+    pub norm_type: NormType,
 }

@@ -97,6 +97,7 @@ llama-rs implements a GGUF v3 parser with full support for:
 - Memory-mapped I/O for efficient large model handling
 - SIMD-parallelized dequantization (Q4_0 through Q6_K, K-quants, Q8_K, Q1_0)
 - Dedicated imatrix quantization support (IQ_XXS, IQ_XS, IQ_S, IQ_M)
+- Multi-architecture forward pass with automatic dispatch (Llama, Mistral, Phi-2/3, Gemma/Gemma2, Qwen2, StableLM)
 
 ### Ollama Compatibility Roadmap
 To achieve complete Ollama model support, llama-rs should:
@@ -108,7 +109,7 @@ To achieve complete Ollama model support, llama-rs should:
 - ✅ Basic tokenizer implementation (SimpleTokenizer from GGUF vocab)
 
 #### Phase 2: Model Architecture Support
-- Implement attention mechanisms for:
+- ✅ Implement attention mechanisms for:
   - Llama/Llama2 architecture (current)
   - Mistral/Mixtral (sliding window attention)
   - Phi-2/3 (alternative norm/activation)
