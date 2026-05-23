@@ -33,7 +33,7 @@ mod matmul;
 pub use matmul::matmul_f32;
 
 mod backend;
-pub use backend::CpuBackend;
+pub use backend::{reset_bump_allocator, CpuBackend};
 
 // ─── Tests ──────────────────────────────────────────────────────────────────
 
@@ -44,13 +44,13 @@ mod tests {
 
     #[test]
     fn cpu_backend_should_default_thread_count() {
-        let backend = CpuBackend::new(0);
+        let backend = CpuBackend::new(0, 0);
         assert!(backend.n_threads() > 0);
     }
 
     #[test]
     fn cpu_backend_should_use_explicit_thread_count() {
-        let backend = CpuBackend::new(4);
+        let backend = CpuBackend::new(4, 0);
         assert_eq!(backend.n_threads(), 4);
     }
 
@@ -124,7 +124,7 @@ mod tests {
 
     #[test]
     fn matmul_should_require_2d_tensors() {
-        let backend = CpuBackend::new(1);
+        let backend = CpuBackend::new(1, 0);
         let a = Tensor::new(DType::F32, &[2, 3]);
         let b = Tensor::new(DType::F32, &[4, 3]);
         let _result = backend.matmul(&a, &b);
@@ -133,7 +133,7 @@ mod tests {
     #[test]
     #[should_panic(expected = "inner dimensions must match")]
     fn matmul_should_panic_on_incompatible_shapes() {
-        let backend = CpuBackend::new(1);
+        let backend = CpuBackend::new(1, 0);
         let a = Tensor::new(DType::F32, &[2, 3]);
         let b = Tensor::new(DType::F32, &[4, 5]);
         let _result = backend.matmul(&a, &b);

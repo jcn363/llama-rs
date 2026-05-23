@@ -19,7 +19,7 @@ fn bench_model_loading(c: &mut Criterion) {
 
     c.bench_function("load_model_from_gguf", |b| {
         b.iter(|| {
-            let model = Model::load_from_gguf(&model_path).expect("Failed to load model");
+            let model = Model::load_from_gguf(&model_path, false).expect("Failed to load model");
             black_box(model.summary())
         })
     });
@@ -39,7 +39,7 @@ fn bench_dequantization(c: &mut Criterion) {
         return;
     }
 
-    let model = Model::load_from_gguf(&model_path).expect("Failed to load model");
+    let model = Model::load_from_gguf(&model_path, false).expect("Failed to load model");
 
     // Find a tensor that can be de-quantized (skip unsupported types)
     let tensor_id = model

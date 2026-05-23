@@ -2,6 +2,26 @@
 
 ## Executive Summary
 
+**Recent Updates (2024‑2026)**
+- Added batch inference API (`Model::run_batch`).
+- Introduced configurable KV‑cache strategies (`CacheStrategy::SlidingWindow`, `PrefixOnly`).
+- Implemented **computed FFN recomputation** to off‑load FFN weights and save VRAM.
+- Added **thread‑local bump allocator** to reduce memory fragmentation across forward passes.
+- Implemented benchmark suite for KV‑cache performance and FFN recomputation.
+- Expanded documentation (USAGE, SECURITY) and CI pipelines for macOS/Windows.
+- Improved CUDA VRAM handling and CPU benchmark constructors.
+
+
+
+**Recent Updates (2024‑2026)**
+- Added batch inference API (`Model::run_batch`).
+- Introduced configurable KV‑cache strategies (`CacheStrategy::SlidingWindow`, `PrefixOnly`).
+- Implemented benchmark suite for KV‑cache performance.
+- Expanded documentation (USAGE, SECURITY) and CI pipelines for macOS/Windows.
+- Improved CUDA VRAM handling and CPU benchmark constructors.
+
+
+
 llama-rs occupies a unique niche in the LLM inference landscape by targeting specific legacy hardware constraints rather than competing on raw performance with market leaders. While projects like vLLM, TensorRT-LLM, and TGI optimize for cutting-edge data center GPUs (H100/A100), llama-rs is purpose-built for the AMD Opteron 3280 (Bulldozer bdver1) + NVIDIA GTX 1050 combination, offering a well-architected, Rust-safe alternative for constrained environments.
 
 ## Market Landscape Analysis
@@ -121,7 +141,7 @@ To achieve complete Ollama model support, llama-rs should:
 
 #### Phase 3: Quantization Support
 - Extend dequantization to cover all Ollama-used formats:
-  - ✅ Q4_0, Q4_1, Q4_2, Q4_3
+  - ✅ Q4_0, Q4_1
   - ✅ Q5_0, Q5_1
   - ✅ Q6_K
   - ✅ Q2_K, Q3_K, Q4_K, Q5_K, Q6_K (K-quants)

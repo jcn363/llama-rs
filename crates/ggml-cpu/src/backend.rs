@@ -4,6 +4,47 @@
 //! and other tensor operations using the CPU.
 
 use ggml::{DType, Tensor};
+use std::alloc::Layout;
+use std::cell::RefCell;
+
+thread_local! {
+    static BUMP_ALLOCATOR: RefCell<Option<bumpalo::Bump>> = const { RefCell::new(None) };
+}
+
+/// Executes a closure with access to a thread-local bump allocator.
+///
+/// If no allocator exists (or needs reallocation), one is created with the
+/// given `size` capacity. Otherwise, the existing allocator is reset and reused.
+pub fn with_bump_allocator<F, R>(size: usize, f: F) -> R
+where
+    F: FnOnce(&mut bumpalo::Bump) -> R,
+{
+    BUMP_ALLOCATOR.with(|cell| {
+        let mut opt = cell.borrow_mut();
+        let needs_realloc = match &mut *opt {
+            None => true,
+            Some(bump) => {
+                // In newer bumpalo, we check if the chunk capacity is sufficient
+                bump.reset();
+                false
+            }
+        };
+        if needs_realloc {
+            *opt = Some(bumpalo::Bump::with_capacity(size));
+        }
+        f(opt.as_mut().unwrap())
+    })
+}
+
+/// Resets the thread-local bump allocator, freeing its memory.
+///
+/// Call this at the start of each forward pass to prevent
+/// memory accumulation across invocations.
+pub fn reset_bump_allocator() {
+    BUMP_ALLOCATOR.with(|cell| {
+        *cell.borrow_mut() = None;
+    });
+}
 
 /// Executes a computation graph on the CPU.
 pub struct CpuBackend {
@@ -11,6 +52,8 @@ pub struct CpuBackend {
     /// Minimum number of rows (M) before parallel dispatch kicks in.
     /// For small matrices, thread overhead exceeds the benefit.
     parallel_min_rows: usize,
+    /// Size of thread-local memory pool for small temporary allocations (in bytes, 0 = disabled).
+    memory_pool_size: usize,
 }
 
 impl CpuBackend {
@@ -19,15 +62,20 @@ impl CpuBackend {
     /// If `n_threads` is 0, uses the number of available parallel threads.
     /// `parallel_min_rows` is the minimum number of rows before parallel dispatch;
     /// pass 0 for default (128).
+    /// `memory_pool_size` is the size of thread-local memory pool for small temporary allocations (in bytes, 0 = disabled).
     #[must_use]
-    pub fn new(n_threads: usize) -> Self {
-        Self::new_with_min_rows(n_threads, 0)
+    pub fn new(n_threads: usize, memory_pool_size: usize) -> Self {
+        Self::new_with_min_rows(n_threads, 0, memory_pool_size)
     }
 
     /// Create a new CPU backend with the given number of threads and
     /// a minimum row count for parallel matmul dispatch.
     #[must_use]
-    pub fn new_with_min_rows(n_threads: usize, parallel_min_rows: usize) -> Self {
+    pub fn new_with_min_rows(
+        n_threads: usize,
+        parallel_min_rows: usize,
+        memory_pool_size: usize,
+    ) -> Self {
         Self {
             n_threads: if n_threads == 0 {
                 std::thread::available_parallelism().map_or(1, std::num::NonZero::get)
@@ -39,6 +87,7 @@ impl CpuBackend {
             } else {
                 parallel_min_rows
             },
+            memory_pool_size,
         }
     }
 
@@ -86,16 +135,37 @@ impl CpuBackend {
             std::slice::from_raw_parts(b_bytes.as_ptr().cast::<f32>(), b_bytes.len() / 4)
         };
 
-        let mut c = vec![0.0f32; m * n];
+        // Allocate result buffer
+        let result_size = m * n;
+        let result_data_size = result_size * std::mem::size_of::<f32>();
+        #[allow(unused_assignments)]
+        let mut temp_vec = Vec::new();
+        let result_buffer =
+            if self.memory_pool_size > 0 && result_data_size <= self.memory_pool_size {
+                // Allocate from bump allocator
+                let layout = Layout::array::<f32>(result_size).expect("Failed to create layout");
+                let ptr = with_bump_allocator(result_data_size, |bump| {
+                    bump.alloc_layout(layout).as_ptr().cast::<f32>()
+                });
+                // Create a slice from the bump allocated memory
+                unsafe { std::slice::from_raw_parts_mut(ptr, result_size) }
+            } else {
+                // Allocate a vec on the heap
+                temp_vec = vec![0.0f32; result_size];
+                temp_vec.as_mut_slice()
+            };
+
         // Skip parallel dispatch for small matrices (thread overhead > benefit)
         let effective_threads = if m < self.parallel_min_rows {
             1
         } else {
             self.n_threads
         };
-        crate::matmul::matmul_f32(a_f32, b_f32, &mut c, m, n, k, effective_threads);
+        crate::matmul::matmul_f32(a_f32, b_f32, result_buffer, m, n, k, effective_threads);
 
-        Tensor::from_f32(&[m, n], &c)
+        // Copy result to owned vector to create Tensor (so Tensor owns its data)
+        let result_data: Vec<f32> = result_buffer.to_vec();
+        Tensor::from_f32(&[m, n], &result_data)
     }
 
     /// Execute element-wise addition: `C = A + B`.
@@ -112,7 +182,39 @@ impl CpuBackend {
             a.shape(),
             b.shape()
         );
-        Tensor::new(a.dtype(), a.shape())
+        let shape = a.shape();
+        let elem_count = shape.iter().product::<usize>();
+        let data_size = elem_count * std::mem::size_of::<f32>();
+        #[allow(unused_assignments)]
+        let mut temp_vec = Vec::new();
+        let result_buffer = if self.memory_pool_size > 0 && data_size <= self.memory_pool_size {
+            // Allocate from bump allocator
+            let layout = Layout::array::<f32>(elem_count).expect("Failed to create layout");
+            let ptr = with_bump_allocator(data_size, |bump| {
+                bump.alloc_layout(layout).as_ptr().cast::<f32>()
+            });
+            // Create a slice from the bump allocated memory
+            unsafe { std::slice::from_raw_parts_mut(ptr, elem_count) }
+        } else {
+            // Allocate a vec on the heap
+            temp_vec = vec![0.0f32; elem_count];
+            temp_vec.as_mut_slice()
+        };
+
+        // Perform element-wise addition
+        let a_data = a.data();
+        let b_data = b.data();
+        let a_f32 =
+            unsafe { std::slice::from_raw_parts(a_data.as_ptr().cast::<f32>(), elem_count) };
+        let b_f32 =
+            unsafe { std::slice::from_raw_parts(b_data.as_ptr().cast::<f32>(), elem_count) };
+        for i in 0..elem_count {
+            result_buffer[i] = a_f32[i] + b_f32[i];
+        }
+
+        // Copy result to owned vector to create Tensor
+        let result_data: Vec<f32> = result_buffer.to_vec();
+        Tensor::from_f32(shape, &result_data)
     }
 
     /// Returns the number of worker threads.

@@ -16,7 +16,9 @@ use crate::tokenizer;
 use crate::{InternedStrings, Model, NormType, RoPEConfig, RopeScaleType, TensorData};
 
 impl Model {
-    /// Return a short summary string for debugging.
+
+
+    /// Return a concise summary of the model configuration.
     pub fn summary(&self) -> String {
         format!(
             "Model: arch={}, embd={}, heads={}, kv_heads={}, d_head={}, layers={}, seq_len={}, rope_theta={}, rope_scale={:?}, norm_eps={}",
@@ -61,7 +63,11 @@ impl Model {
     /// Load a model from a GGUF file, reading all tensors in parallel and
     /// de‑quantizing them eagerly. This is the primary entry point used by the
     /// CLI and server binaries.
-    pub fn load_from_gguf<P: AsRef<Path>>(path: P) -> Result<Self, GgufError> {
+    ///
+    /// If `offload_ffn` is true, FFN weights (gate, up, down) will not be cached
+    /// after dequantization, allowing them to be reloaded from memory-mapped file
+    /// on each use to save VRAM.
+    pub fn load_from_gguf<P: AsRef<Path>>(path: P, offload_ffn: bool) -> Result<Self, GgufError> {
         let reader = GgufReader::from_file(&path)?;
 
         let architecture = match reader.get_kv("general.architecture") {
@@ -246,6 +252,12 @@ impl Model {
                 let mut guard = interned.lock().expect("lock poisoned");
                 let id = guard.intern(&info.name);
                 drop(guard);
+                // Determine if we should cache this tensor.
+                // If offload_ffn is true, do not cache FFN weights (gate, up, down).
+                let is_ffn_weight = info.name.ends_with(".ffn_gate.weight")
+                    || info.name.ends_with(".ffn_up.weight")
+                    || info.name.ends_with(".ffn_down.weight");
+                let cache = if offload_ffn { !is_ffn_weight } else { true };
                 Ok((
                     id,
                     TensorData {
@@ -253,6 +265,7 @@ impl Model {
                         info: info.clone(),
                         data: RwLock::new(None),
                         shape,
+                        cache,
                     },
                 ))
             })
@@ -330,6 +343,6 @@ impl Model {
 
     /// Backwards‑compatible wrapper used by existing code.
     pub fn from_file<P: AsRef<Path>>(path: P) -> Result<Self, GgufError> {
-        Self::load_from_gguf(path)
+        Self::load_from_gguf(path, false)
     }
 }

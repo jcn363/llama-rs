@@ -36,6 +36,18 @@ struct Args {
     #[arg(short = 'n', long, default_value_t = 128)]
     n_predict: usize,
 
+    /// Use CUDA acceleration if available.
+    #[arg(long, default_value_t = false)]
+    use_cuda: bool,
+
+    /// Offload FFN weights to RAM (load on demand) to save VRAM.
+    #[arg(long, default_value_t = false)]
+    offload_ffn: bool,
+
+    /// Size of thread-local memory pool for small temporary allocations (in bytes, 0 = disabled).
+    #[arg(long, default_value_t = 0)]
+    memory_pool_size: usize,
+
     /// Enable verbose logging.
     #[arg(long, default_value_t = false)]
     verbose: bool,
@@ -68,9 +80,11 @@ fn main() -> anyhow::Result<()> {
         } else {
             args.threads
         },
-        use_cuda: false,
+        use_cuda: args.use_cuda,
         n_ctx: args.ctx_size,
         n_batch: args.batch_size,
+        offload_ffn: args.offload_ffn,
+        memory_pool_size: args.memory_pool_size,
         ..Default::default()
     };
 

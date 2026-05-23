@@ -43,6 +43,14 @@ struct Args {
     /// Context size.
     #[arg(short = 'c', long, default_value_t = 512)]
     ctx_size: usize,
+
+    /// Batch size for prompt processing.
+    #[arg(long, default_value_t = 512)]
+    batch_size: usize,
+
+    /// Use CUDA acceleration if available.
+    #[arg(long, default_value_t = false)]
+    use_cuda: bool,
 }
 
 /// Shared server state.
@@ -105,9 +113,9 @@ async fn main() -> anyhow::Result<()> {
         } else {
             args.threads
         },
-        use_cuda: false,
+        use_cuda: args.use_cuda,
         n_ctx: args.ctx_size,
-        n_batch: args.ctx_size,
+        n_batch: args.batch_size,
         ..Default::default()
     };
 

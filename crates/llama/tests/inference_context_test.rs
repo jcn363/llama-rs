@@ -163,7 +163,7 @@ fn test_load_dummy_model() {
 
     create_test_gguf(&gguf_path).expect("Failed to create test GGUF");
 
-    let model = Model::load_from_gguf(&gguf_path).expect("Failed to load test model");
+    let model = Model::load_from_gguf(&gguf_path, false).expect("Failed to load test model");
 
     assert_eq!(model.n_embd, 8);
     assert_eq!(model.n_head, 1);
@@ -184,7 +184,8 @@ fn test_forward_pass_produces_logits() {
 
     create_test_gguf(&gguf_path).expect("Failed to create test GGUF");
 
-    let model = Arc::new(Model::load_from_gguf(&gguf_path).expect("Failed to load test model"));
+    let model =
+        Arc::new(Model::load_from_gguf(&gguf_path, false).expect("Failed to load test model"));
     let config = ModelConfig::default();
     let ctx = InferenceContext::new(model, config);
 
@@ -217,7 +218,7 @@ fn test_load_real_gguf_model() {
         return;
     }
 
-    let model = Model::load_from_gguf(&model_path).expect("Failed to load real test model");
+    let model = Model::load_from_gguf(&model_path, false).expect("Failed to load real test model");
 
     // Verify model loaded with reasonable parameters
     assert!(model.n_embd > 0);

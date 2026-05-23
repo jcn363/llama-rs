@@ -15,6 +15,8 @@ use crate::inference::{
 use crate::kv_cache::CacheStrategy;
 use crate::profile::ProfileResult;
 use crate::{Model, NormType};
+#[cfg(feature = "cuda")]
+use ggml_cuda;
 
 /// Configuration for inference.
 #[derive(Debug, Clone)]
@@ -31,6 +33,10 @@ pub struct ModelConfig {
     pub parallel_min_rows: usize,
     /// KV cache strategy.
     pub cache_strategy: CacheStrategy,
+    /// Whether to offload FFN weights to RAM (load on demand) to save VRAM.
+    pub offload_ffn: bool,
+    /// Size of thread-local memory pool for small temporary allocations (in bytes, 0 = disabled).
+    pub memory_pool_size: usize,
 }
 
 impl Default for ModelConfig {
@@ -42,12 +48,13 @@ impl Default for ModelConfig {
             n_batch: 512,
             parallel_min_rows: 128,
             cache_strategy: CacheStrategy::Full,
+            offload_ffn: false,
+            memory_pool_size: 0,
         }
     }
 }
 
 /// Inference context holding state for a model.
-#[derive(Debug)]
 pub struct InferenceContext {
     /// Shared reference to the loaded model.
     pub model: Arc<Model>,
@@ -57,6 +64,14 @@ pub struct InferenceContext {
     pub tokenizer: crate::SimpleTokenizer,
     /// Sampling configuration.
     pub sampling: SamplingConfig,
+    /// Thread‑local bump allocator for temporary buffers (reused across forward passes).
+    pub bump: bumpalo::Bump,
+    /// Optional CUDA backend for GPU-accelerated matmul.
+    #[cfg(feature = "cuda")]
+    pub cuda_backend: Option<ggml_cuda::CudaBackend>,
+    #[cfg(not(feature = "cuda"))]
+    #[allow(dead_code)]
+    pub cuda_backend: Option<()>,
 }
 
 impl InferenceContext {
@@ -71,11 +86,28 @@ impl InferenceContext {
             model.unk_token_id,
             model.add_bos_token,
         );
+        #[cfg(feature = "cuda")]
+        let cuda_backend = if config.use_cuda {
+            match ggml_cuda::CudaBackend::new() {
+                Ok(b) => Some(b),
+                Err(e) => {
+                    tracing::warn!("CUDA requested but unavailable: {e}");
+                    None
+                }
+            }
+        } else {
+            None
+        };
+
         Self {
             model,
             config,
             tokenizer,
             sampling: SamplingConfig::default(),
+            #[cfg(feature = "cuda")]
+            cuda_backend,
+            #[cfg(not(feature = "cuda"))]
+            cuda_backend: None,
         }
     }
 
@@ -132,6 +164,9 @@ impl InferenceContext {
         &self,
         token_id: usize,
     ) -> anyhow::Result<(Vec<f32>, ProfileResult)> {
+        // Reset the thread-local bump allocator at the start of each forward pass
+        // to prevent memory accumulation across invocations.
+        ggml_cpu::reset_bump_allocator();
         let total_start = Instant::now();
         let mut profile = ProfileResult::default();
 

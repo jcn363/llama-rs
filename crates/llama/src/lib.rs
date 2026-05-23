@@ -95,8 +95,8 @@ impl RoPEConfig {
 
 /// Lazy-loaded tensor data backed by memory-mapped file access.
 ///
-/// Raw (quantized) data stays on disk until [`get`](TensorData::get) is called,
-/// at which point it is dequantized and cached.
+// Raw (quantized) data stays on disk until [`get`](TensorData::get) is called,
+// at which point it is dequantized and optionally cached.
 #[derive(Debug)]
 pub struct TensorData {
     /// Memory-mapped reference to the tensor's raw (quantized) data.
@@ -107,6 +107,8 @@ pub struct TensorData {
     pub data: RwLock<Option<Arc<[f32]>>>,
     /// Shape of the tensor (rows, cols) for 2‑D tensors; empty for scalars.
     pub shape: Vec<usize>,
+    /// Whether to cache the dequantized data after first use.
+    pub cache: bool,
 }
 
 impl TensorData {
@@ -117,8 +119,10 @@ impl TensorData {
         }
         let deq = self.mmap_tensor.dequantize(&self.info)?;
         let arc: Arc<[f32]> = Arc::from(deq.into_boxed_slice());
-        let mut write = self.data.write().expect("lock poisoned");
-        *write = Some(arc.clone());
+        if self.cache {
+            let mut write = self.data.write().expect("lock poisoned");
+            *write = Some(arc.clone());
+        }
         Ok(arc)
     }
 }

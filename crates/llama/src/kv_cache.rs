@@ -2,13 +2,21 @@
 // Supports MHA, GQA (Grouped Query Attention), and MQA (Multi-Query Attention).
 
 /// KV cache strategy: controls when and how the cache is trimmed.
+/// Strategy for managing the KV cache memory.
+#[allow(missing_docs)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CacheStrategy {
     /// Full cache — never trim (default).
     Full,
     /// Prefix caching — trim during generation for long contexts.
     Prefix,
+    /// Sliding‑window caching — keep only the most recent `size` tokens.
+    /// `size` – maximum number of tokens to retain.
+    SlidingWindow { size: usize },
+    /// Prefix‑only caching — keep only the initial prefix up to a fixed length.
+    PrefixOnly,
 }
+
 
 /// Per-layer KV cache.
 ///
@@ -107,18 +115,33 @@ pub struct KvCacheManager {
     pub caches: Vec<KvCache>,
     /// Number of transformer layers.
     pub n_layers: usize,
+    /// Cache eviction strategy.
+    pub strategy: CacheStrategy,
 }
 
 impl KvCacheManager {
-    /// Create a new KV cache manager with one cache per layer.
+    /// Create a new KV cache manager with one cache per layer (default Full strategy).
     pub fn new(n_layers: usize, max_seq: usize, n_head_kv: usize, head_dim: usize) -> Self {
+        Self::with_strategy(n_layers, max_seq, n_head_kv, head_dim, CacheStrategy::Full)
+    }
+
+    /// Create a KV cache manager with a custom eviction strategy.
+    pub fn with_strategy(
+        n_layers: usize,
+        max_seq: usize,
+        n_head_kv: usize,
+        head_dim: usize,
+        strategy: CacheStrategy,
+    ) -> Self {
         Self {
             caches: (0..n_layers)
                 .map(|_| KvCache::new(max_seq, n_head_kv, head_dim))
                 .collect(),
             n_layers,
+            strategy,
         }
     }
+
 
     /// Reset all layer caches.
     pub fn reset(&mut self) {
