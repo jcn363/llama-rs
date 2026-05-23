@@ -341,8 +341,10 @@ impl Model {
         })
     }
 
-    /// Backwards‑compatible wrapper used by existing code.
-    pub fn from_file<P: AsRef<Path>>(path: P) -> Result<Self, GgufError> {
-        Self::load_from_gguf(path, false)
+    /// Run a batch of prompts, returning a vector of generated token ID sequences.
+    /// This is a simple placeholder implementation that calls `infer` for each prompt
+    /// sequentially. Future versions may implement true parallel batch inference.
+    pub fn run_batch(&self, prompts: &[&str]) -> Vec<Vec<usize>> {
+        prompts.iter().map(|p| self.infer(p)).collect()
     }
 }

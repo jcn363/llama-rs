@@ -4,7 +4,7 @@
 //! which ties together a model, tokenizer, and sampling configuration for
 //! text generation.
 
-use std::sync::Arc;
+use bumpalo::Bump;
 use std::time::Instant;
 
 use crate::attention::multi_head_attention_with_cache;
@@ -108,6 +108,7 @@ impl InferenceContext {
             cuda_backend,
             #[cfg(not(feature = "cuda"))]
             cuda_backend: None,
+            bump: Bump::new(),
         }
     }
 

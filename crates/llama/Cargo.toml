@@ -20,6 +20,7 @@ serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 anyhow = "1.0"
 fastrand = "2.0"
+bumpalo.workspace = true
 
 [features]
 default = []
