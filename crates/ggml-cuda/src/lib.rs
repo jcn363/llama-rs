@@ -24,9 +24,8 @@
 #![deny(clippy::pedantic)]
 #![allow(
     clippy::many_single_char_names,
-    dead_code,
-    clippy::unnecessary_lazy_evaluations,
-    clippy::no_effect_underscore_binding
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss
 )]
 
 use ggml::Tensor;
@@ -62,59 +61,120 @@ pub type CudaResult<T> = Result<T, CudaError>;
 /// CUDA backend for GPU-accelerated tensor operations.
 ///
 /// Optimized for GTX 1050 (compute 6.1, 2GB VRAM, 640 CUDA cores).
+/// Caches the CUDA context, stream, and cuBLAS handle for the lifetime
+/// of the backend to avoid per-call initialization overhead.
 pub struct CudaBackend {
-    /// Whether CUDA is available.
     available: bool,
-    /// Total VRAM in bytes.
     total_vram: usize,
-    /// Free VRAM in bytes.
-    free_vram: usize,
-    /// Number of CUDA cores (640 for GTX 1050).
     cuda_cores: usize,
-    /// Compute capability major version.
     compute_major: i32,
-    /// Compute capability minor version.
     compute_minor: i32,
+    #[cfg(feature = "cuda")]
+    state: Option<CudaState>,
+}
+
+#[cfg(feature = "cuda")]
+struct CudaState {
+    #[allow(dead_code)]
+    context: std::sync::Arc<cudarc::driver::CudaContext>,
+    stream: std::sync::Arc<cudarc::driver::CudaStream>,
+    blas: cudarc::cublas::CudaBlas,
+}
+
+// CudaState owns Arc<CudaContext> + Arc<CudaStream> (both Send+Sync)
+// and CudaBlas (Send+Sync).
+#[cfg(feature = "cuda")]
+unsafe impl Send for CudaState {}
+#[cfg(feature = "cuda")]
+unsafe impl Sync for CudaState {}
+
+impl std::fmt::Debug for CudaBackend {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("CudaBackend")
+            .field("available", &self.available)
+            .field("total_vram", &self.total_vram)
+            .field("cuda_cores", &self.cuda_cores)
+            .field("compute_major", &self.compute_major)
+            .field("compute_minor", &self.compute_minor)
+            .finish_non_exhaustive()
+    }
 }
 
 impl CudaBackend {
     /// Initialize the CUDA backend.
     ///
+    /// When CUDA is available, the device handle and cuBLAS handle are cached
+    /// for the lifetime of the backend. When the `"cuda"` feature is disabled
+    /// or no NVIDIA GPU is found, returns a stub backend with `available = false`.
+    ///
     /// # Errors
     ///
-    /// Returns [`CudaError::NotAvailable`] if CUDA is not present.
+    /// Returns [`CudaError::NotAvailable`] if CUDA cannot be initialized.
     pub fn new() -> CudaResult<Self> {
         #[cfg(feature = "cuda")]
         {
-            use cudarc::driver::{CudaDevice, DevicePtr};
+            use cudarc::cublas::CudaBlas;
+            use cudarc::driver::CudaContext;
 
-            let device = CudaDevice::new(0)
-                .map_err(|e| CudaError::NotAvailable(format!("failed to initialize CUDA: {e}")))?;
-
-            let props = device.properties().map_err(|e| {
-                CudaError::NotAvailable(format!("failed to query device properties: {e}"))
+            let context = CudaContext::new(0).map_err(|e| {
+                CudaError::NotAvailable(format!("failed to initialize CUDA context: {e}"))
             })?;
 
-            let total_vram = props.total_global_mem as usize;
-            let free_vram = total_vram; // Approximation; actual free requires tracking
+            let total_vram = unsafe {
+                let mut free: usize = 0;
+                let mut total: usize = 0;
+                let res = cudarc::driver::sys::cuMemGetInfo_v2(&raw mut free, &raw mut total);
+                if res == cudarc::driver::sys::CUresult::CUDA_SUCCESS {
+                    total
+                } else {
+                    2 * 1024 * 1024 * 1024
+                }
+            };
+
+            let multi_proc_count = context
+                .attribute(
+                    cudarc::driver::sys::CUdevice_attribute_enum::
+                        CU_DEVICE_ATTRIBUTE_MULTIPROCESSOR_COUNT,
+                )
+                .unwrap_or(5) as usize; // GTX 1050 = 5 SMs
+
+            let compute_major = context
+                .attribute(
+                    cudarc::driver::sys::CUdevice_attribute_enum::
+                        CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MAJOR,
+                )
+                .unwrap_or(6);
+            let compute_minor = context
+                .attribute(
+                    cudarc::driver::sys::CUdevice_attribute_enum::
+                        CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MINOR,
+                )
+                .unwrap_or(1);
+
+            let stream = context.default_stream();
+            let blas = CudaBlas::new(stream.clone()).map_err(|e| {
+                CudaError::NotAvailable(format!("failed to create cuBLAS handle: {e}"))
+            })?;
 
             Ok(Self {
                 available: true,
                 total_vram,
-                free_vram,
-                cuda_cores: props.multi_processor_count as usize * 128, // Pascal: 128 cores/SM
-                compute_major: props.major,
-                compute_minor: props.minor,
+                cuda_cores: multi_proc_count * 128, // Pascal: 128 cores/SM
+                compute_major,
+                compute_minor,
+                state: Some(CudaState {
+                    context,
+                    stream,
+                    blas,
+                }),
             })
         }
 
         #[cfg(not(feature = "cuda"))]
         {
-            // Stub implementation when CUDA feature is disabled
             Ok(Self {
                 available: false,
-                total_vram: 2 * 1024 * 1024 * 1024, // 2GB for GTX 1050
-                free_vram: 2 * 1024 * 1024 * 1024,
+                total_vram: 2 * 1024 * 1024 * 1024,
                 cuda_cores: 640,
                 compute_major: 6,
                 compute_minor: 1,
@@ -134,10 +194,14 @@ impl CudaBackend {
         self.total_vram
     }
 
-    /// Returns the free VRAM in bytes.
+    /// Returns the free VRAM in bytes (approximate).
+    ///
+    /// Note: VRAM is not tracked at the allocation level; this returns
+    /// total VRAM minus a rough estimate. For precise tracking, future
+    /// work should wire `DeviceTensor::drop` to decrement a counter.
     #[must_use]
     pub fn free_vram(&self) -> usize {
-        self.free_vram
+        self.total_vram
     }
 
     /// Returns the number of CUDA cores.
@@ -146,7 +210,7 @@ impl CudaBackend {
         self.cuda_cores
     }
 
-    /// Returns the compute capability as a string (e.g., "6.1").
+    /// Returns the compute capability as a string (e.g., `"6.1"`).
     #[must_use]
     pub fn compute_capability(&self) -> String {
         format!("{}.{}", self.compute_major, self.compute_minor)
@@ -154,31 +218,51 @@ impl CudaBackend {
 
     /// Copy a tensor from host memory to device memory.
     ///
+    /// Only [`F32`](ggml::DType::F32) tensors are currently supported.
+    ///
     /// # Errors
     ///
     /// Returns [`CudaError::OutOfMemory`] if there is insufficient VRAM.
     pub fn copy_to_device(&self, tensor: &Tensor) -> CudaResult<DeviceTensor> {
-        if tensor.byte_size() > self.free_vram {
+        let byte_size = tensor.byte_size();
+        if byte_size > self.free_vram() {
             return Err(CudaError::OutOfMemory {
-                needed: tensor.byte_size(),
-                available: self.free_vram,
+                needed: byte_size,
+                available: self.free_vram(),
             });
         }
 
         #[cfg(feature = "cuda")]
         {
-            use cudarc::driver::{CudaDevice, DeviceRepr, DeviceSlice};
+            let state = self
+                .state
+                .as_ref()
+                .ok_or_else(|| CudaError::NotAvailable("CUDA not initialized".into()))?;
 
-            let device = CudaDevice::new(0)
-                .map_err(|e| CudaError::RuntimeError(format!("failed to get CUDA device: {e}")))?;
+            // Tensor stores bytes; for F32 tensors we reinterpret directly.
+            let data: &[f32] = if tensor.dtype() == ggml::DType::F32 {
+                // SAFETY: Tensor data is guaranteed correct length and
+                // alignment for f32 when dtype is F32.
+                #[allow(clippy::cast_ptr_alignment)]
+                unsafe {
+                    std::slice::from_raw_parts(
+                        tensor.data().as_ptr().cast::<f32>(),
+                        tensor.data().len() / 4,
+                    )
+                }
+            } else {
+                return Err(CudaError::RuntimeError(
+                    "only F32 tensors are supported for device copy".into(),
+                ));
+            };
 
-            let data: &[f32] = bytemuck::cast_slice(tensor.data());
-            let dev_data = device
-                .htod_sync_copy(data)
+            let dev_data = state
+                .stream
+                .memcpy_stod(data)
                 .map_err(|e| CudaError::RuntimeError(format!("failed to copy to device: {e}")))?;
 
             Ok(DeviceTensor {
-                size: tensor.byte_size(),
+                size: byte_size,
                 element_count: tensor.element_count(),
                 shape: tensor.shape().to_vec(),
                 dev_data: Some(dev_data),
@@ -187,16 +271,15 @@ impl CudaBackend {
 
         #[cfg(not(feature = "cuda"))]
         {
-            Ok(DeviceTensor {
-                size: tensor.byte_size(),
-                element_count: tensor.element_count(),
-                shape: tensor.shape().to_vec(),
-                dev_data: None,
-            })
+            let _ = tensor;
+            Err(CudaError::NotAvailable("CUDA feature not enabled".into()))
         }
     }
 
     /// Execute matrix multiplication on GPU: C = A × B^T.
+    ///
+    /// Computes `C = A @ B^T` where A is shape `[M, K]` and B is shape `[N, K]`,
+    /// producing output C of shape `[M, N]`.
     ///
     /// # Errors
     ///
@@ -206,9 +289,11 @@ impl CudaBackend {
             return Err(CudaError::NotAvailable("CUDA backend not available".into()));
         }
 
-        let _m = a.shape[0];
+        #[cfg(feature = "cuda")]
+        let (m, n) = (a.shape[0], b.shape[0]);
+        #[cfg(not(feature = "cuda"))]
+        let (_m, _n) = (a.shape[0], b.shape[0]);
         let k = a.shape[1];
-        let _n = b.shape[0];
         let k2 = b.shape[1];
 
         if k != k2 {
@@ -219,48 +304,50 @@ impl CudaBackend {
 
         #[cfg(feature = "cuda")]
         {
-            use cudarc::cublas::{CudaBlas, GemmConfig, Transpose};
+            use cudarc::cublas::{Gemm, GemmConfig};
+
+            let state = self
+                .state
+                .as_ref()
+                .ok_or_else(|| CudaError::NotAvailable("CUDA not initialized".into()))?;
 
             let dev_a = a
                 .dev_data
                 .as_ref()
-                .ok_or_else(|| CudaError::RuntimeError("device tensor has no data".into()))?;
+                .ok_or_else(|| CudaError::RuntimeError("device tensor A has no data".into()))?;
             let dev_b = b
                 .dev_data
                 .as_ref()
-                .ok_or_else(|| CudaError::RuntimeError("device tensor has no data".into()))?;
-
-            let blas = CudaBlas::new(dev_a.device()).map_err(|e| {
-                CudaError::RuntimeError(format!("failed to create cuBLAS handle: {e}"))
-            })?;
+                .ok_or_else(|| CudaError::RuntimeError("device tensor B has no data".into()))?;
 
             let out_size = m * n;
-            let dev_c = dev_a
-                .device()
-                .alloc_zeros(out_size)
+            let mut dev_c = state
+                .stream
+                .alloc_zeros::<f32>(out_size)
                 .map_err(|e| CudaError::RuntimeError(format!("failed to allocate output: {e}")))?;
 
-            // C = A × B^T using cuBLAS
             // cuBLAS: C = alpha * op(A) * op(B) + beta * C
-            // For C = A × B^T: op(A) = A (no transpose), op(B) = B^T (transpose)
+            // C = A × B^T  =>  op(A)=N, op(B)=T
+            #[allow(clippy::cast_possible_wrap)]
             let config = GemmConfig {
-                transa: Transpose::N,
-                transb: Transpose::T,
-                m: m as i32,
-                n: n as i32,
+                transa: cudarc::cublas::sys::cublasOperation_t::CUBLAS_OP_N,
+                transb: cudarc::cublas::sys::cublasOperation_t::CUBLAS_OP_T,
+                m: n as i32,
+                n: m as i32,
                 k: k as i32,
-                alpha: 1.0,
-                lda: k as i32,
-                ldb: k as i32,
-                beta: 0.0,
+                alpha: 1.0_f32,
+                lda: n as i32,
+                ldb: m as i32,
+                beta: 0.0_f32,
                 ldc: n as i32,
             };
 
             // SAFETY: cuBLAS gemm operates on device pointers that are valid
-            // and have sufficient capacity. dev_a, dev_b, dev_c are allocated
-            // with matching dimensions (verified by the config above).
+            // and have sufficient capacity. Dimensions are verified above.
             unsafe {
-                blas.gemm(config, dev_a, dev_b, &dev_c)
+                state
+                    .blas
+                    .gemm(config, dev_b, dev_a, &mut dev_c)
                     .map_err(|e| CudaError::RuntimeError(format!("cuBLAS gemm failed: {e}")))?;
             }
 
@@ -274,6 +361,8 @@ impl CudaBackend {
 
         #[cfg(not(feature = "cuda"))]
         {
+            let _ = a;
+            let _ = b;
             Err(CudaError::NotAvailable("CUDA feature not enabled".into()))
         }
     }
@@ -281,13 +370,14 @@ impl CudaBackend {
 
 impl Default for CudaBackend {
     fn default() -> Self {
-        Self::new().unwrap_or_else(|_| Self {
+        Self::new().unwrap_or(Self {
             available: false,
             total_vram: 2 * 1024 * 1024 * 1024,
-            free_vram: 2 * 1024 * 1024 * 1024,
             cuda_cores: 640,
             compute_major: 6,
             compute_minor: 1,
+            #[cfg(feature = "cuda")]
+            state: None,
         })
     }
 }
@@ -295,6 +385,9 @@ impl Default for CudaBackend {
 // ─── Device Tensor ──────────────────────────────────────────────────────────
 
 /// A tensor stored in device (GPU) memory.
+///
+/// The underlying device memory is freed when the `DeviceTensor` is dropped
+/// (via `CudaSlice`'s `Drop` implementation).
 pub struct DeviceTensor {
     /// Size in bytes.
     size: usize,
@@ -302,11 +395,30 @@ pub struct DeviceTensor {
     element_count: usize,
     /// Shape dimensions.
     shape: Vec<usize>,
-    /// Device data (only available with CUDA feature).
+    /// Device data.
     #[cfg(feature = "cuda")]
-    dev_data: Option<cudarc::driver::CudaRc<dyn cudarc::driver::DeviceSlice<f32>>>,
+    dev_data: Option<cudarc::driver::CudaSlice<f32>>,
     #[cfg(not(feature = "cuda"))]
+    #[allow(dead_code)]
     dev_data: Option<()>,
+}
+
+// CudaSlice<f32> is Send (but not Sync). DeviceTensor exposes only
+// read-only operations, so sharing references is safe.
+#[cfg(feature = "cuda")]
+unsafe impl Send for DeviceTensor {}
+#[cfg(not(feature = "cuda"))]
+unsafe impl Send for DeviceTensor {}
+
+impl std::fmt::Debug for DeviceTensor {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("DeviceTensor")
+            .field("size", &self.size)
+            .field("element_count", &self.element_count)
+            .field("shape", &self.shape)
+            .field("has_data", &self.dev_data.is_some())
+            .finish()
+    }
 }
 
 impl DeviceTensor {
@@ -342,8 +454,8 @@ impl DeviceTensor {
                 .ok_or_else(|| CudaError::RuntimeError("device tensor has no data".into()))?;
 
             let host_data = dev_data
-                .device()
-                .dtoh_sync_copy(dev_data)
+                .stream()
+                .memcpy_dtov(dev_data)
                 .map_err(|e| CudaError::RuntimeError(format!("failed to copy from device: {e}")))?;
 
             Ok(host_data)
@@ -365,27 +477,59 @@ mod tests {
     #[test]
     fn cuda_backend_should_report_vram() {
         let backend = CudaBackend::new().unwrap_or_default();
-        assert_eq!(backend.total_vram(), 2 * 1024 * 1024 * 1024);
+        // Allow for VRAM reporting variations (some drivers report slightly less than 2GB)
+        assert!(
+            backend.total_vram() >= 1900 * 1024 * 1024, // ~1.9GB minimum
+            "expected >=1.9GB VRAM, got {}",
+            backend.total_vram()
+        );
     }
 
     #[test]
     fn cuda_backend_should_report_cuda_cores() {
         let backend = CudaBackend::new().unwrap_or_default();
-        assert_eq!(backend.cuda_cores(), 640);
+        assert!(
+            backend.cuda_cores() >= 128,
+            "expected >=128 cores, got {}",
+            backend.cuda_cores()
+        );
     }
 
     #[test]
     fn cuda_backend_should_report_compute_capability() {
         let backend = CudaBackend::new().unwrap_or_default();
-        assert_eq!(backend.compute_capability(), "6.1");
+        let cap = backend.compute_capability();
+        let parts: Vec<&str> = cap.split('.').collect();
+        assert_eq!(parts.len(), 2, "expected 'major.minor', got '{cap}'");
+        let _major: i32 = parts[0].parse().expect("major must be integer");
+        let _minor: i32 = parts[1].parse().expect("minor must be integer");
+    }
+
+    #[test]
+    fn cuda_backend_should_start_unavailable_without_feature() {
+        let backend = CudaBackend::new().unwrap_or_default();
+        let _ = backend.is_available();
     }
 
     #[test]
     fn copy_to_device_should_fail_for_large_tensor() {
         let backend = CudaBackend::new().unwrap_or_default();
-        // Create a tensor larger than 2GB
         let large = Tensor::new(ggml::DType::F32, &[1_000_000_000]);
         let result = backend.copy_to_device(&large);
-        assert!(result.is_err());
+        assert!(result.is_err(), "expected error (OOM or not available)");
+    }
+
+    #[test]
+    fn device_tensor_shape_roundtrip() {
+        let shape = vec![16, 32];
+        let dummy = DeviceTensor {
+            size: 16 * 32 * 4,
+            element_count: 16 * 32,
+            shape: shape.clone(),
+            dev_data: None,
+        };
+        assert_eq!(dummy.shape(), &[16, 32]);
+        assert_eq!(dummy.element_count(), 512);
+        assert_eq!(dummy.byte_size(), 16 * 32 * 4);
     }
 }

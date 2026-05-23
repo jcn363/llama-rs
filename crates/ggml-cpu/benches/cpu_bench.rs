@@ -13,7 +13,7 @@ fn fill_tensor(tensor: &mut Tensor, seed: u64) {
 }
 
 fn matmul_benchmark(c: &mut Criterion) {
-    let backend = CpuBackend::new(1);
+    let backend = CpuBackend::new(1, 0);
 
     let sizes = [(64, 64), (128, 128), (256, 256), (512, 512)];
     for &(m, k) in &sizes {
@@ -29,7 +29,7 @@ fn matmul_benchmark(c: &mut Criterion) {
             bencher.iter(|| backend.matmul(&a, &b))
         });
 
-        let parallel = CpuBackend::new(0);
+        let parallel = CpuBackend::new(0, 0);
         group.bench_function("parallel", |bencher| {
             bencher.iter(|| parallel.matmul(&a, &b))
         });
@@ -50,19 +50,19 @@ fn parallel_threshold_benchmark(c: &mut Criterion) {
         fill_tensor(&mut b_tensor, 137);
 
         // Single-thread (threshold always blocks)
-        let single = CpuBackend::new_with_min_rows(0, usize::MAX);
+        let single = CpuBackend::new_with_min_rows(0, usize::MAX, 0);
         group.bench_function("single", |bencher| {
             bencher.iter(|| single.matmul(&a, &b_tensor))
         });
-
+        
         // Auto-parallel with default threshold (128)
-        let parallel = CpuBackend::new_with_min_rows(0, 128);
+        let parallel = CpuBackend::new_with_min_rows(0, 128, 0);
         group.bench_function("thresh128", |bencher| {
             bencher.iter(|| parallel.matmul(&a, &b_tensor))
         });
-
+        
         // Low threshold (16) — parallel on small matrices
-        let low_thresh = CpuBackend::new_with_min_rows(0, 16);
+        let low_thresh = CpuBackend::new_with_min_rows(0, 16, 0);
         group.bench_function("thresh16", |bencher| {
             bencher.iter(|| low_thresh.matmul(&a, &b_tensor))
         });
