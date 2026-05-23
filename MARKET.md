@@ -96,6 +96,7 @@ llama-rs implements a GGUF v3 parser with full support for:
 - 42 tensor data types
 - Memory-mapped I/O for efficient large model handling
 - SIMD-parallelized dequantization (Q4_0 through Q6_K, K-quants, Q8_K, Q1_0)
+- Dedicated imatrix quantization support (IQ_XXS, IQ_XS, IQ_S, IQ_M)
 
 ### Ollama Compatibility Roadmap
 To achieve complete Ollama model support, llama-rs should:

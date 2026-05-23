@@ -1,4 +1,4 @@
-# llama.rs — LLaMA inference in Rust
+# llama.rs — LLaMa inference in Rust
 
 ![llama](media/llama1-banner.png)
 
@@ -89,7 +89,7 @@ cargo bench -p ggml-cpu --bench cpu_bench
 
 ## Features
 
-- **GGUF v3 parser**: Full support for 13 metadata types, 42 tensor types, memory-mapped I/O, and all quantization types used by Ollama (Q8_K, Q1_0, Q2_K, Q3_K, Q4_K, Q5_K, Q6_K, Q8_0, Q8_1, Q4_0, Q4_1, Q5_0, Q5_1, IQ_XXS, IQ_XS, IQ_S, IQ_M)
+- **GGUF v3 parser**: Full support for 13 metadata types, 42 tensor types, memory-mapped I/O, and all quantization types used by Ollama (Q8_K, Q1_0, Q2_K, Q3_K, Q4_K, Q5_K, Q6_K, Q8_0, Q8_1, Q4_0, Q4_1, Q5_0, Q5_1, IQ_XXS, IQ_XS, IQ_S, IQ_M) with dedicated imatrix module for importance matrix quantizations
 - **SIMD matmul**: AVX 8-wide (32 floats/iter) → SSE4.2 4-wide (16 floats/iter) → scalar fallback
 - **CUDA backend**: cuBLAS matmul, VRAM tracking (enabled by default, requires CUDA toolkit)
 - **Inference engine**: RMSNorm, RoPE, multi-head attention with GQA, SwiGLU FFN, KV cache, flash attention
