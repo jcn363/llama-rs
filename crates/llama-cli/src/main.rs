@@ -28,6 +28,10 @@ struct Args {
     #[arg(short = 'c', long, default_value_t = 512)]
     ctx_size: usize,
 
+    /// Batch size for prompt processing.
+    #[arg(long, default_value_t = 512)]
+    batch_size: usize,
+
     /// Maximum tokens to generate.
     #[arg(short = 'n', long, default_value_t = 128)]
     n_predict: usize,
@@ -66,7 +70,8 @@ fn main() -> anyhow::Result<()> {
         },
         use_cuda: false,
         n_ctx: args.ctx_size,
-        n_batch: args.ctx_size,
+        n_batch: args.batch_size,
+        ..Default::default()
     };
 
     let ctx = InferenceContext::new(model, config);

@@ -2,8 +2,8 @@
 // Supports MHA, GQA (Grouped Query Attention), and MQA (Multi-Query Attention).
 // Includes flash attention for memory-efficient prefill.
 
-use crate::dot_product;
 use crate::kv_cache::KvCache;
+use crate::{RoPEConfig, RopeScaleType, dot_product};
 
 /// Flash attention: compute softmax(Q @ K^T) @ V in a single pass without materializing the full attention matrix.
 /// Uses the online softmax trick: track running max and sum to compute softmax incrementally.
@@ -26,6 +26,7 @@ use crate::kv_cache::KvCache;
 ///
 /// # Returns
 /// Output vector of shape (1, head_dim)
+#[expect(clippy::too_many_arguments)]
 fn flash_attention_head(
     q: &[f32],
     keys: &[f32],
@@ -89,33 +90,66 @@ fn flash_attention_head(
     output
 }
 
-/// Apply Rotary Position Embedding (RoPE) to Q and K vectors.
+/// Apply Rotary Position Embedding (RoPE) with optional scaling.
 ///
-/// RoPE rotates Q and K vectors based on their position in the sequence.
-/// This encodes positional information without adding learnable parameters.
+/// Supports Linear, NTK-aware, and Dynamic NTK scaling strategies, plus
+/// partial rotation (used by Phi-3).
 ///
 /// # Arguments
 /// * `x` - Input vector of shape (seq_len, head_dim), flattened
 /// * `seq_len` - Sequence length
 /// * `head_dim` - Dimension of each head
 /// * `position_offset` - Starting position (for KV cache continuity)
-/// * `rope_theta` - Base frequency for RoPE (typically 10000.0)
-pub fn apply_rope(
+/// * `config` - RoPE configuration (theta, scaling type, etc.)
+/// * `actual_seq_len` - Current context length for Dynamic NTK
+pub fn apply_rope_with_config(
     x: &mut [f32],
     seq_len: usize,
     head_dim: usize,
     position_offset: usize,
-    rope_theta: f32,
+    config: &RoPEConfig,
+    actual_seq_len: Option<usize>,
 ) {
-    let half_dim = head_dim / 2;
+    let rot_dim = config.partial_dim.unwrap_or(head_dim);
+    let half_dim = rot_dim / 2;
+    let rope_theta = config.theta;
+
+    // Effective theta based on scaling type
+    let effective_theta = match config.scale_type {
+        RopeScaleType::NtkAware => {
+            let scale = config.scale_factor.max(1.0);
+            let d = head_dim as f32;
+            rope_theta * scale.powf(d / (d - 2.0))
+        }
+        RopeScaleType::DynamicNtk => {
+            let max_s = config.original_max_seq_len as f32;
+            let actual = actual_seq_len.unwrap_or(seq_len + position_offset) as f32;
+            let scale = (config.scale_factor * actual / max_s).max(1.0);
+            rope_theta * scale.powf(head_dim as f32 / (head_dim as f32 - 2.0))
+        }
+        _ => rope_theta,
+    };
 
     for pos in 0..seq_len {
         let actual_pos = position_offset + pos;
+
+        // Compute effective position based on scaling type
+        let eff_pos = match config.scale_type {
+            RopeScaleType::Linear => actual_pos as f32 / config.scale_factor.max(1.0),
+            RopeScaleType::DynamicNtk => {
+                let max_s = config.original_max_seq_len as f32;
+                let cur = (actual_pos + 1) as f32;
+                let s = (config.scale_factor * cur / max_s).max(1.0);
+                actual_pos as f32 / s
+            }
+            _ => actual_pos as f32,
+        };
+
         let row_start = pos * head_dim;
 
         for i in 0..half_dim {
-            let freq = 1.0 / rope_theta.powf(i as f32 / half_dim as f32);
-            let theta = actual_pos as f32 * freq;
+            let freq = 1.0 / effective_theta.powf(i as f32 / half_dim as f32);
+            let theta = eff_pos * freq;
             let cos_theta = theta.cos();
             let sin_theta = theta.sin();
 
@@ -130,6 +164,21 @@ pub fn apply_rope(
             x[idx2] = x1 * sin_theta + x2 * cos_theta;
         }
     }
+}
+
+/// Apply Rotary Position Embedding (RoPE) with default (no-scaling) config.
+///
+/// Backward-compatible wrapper around [`apply_rope_with_config`].
+#[cfg_attr(not(test), expect(dead_code))]
+pub fn apply_rope(
+    x: &mut [f32],
+    seq_len: usize,
+    head_dim: usize,
+    position_offset: usize,
+    rope_theta: f32,
+) {
+    let config = RoPEConfig::new(rope_theta);
+    apply_rope_with_config(x, seq_len, head_dim, position_offset, &config, None);
 }
 
 /// Compute scaled dot-product attention for a single head with causal masking.
@@ -213,7 +262,7 @@ pub fn multi_head_attention_with_cache(
     k: &mut [f32],
     v: &[f32],
     kv_cache: &mut KvCache,
-    rope_theta: f32,
+    rope_config: &RoPEConfig,
     window_size: Option<usize>,
 ) -> Vec<f32> {
     assert_eq!(q.len(), seq_len * n_head * head_dim);
@@ -221,8 +270,8 @@ pub fn multi_head_attention_with_cache(
     assert_eq!(v.len(), seq_len * n_head_kv * head_dim);
 
     // Apply RoPE to Q and K
-    apply_rope(q, seq_len, head_dim, position_offset, rope_theta);
-    apply_rope(k, seq_len, head_dim, position_offset, rope_theta);
+    apply_rope_with_config(q, seq_len, head_dim, position_offset, rope_config, None);
+    apply_rope_with_config(k, seq_len, head_dim, position_offset, rope_config, None);
 
     // Store K and V in cache
     for pos in 0..seq_len {
@@ -284,12 +333,13 @@ pub fn multi_head_attention_with_cache(
 /// * `q` - Query projections, shape (seq_len, n_head * head_dim)
 /// * `k` - Key projections, shape (seq_len, n_head_kv * head_dim)
 /// * `v` - Value projections, shape (seq_len, n_head_kv * head_dim)
-/// * `rope_theta` - RoPE base frequency
+/// * `rope_config` - RoPE configuration
+/// * `window_size` - Optional sliding window size (None = full attention)
 ///
 /// # Returns
 /// Attention output of shape (seq_len, n_head * head_dim)
 #[expect(clippy::too_many_arguments)]
-// Used in tests and for benchmarking; not referenced in production forward pass.
+// Ready for production prefill wiring; currently used only in tests.
 #[cfg_attr(not(test), expect(dead_code))]
 pub fn multi_head_attention_prefill(
     n_head: usize,
@@ -299,15 +349,16 @@ pub fn multi_head_attention_prefill(
     q: &mut [f32],
     k: &mut [f32],
     v: &[f32],
-    rope_theta: f32,
+    rope_config: &RoPEConfig,
+    window_size: Option<usize>,
 ) -> Vec<f32> {
     assert_eq!(q.len(), seq_len * n_head * head_dim);
     assert_eq!(k.len(), seq_len * n_head_kv * head_dim);
     assert_eq!(v.len(), seq_len * n_head_kv * head_dim);
 
     // Apply RoPE to Q and K
-    apply_rope(q, seq_len, head_dim, 0, rope_theta);
-    apply_rope(k, seq_len, head_dim, 0, rope_theta);
+    apply_rope_with_config(q, seq_len, head_dim, 0, rope_config, None);
+    apply_rope_with_config(k, seq_len, head_dim, 0, rope_config, None);
 
     let n_rep = n_head / n_head_kv;
     let mut output = vec![0.0f32; seq_len * n_head * head_dim];
@@ -320,13 +371,17 @@ pub fn multi_head_attention_prefill(
             let q_offset = i * n_head * head_dim + h * head_dim;
             let q_vec = &q[q_offset..q_offset + head_dim];
 
-            // Online softmax: single pass over causal context
+            // Online softmax: single pass over causal context with optional sliding window
+            let window_start = match window_size {
+                Some(w) => (i + 1).saturating_sub(w),
+                None => 0,
+            };
             let mut max_val = f32::NEG_INFINITY;
             let mut sum_exp = 0.0f32;
             let out_offset = i * n_head * head_dim + h * head_dim;
             let mut out_vec = vec![0.0f32; head_dim];
 
-            for j in 0..=i {
+            for j in window_start..=i {
                 let k_offset = j * n_head_kv * head_dim + kv_head * head_dim;
                 let k_vec = &k[k_offset..k_offset + head_dim];
                 let score = dot_product(q_vec, k_vec) * scale;
@@ -400,12 +455,134 @@ mod tests {
         let mut k = vec![0.1; seq_len * n_head_kv * head_dim];
         let v = vec![0.1; seq_len * n_head_kv * head_dim];
 
+        let config = RoPEConfig::new(10000.0);
         let output = multi_head_attention_prefill(
-            n_head, n_head_kv, head_dim, seq_len, &mut q, &mut k, &v, 10000.0,
+            n_head, n_head_kv, head_dim, seq_len, &mut q, &mut k, &v, &config, None,
         );
 
         assert_eq!(output.len(), seq_len * n_head * head_dim);
         // Output should be non-zero
         assert!(output.iter().any(|&x| x.abs() > 1e-6));
+    }
+
+    #[test]
+    fn test_attention_prefill_with_window() {
+        let n_head = 2;
+        let n_head_kv = 2;
+        let head_dim = 4;
+        let seq_len = 4;
+
+        let mut q = vec![0.1; seq_len * n_head * head_dim];
+        let mut k = vec![0.1; seq_len * n_head_kv * head_dim];
+        let v = vec![0.2; seq_len * n_head_kv * head_dim];
+
+        let config = RoPEConfig::new(10000.0);
+
+        // Without window
+        let output_full = multi_head_attention_prefill(
+            n_head, n_head_kv, head_dim, seq_len, &mut q, &mut k, &v, &config, None,
+        );
+        // With window=2 (each position only attends to last 2 tokens)
+        let mut q2 = q.clone();
+        let mut k2 = k.clone();
+        let output_windowed = multi_head_attention_prefill(
+            n_head,
+            n_head_kv,
+            head_dim,
+            seq_len,
+            &mut q2,
+            &mut k2,
+            &v,
+            &config,
+            Some(2),
+        );
+
+        // Both should have correct shape
+        assert_eq!(output_full.len(), seq_len * n_head * head_dim);
+        assert_eq!(output_windowed.len(), seq_len * n_head * head_dim);
+        // Windowed output should differ from full (less context seen)
+        assert_ne!(output_full, output_windowed);
+    }
+
+    #[test]
+    fn test_rope_with_scaling_linear() {
+        let head_dim = 4;
+        let seq_len = 2;
+        let mut x_vanilla = vec![1.0, 0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 1.0];
+        let mut x_scaled = x_vanilla.clone();
+
+        apply_rope(&mut x_vanilla, seq_len, head_dim, 0, 10000.0);
+
+        // Linear scaling with factor 2 => position halved => pos=1 acts like pos=0.5
+        let config = RoPEConfig {
+            theta: 10000.0,
+            scale_type: RopeScaleType::Linear,
+            scale_factor: 2.0,
+            original_max_seq_len: 4096,
+            partial_dim: None,
+        };
+        apply_rope_with_config(&mut x_scaled, seq_len, head_dim, 0, &config, None);
+
+        // Scaled should differ from vanilla
+        assert_ne!(x_vanilla, x_scaled);
+    }
+
+    #[test]
+    fn test_rope_with_ntk() {
+        let head_dim = 4;
+        let seq_len = 2;
+        let mut x_vanilla = vec![1.0, 0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 1.0];
+        let mut x_ntk = x_vanilla.clone();
+
+        apply_rope(&mut x_vanilla, seq_len, head_dim, 0, 10000.0);
+
+        // NTK scaling: theta is adjusted
+        let config = RoPEConfig {
+            theta: 10000.0,
+            scale_type: RopeScaleType::NtkAware,
+            scale_factor: 2.0,
+            original_max_seq_len: 4096,
+            partial_dim: None,
+        };
+        apply_rope_with_config(&mut x_ntk, seq_len, head_dim, 0, &config, None);
+
+        assert_ne!(x_vanilla, x_ntk);
+    }
+
+    #[test]
+    fn test_rope_partial_rotation() {
+        let head_dim = 4;
+        let seq_len = 1;
+        let mut x = vec![1.0, 2.0, 3.0, 4.0];
+
+        // Partial rotation: only first 2 dims rotated, last 2 untouched
+        let config = RoPEConfig {
+            theta: 10000.0,
+            scale_type: RopeScaleType::None,
+            scale_factor: 1.0,
+            original_max_seq_len: 4096,
+            partial_dim: Some(2),
+        };
+        apply_rope_with_config(&mut x, seq_len, head_dim, 5, &config, None);
+
+        // dim 0 and 1 rotated (values changed from input)
+        assert!((x[0] - 1.0).abs() > 1e-6 || (x[1] - 2.0).abs() > 1e-6);
+        // dim 2 and 3 untouched (3.0, 4.0)
+        assert!((x[2] - 3.0).abs() < 1e-6);
+        assert!((x[3] - 4.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_rope_config_default_equals_vanilla() {
+        let head_dim = 4;
+        let seq_len = 2;
+        let mut x_vanilla = vec![1.0, 0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 1.0];
+        let mut x_config = x_vanilla.clone();
+
+        apply_rope(&mut x_vanilla, seq_len, head_dim, 0, 10000.0);
+        let config = RoPEConfig::new(10000.0);
+        apply_rope_with_config(&mut x_config, seq_len, head_dim, 0, &config, None);
+
+        assert_eq!(x_vanilla, x_config);
     }
 }

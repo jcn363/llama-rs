@@ -85,6 +85,17 @@ pub fn gelu(x: &[f32]) -> Vec<f32> {
         .collect()
 }
 
+/// Apply ReLU² activation: max(0, x)².
+/// Used by Phi-3 and some other architectures with partial RoPE.
+pub fn relu_squared(x: &[f32]) -> Vec<f32> {
+    x.iter()
+        .map(|v| {
+            let v = v.max(0.0);
+            v * v
+        })
+        .collect()
+}
+
 /// Sample the next token from logits using argmax (greedy sampling).
 pub fn sample_argmax(logits: &[f32]) -> usize {
     logits
@@ -388,4 +399,16 @@ pub fn sample_logits(logits: &[f32], config: &SamplingConfig) -> usize {
 
     // Sample from the distribution
     sample_categorical(&probs, &mut rng)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_relu_squared() {
+        let input = vec![-2.0, -1.0, 0.0, 1.0, 2.0, 3.0];
+        let output = relu_squared(&input);
+        assert_eq!(output, vec![0.0, 0.0, 0.0, 1.0, 4.0, 9.0]);
+    }
 }

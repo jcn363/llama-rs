@@ -33,6 +33,14 @@ pub mod args {
         /// Use CUDA acceleration if available.
         #[arg(long, default_value_t = false)]
         pub use_cuda: bool,
+
+        /// Minimum matrix rows for parallel matmul (default: 128).
+        #[arg(long, default_value_t = 128)]
+        pub parallel_min_rows: usize,
+
+        /// KV cache strategy: "full" or "prefix".
+        #[arg(long, default_value_t = String::from("full"))]
+        pub cache_strategy: String,
     }
 }
 

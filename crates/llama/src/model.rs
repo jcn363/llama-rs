@@ -13,13 +13,13 @@ use rayon::prelude::*;
 
 use crate::kv_cache::KvCacheManager;
 use crate::tokenizer;
-use crate::{InternedStrings, Model, NormType, TensorData};
+use crate::{InternedStrings, Model, NormType, RoPEConfig, RopeScaleType, TensorData};
 
 impl Model {
     /// Return a short summary string for debugging.
     pub fn summary(&self) -> String {
         format!(
-            "Model: arch={}, embd={}, heads={}, kv_heads={}, d_head={}, layers={}, seq_len={}, rope_theta={}, norm_eps={}",
+            "Model: arch={}, embd={}, heads={}, kv_heads={}, d_head={}, layers={}, seq_len={}, rope_theta={}, rope_scale={:?}, norm_eps={}",
             self.architecture,
             self.n_embd,
             self.n_head,
@@ -28,6 +28,7 @@ impl Model {
             self.n_layers,
             self.max_seq_len,
             self.rope_theta,
+            self.rope_config.scale_type,
             self.norm_eps
         )
     }
@@ -160,6 +161,42 @@ impl Model {
             },
         };
 
+        // ─── RoPE scaling metadata ─────────────────────────────────────
+        let rope_scale_type = match reader.get_kv(&format!("{arch_prefix}rope.scaling.type")) {
+            Some(GgufValue::Str(s)) => match s.as_str() {
+                "linear" => RopeScaleType::Linear,
+                "ntk" | "ntk-aware" | "yarn" => RopeScaleType::NtkAware,
+                "dynamic" | "dynamic-ntk" => RopeScaleType::DynamicNtk,
+                _ => RopeScaleType::None,
+            },
+            _ => RopeScaleType::None,
+        };
+        let rope_scale_factor = match reader.get_kv(&format!("{arch_prefix}rope.scaling.factor")) {
+            Some(GgufValue::F32(v)) => *v,
+            Some(GgufValue::F64(v)) => *v as f32,
+            _ => 1.0,
+        };
+        let rope_original_max_seq = reader
+            .get_usize_any(&[&format!(
+                "{arch_prefix}rope.scaling.original_max_position_embeddings"
+            )])
+            .unwrap_or(max_seq_len);
+        let rope_dim_count = reader
+            .get_usize_any(&[&format!("{arch_prefix}rope.dimension_count")])
+            .ok();
+
+        let rope_config = RoPEConfig {
+            theta: rope_theta,
+            scale_type: rope_scale_type,
+            scale_factor: rope_scale_factor,
+            original_max_seq_len: rope_original_max_seq,
+            partial_dim: if rope_dim_count.is_some() && rope_dim_count != Some(d_head) {
+                rope_dim_count
+            } else {
+                None
+            },
+        };
+
         let norm_eps = match architecture.as_str() {
             "gemma" | "gemma2" => 1e-6,
             "phi2" | "phi3" => 1e-5,
@@ -182,6 +219,16 @@ impl Model {
                     .collect::<Vec<_>>(),
             )
             .ok();
+
+        // QK-norm (Gemma2): detect by checking if first layer QK-norm tensor exists
+        let has_qk_norm = reader
+            .tensors()
+            .iter()
+            .any(|t| t.name == "blk.0.attn_q_norm.weight");
+        let qk_norm_eps = match architecture.as_str() {
+            "gemma2" => 1e-6,
+            _ => 1e-5,
+        };
 
         let norm_type = match architecture.as_str() {
             "phi2" => NormType::LayerNorm,
@@ -264,6 +311,9 @@ impl Model {
             n_ff,
             n_layers,
             rope_theta,
+            rope_config,
+            has_qk_norm,
+            qk_norm_eps,
             norm_eps,
             vocab_tokens,
             vocab_scores,

@@ -9,9 +9,10 @@ use std::time::Instant;
 
 use crate::attention::multi_head_attention_with_cache;
 use crate::inference::{
-    SamplingConfig, add_vec, embed_token, gelu, layer_norm, mat_vec, mul_vec, rms_norm,
-    sample_logits, silu,
+    SamplingConfig, add_vec, embed_token, gelu, layer_norm, mat_vec, mul_vec, relu_squared,
+    rms_norm, sample_logits, silu,
 };
+use crate::kv_cache::CacheStrategy;
 use crate::profile::ProfileResult;
 use crate::{Model, NormType};
 
@@ -24,8 +25,12 @@ pub struct ModelConfig {
     pub use_cuda: bool,
     /// Context window size.
     pub n_ctx: usize,
-    /// Batch size for prompt processing.
+    /// Batch size for prompt processing (independently configurable from n_ctx).
     pub n_batch: usize,
+    /// Minimum matrix rows for parallel dispatch (0 = auto).
+    pub parallel_min_rows: usize,
+    /// KV cache strategy.
+    pub cache_strategy: CacheStrategy,
 }
 
 impl Default for ModelConfig {
@@ -35,6 +40,8 @@ impl Default for ModelConfig {
             use_cuda: false,
             n_ctx: 2048,
             n_batch: 512,
+            parallel_min_rows: 128,
+            cache_strategy: CacheStrategy::Full,
         }
     }
 }
@@ -143,7 +150,7 @@ impl InferenceContext {
         let n_head_kv = self.model.n_head_kv;
         let head_dim = self.model.d_head;
         let n_embd = self.model.n_embd;
-        let rope_theta = self.model.rope_theta;
+        let rope_config = &self.model.rope_config;
         let arch = self.model.architecture.as_str();
         let norm_type = self.model.norm_type;
 
@@ -171,16 +178,10 @@ impl InferenceContext {
             let v_proj_name = format!("blk.{}.attn_v.weight", layer_idx);
 
             let mut attn_ms = 0.0;
-            let ffn_ms;
             let mut attn_output_vec = None;
             let mut ffn_output_vec = None;
 
-            // StableLM parallel residual: compute attention and FFN from the same norm_x.
-            let (attn_input, ffn_input) = if arch == "stablelm" {
-                (x.clone(), x.clone())
-            } else {
-                (x.clone(), x.clone())
-            };
+            let (attn_input, ffn_input) = (x.clone(), x.clone());
 
             // ─── Attention ───
             if let (Ok(q_weight), Ok(k_weight), Ok(v_weight)) = (
@@ -192,6 +193,33 @@ impl InferenceContext {
                 let mut q = mat_vec(&q_weight, n_head * head_dim, n_embd, &attn_input);
                 let mut k = mat_vec(&k_weight, n_head_kv * head_dim, n_embd, &attn_input);
                 let v = mat_vec(&v_weight, n_head_kv * head_dim, n_embd, &attn_input);
+
+                // ─── QK-norm (Gemma2): per-head RMSNorm after projection, before RoPE ───
+                if self.model.has_qk_norm {
+                    let qk_norm_eps = self.model.qk_norm_eps;
+                    if let Ok(q_norm_weight) = self
+                        .model
+                        .get_tensor(&format!("blk.{}.attn_q_norm.weight", layer_idx))
+                    {
+                        for h in 0..n_head {
+                            let start = h * head_dim;
+                            let slice = &mut q[start..start + head_dim];
+                            let normed = rms_norm(slice, &q_norm_weight, qk_norm_eps);
+                            slice.copy_from_slice(&normed);
+                        }
+                    }
+                    if let Ok(k_norm_weight) = self
+                        .model
+                        .get_tensor(&format!("blk.{}.attn_k_norm.weight", layer_idx))
+                    {
+                        for h in 0..n_head_kv {
+                            let start = h * head_dim;
+                            let slice = &mut k[start..start + head_dim];
+                            let normed = rms_norm(slice, &k_norm_weight, qk_norm_eps);
+                            slice.copy_from_slice(&normed);
+                        }
+                    }
+                }
 
                 let mut kv_cache = self.model.kv_cache.write().expect("lock poisoned");
                 let position_offset = kv_cache.get_layer_ref(layer_idx).cur_len;
@@ -205,7 +233,7 @@ impl InferenceContext {
                     &mut k,
                     &v,
                     kv_cache.get_layer(layer_idx),
-                    rope_theta,
+                    rope_config,
                     self.model.sliding_window,
                 );
 
@@ -247,13 +275,14 @@ impl InferenceContext {
                 let up_proj = mat_vec(&up, self.model.n_ff, n_embd, &ffn_input);
                 let activated_gate = match arch {
                     "gemma" | "gemma2" => gelu(&gate_proj),
+                    "phi3" | "phi3small" | "phi3.5" => relu_squared(&gate_proj),
                     _ => silu(&gate_proj),
                 };
                 let ffn_hidden = mul_vec(&activated_gate, &up_proj);
                 let ffn_output = mat_vec(&down, n_embd, self.model.n_ff, &ffn_hidden);
                 ffn_output_vec = Some(ffn_output);
             }
-            ffn_ms = ffn_start.elapsed().as_secs_f64() * 1000.0;
+            let ffn_ms = ffn_start.elapsed().as_secs_f64() * 1000.0;
 
             // ─── Residual connection ───
             match arch {

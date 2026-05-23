@@ -34,6 +34,7 @@ pub mod tokenizer;
 
 pub use context::{InferenceContext, ModelConfig};
 pub use inference::dot_product;
+pub use kv_cache::CacheStrategy;
 pub use profile::ProfileResult;
 pub use tokenizer::SimpleTokenizer;
 
@@ -46,6 +47,47 @@ pub enum NormType {
     RmsNorm,
     /// LayerNorm (used by Phi-2)
     LayerNorm,
+}
+
+/// RoPE scaling strategy type.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RopeScaleType {
+    /// No scaling (vanilla RoPE).
+    None,
+    /// Linear scaling: divide position by `scale_factor`.
+    Linear,
+    /// NTK-aware scaling: adjust base frequency.
+    NtkAware,
+    /// Dynamic NTK scaling: adjusts per-step.
+    DynamicNtk,
+}
+
+/// Configuration for RoPE with optional scaling.
+#[derive(Debug, Clone, Copy)]
+pub struct RoPEConfig {
+    /// RoPE base frequency (theta).
+    pub theta: f32,
+    /// Scaling type (None = vanilla RoPE).
+    pub scale_type: RopeScaleType,
+    /// Scale factor for linear/NTK scaling.
+    pub scale_factor: f32,
+    /// Original max sequence length used during training.
+    pub original_max_seq_len: usize,
+    /// Optional partial rotation dimension (Phi-3: partial for some layers).
+    pub partial_dim: Option<usize>,
+}
+
+impl RoPEConfig {
+    /// Create a default RoPE config (vanilla, no scaling).
+    pub fn new(theta: f32) -> Self {
+        Self {
+            theta,
+            scale_type: RopeScaleType::None,
+            scale_factor: 1.0,
+            original_max_seq_len: 4096,
+            partial_dim: None,
+        }
+    }
 }
 
 // ─── TensorData ──────────────────────────────────────────────────────────────
@@ -138,6 +180,12 @@ pub struct Model {
     pub n_layers: usize,
     /// RoPE base frequency.
     pub rope_theta: f32,
+    /// RoPE configuration with optional scaling.
+    pub rope_config: RoPEConfig,
+    /// Whether this model has QK-norm (Gemma2).
+    pub has_qk_norm: bool,
+    /// RMSNorm epsilon for QK-norm (Gemma2 uses 1e-6).
+    pub qk_norm_eps: f32,
     /// RMSNorm epsilon (architecture-dependent).
     pub norm_eps: f32,
     /// Tokenizer vocabulary loaded from GGUF metadata.

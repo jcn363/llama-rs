@@ -1,6 +1,15 @@
 // Per-layer KV cache for multi-head attention.
 // Supports MHA, GQA (Grouped Query Attention), and MQA (Multi-Query Attention).
 
+/// KV cache strategy: controls when and how the cache is trimmed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CacheStrategy {
+    /// Full cache — never trim (default).
+    Full,
+    /// Prefix caching — trim during generation for long contexts.
+    Prefix,
+}
+
 /// Per-layer KV cache.
 ///
 /// Layout:
@@ -32,11 +41,10 @@ impl KvCache {
         }
     }
 
-    /// Reset the cache (clear all entries).
+    /// Reset the cache (clear all entries). O(1) — just sets `cur_len` to 0.
+    /// Memory is not zeroed; stale values will be overwritten by new pushes.
     pub fn reset(&mut self) {
         self.cur_len = 0;
-        self.keys.fill(0.0);
-        self.values.fill(0.0);
     }
 
     /// Append a new token's key and value vectors.
@@ -49,6 +57,26 @@ impl KvCache {
         self.keys[offset..offset + k.len()].copy_from_slice(k);
         self.values[offset..offset + v.len()].copy_from_slice(v);
         self.cur_len += 1;
+    }
+
+    /// Truncate the cache to a new length (for prefix caching).
+    /// Panics if `new_len > cur_len`.
+    pub fn truncate(&mut self, new_len: usize) {
+        assert!(new_len <= self.cur_len);
+        self.cur_len = new_len;
+    }
+
+    /// Append multiple tokens' key and value vectors at once.
+    /// `k` and `v` must be of length `n_tokens * n_head_kv * head_dim`.
+    pub fn push_batch(&mut self, k: &[f32], v: &[f32], n_tokens: usize) {
+        let stride = self.n_head_kv * self.head_dim;
+        assert_eq!(k.len(), n_tokens * stride);
+        assert_eq!(v.len(), n_tokens * stride);
+        assert!(self.cur_len + n_tokens <= self.max_seq, "KV cache overflow");
+        let offset = self.cur_len * stride;
+        self.keys[offset..offset + k.len()].copy_from_slice(k);
+        self.values[offset..offset + v.len()].copy_from_slice(v);
+        self.cur_len += n_tokens;
     }
 
     /// Retrieve a slice for a specific head and position.
@@ -99,5 +127,64 @@ impl KvCacheManager {
     /// Get immutable reference to a specific layer's cache.
     pub fn get_layer_ref(&self, layer: usize) -> &KvCache {
         &self.caches[layer]
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_kv_cache_push_and_get() {
+        let mut cache = KvCache::new(4, 2, 3);
+        // Push one token: 2 heads × 3 dims
+        cache.push(
+            &[1.0, 2.0, 3.0, 4.0, 5.0, 6.0],
+            &[7.0, 8.0, 9.0, 10.0, 11.0, 12.0],
+        );
+        assert_eq!(cache.cur_len, 1);
+        let (k, v) = cache.get(0, 0);
+        assert_eq!(k, &[1.0, 2.0, 3.0]);
+        assert_eq!(v, &[7.0, 8.0, 9.0]);
+    }
+
+    #[test]
+    fn test_kv_cache_push_batch() {
+        let mut cache = KvCache::new(4, 2, 3);
+        // Push 2 tokens at once
+        cache.push_batch(
+            &[
+                1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0,
+            ],
+            &[0.0; 12],
+            2,
+        );
+        assert_eq!(cache.cur_len, 2);
+        let (k, _) = cache.get(1, 0);
+        assert_eq!(k, &[7.0, 8.0, 9.0]);
+    }
+
+    #[test]
+    fn test_kv_cache_o1_reset() {
+        let mut cache = KvCache::new(4, 1, 2);
+        cache.push(&[1.0, 2.0], &[3.0, 4.0]);
+        assert_eq!(cache.cur_len, 1);
+        cache.reset();
+        assert_eq!(cache.cur_len, 0);
+        // O(1) reset does not zero memory — data remains but is inaccessible
+        assert_eq!(cache.keys[0], 1.0);
+    }
+
+    #[test]
+    fn test_kv_cache_truncate() {
+        let mut cache = KvCache::new(4, 1, 2);
+        cache.push(&[1.0, 2.0], &[3.0, 4.0]);
+        cache.push(&[5.0, 6.0], &[7.0, 8.0]);
+        assert_eq!(cache.cur_len, 2);
+        cache.truncate(1);
+        assert_eq!(cache.cur_len, 1);
+        let (k, v) = cache.get(0, 0);
+        assert_eq!(k, &[1.0, 2.0]);
+        assert_eq!(v, &[3.0, 4.0]);
     }
 }

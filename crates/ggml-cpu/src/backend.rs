@@ -8,19 +8,36 @@ use ggml::{DType, Tensor};
 /// Executes a computation graph on the CPU.
 pub struct CpuBackend {
     n_threads: usize,
+    /// Minimum number of rows (M) before parallel dispatch kicks in.
+    /// For small matrices, thread overhead exceeds the benefit.
+    parallel_min_rows: usize,
 }
 
 impl CpuBackend {
     /// Create a new CPU backend with the given number of threads.
     ///
     /// If `n_threads` is 0, uses the number of available parallel threads.
+    /// `parallel_min_rows` is the minimum number of rows before parallel dispatch;
+    /// pass 0 for default (128).
     #[must_use]
     pub fn new(n_threads: usize) -> Self {
+        Self::new_with_min_rows(n_threads, 0)
+    }
+
+    /// Create a new CPU backend with the given number of threads and
+    /// a minimum row count for parallel matmul dispatch.
+    #[must_use]
+    pub fn new_with_min_rows(n_threads: usize, parallel_min_rows: usize) -> Self {
         Self {
             n_threads: if n_threads == 0 {
                 std::thread::available_parallelism().map_or(1, std::num::NonZero::get)
             } else {
                 n_threads
+            },
+            parallel_min_rows: if parallel_min_rows == 0 {
+                128
+            } else {
+                parallel_min_rows
             },
         }
     }
@@ -70,7 +87,13 @@ impl CpuBackend {
         };
 
         let mut c = vec![0.0f32; m * n];
-        crate::matmul::matmul_f32(a_f32, b_f32, &mut c, m, n, k, self.n_threads);
+        // Skip parallel dispatch for small matrices (thread overhead > benefit)
+        let effective_threads = if m < self.parallel_min_rows {
+            1
+        } else {
+            self.n_threads
+        };
+        crate::matmul::matmul_f32(a_f32, b_f32, &mut c, m, n, k, effective_threads);
 
         Tensor::from_f32(&[m, n], &c)
     }
