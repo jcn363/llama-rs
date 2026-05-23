@@ -34,9 +34,11 @@ llama-rs occupies a unique niche in the LLM inference landscape by targeting spe
 - CPU backend (ggml-cpu) with block-tiled matmul (16×16 tiles) and std::thread::scope parallelism
 - CUDA backend (ggml-cuda) via cuBLAS with VRAM tracking
 - Full transformer inference engine (llama) with:
-  - RMSNorm, RoPE, multi-head GQA attention
-  - SwiGLU FFN (GELU for Gemma)
-  - KV cache with flash attention support
+  - RMSNorm, configurable RoPE (with dynamic scaling), multi-head GQA attention
+  - SwiGLU FFN (GELU for Gemma, ReLU² for Phi-3)
+  - QK-norm for Gemma2
+  - KV cache with flash attention support, prefix caching, and configurable cache strategies
+  - Sliding window attention (Mistral)
   - Multi-architecture support (Llama, Mistral, Phi2/3, Gemma/Gemma2, Qwen2, StableLM)
 - Shared utilities (common) for argument parsing and sampling
 - CLI binary (llama-cli) with interactive and single-prompt modes
@@ -129,20 +131,22 @@ To achieve complete Ollama model support, llama-rs should:
   - ❏ Binary and ternary quantization (1-bit, 1.58-bit)
 
 #### Phase 4: Advanced Features
-- Implement RoPE (Rotary Position Embedding) with dynamic scaling
-- Add support for:
-  - Sliding window attention (Mistral)
-  - Grouped-query attention (GQA)
-  - Different normalization schemes (RMSNorm vs LayerNorm)
-  - Various activation functions (SiLU, GELU, ReLU²)
+- ✅ RoPE with dynamic scaling (Linear, NTK-aware, Dynamic NTK) via configurable `RoPEConfig`
+- ✅ Sliding window attention (Mistral) in both cached and prefill paths
+- ✅ Grouped-query attention (GQA)
+- ✅ Different normalization schemes: RMSNorm, LayerNorm, plus QK-norm (Gemma2)
+- ✅ Various activation functions: SiLU, GELU, ReLU² (Phi-3)
 
 #### Phase 5: Optimization & Tuning
-- Hardware-specific KV cache strategies:
-  - Attention-only storage (like llama.cpp) for ultra-long contexts
-  - Computed FFN recomputation to save VRAM
-  - Prefix caching for repeated prompts
-- Parallelization thresholds tuned for target hardware
-- Memory fragmentation reduction techniques
+- ✅ Configuration-driven KV cache strategies (`CacheStrategy` enum: Full/Prefix)
+- ✅ O(1) cache reset via `reset()` (zero-cost, no zero-fill)
+- ✅ `push_batch()` for bulk KV append
+- ✅ `truncate()` for prefix caching (repeated prompt reuse)
+- ✅ Parallel matmul threshold (`parallel_min_rows`, default 128 rows) tuned for bdver1 multi-core
+- ✅ CLI-configurable batch size, parallel threshold, and cache strategy
+- ✅ Comprehensive criterion benchmarks: KV cache ops, RoPE scaling, flash attention (full + windowed), parallel threshold
+- ❏ Computed FFN recomputation to save VRAM (future work)
+- ❏ Memory fragmentation reduction techniques (future work)
 
 ### Implementation Recommendations
 1. **Maintain GGUF v3 Compliance**: Stay current with GGUF specification as Ollama evolves

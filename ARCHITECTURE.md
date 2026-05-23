@@ -138,27 +138,32 @@ The core crate. Implements the full transformer forward pass.
 
 | File | Lines | Responsibility |
 |------|-------|---------------|
-| `lib.rs` | 139 | `Model` struct definition, `TensorData` (lazy dequant), `InternedStrings` |
-| `model.rs` | 263 | `Model::load_from_gguf()` — parses GGUF metadata, builds tensor map |
-| `context.rs` | 432 | `InferenceContext` — ties model + tokenizer + sampling; `generate()`, `forward_pass()` |
-| `inference.rs` | 385 | Math ops: `rms_norm`, `silu`, `gelu`, `mat_vec`, `dot_product`, `sample_logits`, top-k/p |
-| `attention.rs` | 393 | `multi_head_attention_with_cache()`, `flash_attention_head()`, `apply_rope()` |
-| `kv_cache.rs` | 129 | `KvCache` (per-layer) + `KvCacheManager` (multi-layer) |
+| `lib.rs` | 212 | `Model` struct definition, `TensorData` (lazy dequant), `InternedStrings`, `RoPEConfig`, `CacheStrategy`, public re-exports |
+| `model.rs` | 335 | `Model::load_from_gguf()` — parses GGUF metadata, builds tensor map, RoPE scaling + QK-norm detection |
+| `context.rs` | 429 | `InferenceContext` — ties model + tokenizer + sampling; `generate()`, `forward_pass()`, QK-norm application |
+| `inference.rs` | 414 | Math ops: `rms_norm`, `silu`, `gelu`, `relu_squared`, `mat_vec`, `dot_product`, `sample_logits`, top-k/p |
+| `attention.rs` | 588 | `multi_head_attention_with_cache()`, `flash_attention_head()`, `apply_rope()`, `apply_rope_with_config()`, `multi_head_attention_prefill()` |
+| `kv_cache.rs` | 198 | `KvCache` (per-layer) + `KvCacheManager` (multi-layer), `CacheStrategy`, `push_batch()`, `truncate()`, O(1) `reset()` |
 | `tokenizer.rs` | 318 | `SimpleTokenizer` — greedy longest-match tokenizer from GGUF vocab |
 | `profile.rs` | 63 | `ProfileResult` — per-layer timing data |
 
 **Forward pass flow (`InferenceContext::forward_pass`):**
 1. Embed lookup: `token_embd.weight[token_id]`
 2. For each layer:
-   a. RMSNorm → Q/K/V projections → RoPE → KV cache store
-   b. Flash attention (online softmax, O(N) memory)
+   a. RMSNorm → Q/K/V projections → QK-norm (if Gemma2) → RoPE with configurable scaling → KV cache store
+   b. Flash attention (online softmax, O(N) memory; sliding window for Mistral)
    c. Attention output projection → residual add
-   d. RMSNorm → SiLU-gated FFN (or GELU for Gemma) → residual add
+   d. RMSNorm → SiLU-gated FFN (GELU for Gemma, ReLU² for Phi-3) → residual add
 3. Final RMSNorm → output projection → logits
 
 **Inference modes:**
 - `generate()` — standard greedy/sampling generation
 - `generate_with_profile()` — per-layer timing for benchmarking
+
+**Cache strategies:**
+- `Full` — standard KV cache (all tokens retained)
+- `Prefix` — supports `truncate()` for repeated prompt reuse (prefix caching)
+- O(1) `reset()` — zero-cost cache clear (no memory fill)
 
 ### 6. `common` — Shared Utilities (`crates/common/src/`)
 
@@ -249,6 +254,8 @@ cargo deny check licenses           # 4. License audit (uses EmbarkStudios/cargo
 cargo doc --no-deps --document-private-items  # 5. Documentation build
 
 # Benchmarks
-cargo bench -p ggml-cpu --bench cpu_bench
-cargo bench -p llama --bench profiling
+cargo bench -p ggml-cpu --bench cpu_bench      # Matmul, dot product, parallel threshold
+cargo bench -p llama --bench profiling          # End-to-end forward pass
+cargo bench -p llama --bench kv_cache           # KV cache push, push_batch, reset, truncate
+cargo bench -p llama --bench attention          # RoPE scaling, flash attention (full + window)
 ```

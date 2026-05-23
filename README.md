@@ -83,8 +83,10 @@ cargo build --release --workspace
 # Test
 cargo test --workspace
 
-# Benchmark
+# Benchmarks
 cargo bench -p ggml-cpu --bench cpu_bench
+cargo bench -p llama --bench kv_cache
+cargo bench -p llama --bench attention
 ```
 
 ## Features
@@ -92,7 +94,7 @@ cargo bench -p ggml-cpu --bench cpu_bench
 - **GGUF v3 parser**: Full support for 13 metadata types, 42 tensor types, memory-mapped I/O, and all quantization types used by Ollama (Q8_K, Q1_0, Q2_K, Q3_K, Q4_K, Q5_K, Q6_K, Q8_0, Q8_1, Q4_0, Q4_1, Q5_0, Q5_1, IQ_XXS, IQ_XS, IQ_S, IQ_M) with dedicated imatrix module for importance matrix quantizations
 - **SIMD matmul**: AVX 8-wide (32 floats/iter) → SSE4.2 4-wide (16 floats/iter) → scalar fallback
 - **CUDA backend**: cuBLAS matmul, VRAM tracking (enabled by default, requires CUDA toolkit)
-- **Inference engine**: RMSNorm, RoPE, multi-head attention with GQA, SwiGLU FFN, KV cache, flash attention
+- **Inference engine**: RMSNorm, RoPE with dynamic scaling (Linear/NTK/Dynamic NTK), multi-head attention with GQA, SwiGLU FFN (GELU for Gemma, ReLU² for Phi-3), KV cache with prefix caching and configurable strategies, flash attention, QK-norm (Gemma2), sliding window attention (Mistral)
 - **Sampling**: Greedy, temperature, top-k, top-p (nucleus)
 - **Multi-architecture support**: Llama, Mistral, Phi2/3, Gemma/Gemma2, Qwen2, StableLM
 - **Profiling**: Per-layer timing benchmarks with `generate_with_profile()` method
@@ -141,6 +143,8 @@ llama-server -m model.gguf [--host 127.0.0.1] [--port 8080]
 | `cargo test [test_name] -- --nocapture` | Run a single test with output |
 | `cargo bench -p ggml-cpu --bench cpu_bench` | Run CPU benchmarks |
 | `cargo bench -p llama --bench profiling` | Run profiling benchmarks |
+| `cargo bench -p llama --bench kv_cache` | Run KV cache benchmarks |
+| `cargo bench -p llama --bench attention` | Run attention (RoPE scaling + flash attn) benchmarks |
 
 ### Linting & Formatting
 
@@ -222,8 +226,11 @@ if !model_path.exists() {
 | 8 | ✅ | Multi-architecture support (Llama, Mistral, Phi, Gemma, Qwen2) |
 | 9 | ✅ | Flash attention and memory-mapped tensors |
 | 10 | ✅ | Profiling and per-layer timing benchmarks |
+| 11 | ✅ | RoPE scaling, ReLU², QK-norm, sliding window prefill |
+| 12 | ✅ | KV cache strategies (prefix caching, push_batch, O(1) reset) |
+| 13 | ✅ | Parallel matmul threshold, configuration-driven design |
 
-**46 tests pass** across all crates (43 unit/integration + 3 doctests).
+**52 tests pass** across all crates (48 unit/integration + 4 doctests).
 
 ## License
 
