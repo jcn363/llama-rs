@@ -2,26 +2,6 @@
 
 ## Executive Summary
 
-**Recent Updates (2024‑2026)**
-- Added batch inference API (`Model::run_batch`).
-- Introduced configurable KV‑cache strategies (`CacheStrategy::SlidingWindow`, `PrefixOnly`).
-- Implemented **computed FFN recomputation** to off‑load FFN weights and save VRAM.
-- Added **thread‑local bump allocator** to reduce memory fragmentation across forward passes.
-- Implemented benchmark suite for KV‑cache performance and FFN recomputation.
-- Expanded documentation (USAGE, SECURITY) and CI pipelines for macOS/Windows.
-- Improved CUDA VRAM handling and CPU benchmark constructors.
-
-
-
-**Recent Updates (2024‑2026)**
-- Added batch inference API (`Model::run_batch`).
-- Introduced configurable KV‑cache strategies (`CacheStrategy::SlidingWindow`, `PrefixOnly`).
-- Implemented benchmark suite for KV‑cache performance.
-- Expanded documentation (USAGE, SECURITY) and CI pipelines for macOS/Windows.
-- Improved CUDA VRAM handling and CPU benchmark constructors.
-
-
-
 llama-rs occupies a unique niche in the LLM inference landscape by targeting specific legacy hardware constraints rather than competing on raw performance with market leaders. While projects like vLLM, TensorRT-LLM, and TGI optimize for cutting-edge data center GPUs (H100/A100), llama-rs is purpose-built for the AMD Opteron 3280 (Bulldozer bdver1) + NVIDIA GTX 1050 combination, offering a well-architected, Rust-safe alternative for constrained environments.
 
 ## Market Landscape Analysis
@@ -49,7 +29,7 @@ llama-rs occupies a unique niche in the LLM inference landscape by targeting spe
 - Model Format: GGUF v3
 
 **Core Features:**
-- GGUF v3 parser with memory-mapped I/O and SIMD-parallelized dequantization
+- GGUF v3 parser with memory-mapped I/O and SIMD-parallelized dequantization (28 quantized formats)
 - Core tensor library (ggml) with AVX/SSE4.2 SIMD matmul
 - CPU backend (ggml-cpu) with block-tiled matmul (16×16 tiles) and std::thread::scope parallelism
 - CUDA backend (ggml-cuda) via cuBLAS with VRAM tracking
@@ -57,9 +37,8 @@ llama-rs occupies a unique niche in the LLM inference landscape by targeting spe
   - RMSNorm, configurable RoPE (with dynamic scaling), multi-head GQA attention
   - SwiGLU FFN (GELU for Gemma, ReLU² for Phi-3)
   - QK-norm for Gemma2
-  - KV cache with flash attention support, prefix caching, and configurable cache strategies
-  - Sliding window attention (Mistral)
-  - Multi-architecture support (Llama, Mistral, Phi2/3, Gemma/Gemma2, Qwen2, StableLM)
+  - KV cache with prefix caching, configurable cache strategies, and sliding window attention (Mistral/Mixtral)
+  - Multi-architecture support (Llama, Mistral, Mixtral, Phi-2/3/3.5, Gemma/Gemma2, Qwen2, StableLM)
 - Shared utilities (common) for argument parsing and sampling
 - CLI binary (llama-cli) with interactive and single-prompt modes
 - HTTP server (llama-server) with REST API and SSE streaming
@@ -115,11 +94,16 @@ Due to its specific hardware target, llama-rs does not compete on raw throughput
 ### Current Status
 llama-rs implements a GGUF v3 parser with full support for:
 - 13 metadata types
-- 42 tensor data types
+- 36 tensor data types (float, integer, and 28 quantized formats)
 - Memory-mapped I/O for efficient large model handling
-- SIMD-parallelized dequantization (Q4_0 through Q6_K, K-quants, Q8_K, Q1_0)
-- Dedicated imatrix quantization support (IQ_XXS, IQ_XS, IQ_S, IQ_M)
-- Multi-architecture forward pass with automatic dispatch (Llama, Mistral, Phi-2/3, Gemma/Gemma2, Qwen2, StableLM)
+- SIMD-parallelized dequantization across 5 modular kernel families:
+  - **Standard quants**: Q4_0, Q4_1, Q5_0, Q5_1, Q8_0, Q8_1
+  - **K-quants**: Q2_K–Q6_K, Q8_K, Q1_0
+  - **Ternary quants**: Tq1_0, Tq2_0
+  - **Micro-exponent quants**: Mxfp4, Nvfp4
+  - **Importance-matrix quants**: IQ1_S–IQ4_XS (11 subtypes)
+- Dedicated imatrix quantization support (IQ1_S, IQ1_M, IQ2_S, IQ2_XXS, IQ2_XS, IQ3_S, IQ3_XXS, IQ3_XS, IQ3_M, IQ4_NL, IQ4_XS)
+- Multi-architecture forward pass with automatic dispatch (Llama, Mistral, Mixtral, Phi-2/3/3.5, Gemma/Gemma2, Qwen2, StableLM)
 
 ### Ollama Compatibility Roadmap
 To achieve complete Ollama model support, llama-rs should:
@@ -140,19 +124,16 @@ To achieve complete Ollama model support, llama-rs should:
   - StableLM (similar to Llama with minor differences)
 
 #### Phase 3: Quantization Support
-- Extend dequantization to cover all Ollama-used formats:
-  - ✅ Q4_0, Q4_1
-  - ✅ Q5_0, Q5_1
-  - ✅ Q6_K
-  - ✅ Q2_K, Q3_K, Q4_K, Q5_K, Q6_K (K-quants)
-  - ✅ Q8_K, Q1_0
-  - ✅ IQ1_S, IQ1_M, IQ2_S, IQ2_XXS, IQ2_XS, IQ3_S, IQ3_XXS, IQ3_XS, IQ3_M, IQ4_NL, IQ4_XS (imatrix quantizations)
-  - ❏ 1.5-bit, 2-bit, 3-bit, 4.5-bit, 5-bit, 6-bit, 8-bit variants
-  - ❏ Binary and ternary quantization (1-bit, 1.58-bit)
+- ✅ Full dequantization coverage for all 28 GGML quantized types:
+  - ✅ Q4_0, Q4_1, Q5_0, Q5_1, Q8_0, Q8_1 (standard, in `q.rs`)
+  - ✅ Q2_K–Q6_K, Q8_K, Q1_0 (K-quants, in `k_quant.rs`)
+  - ✅ Tq1_0, Tq2_0 (ternary, in `ternary.rs`)
+  - ✅ Mxfp4, Nvfp4 (micro-exponent, in `mxfp.rs`)
+  - ✅ IQ1_S–IQ4_XS (11 imatrix subtypes, in `iq.rs`)
 
 #### Phase 4: Advanced Features
 - ✅ RoPE with dynamic scaling (Linear, NTK-aware, Dynamic NTK) via configurable `RoPEConfig`
-- ✅ Sliding window attention (Mistral) in both cached and prefill paths
+- ✅ Sliding window attention (Mistral/Mixtral) in both cached and prefill paths
 - ✅ Grouped-query attention (GQA)
 - ✅ Different normalization schemes: RMSNorm, LayerNorm, plus QK-norm (Gemma2)
 - ✅ Various activation functions: SiLU, GELU, ReLU² (Phi-3)
@@ -165,12 +146,12 @@ To achieve complete Ollama model support, llama-rs should:
 - ✅ Parallel matmul threshold (`parallel_min_rows`, default 128 rows) tuned for bdver1 multi-core
 - ✅ CLI-configurable batch size, parallel threshold, and cache strategy
 - ✅ Comprehensive criterion benchmarks: KV cache ops, RoPE scaling, flash attention (full + windowed), parallel threshold
-- ❏ Computed FFN recomputation to save VRAM (future work)
-- ❏ Memory fragmentation reduction techniques (future work)
+- ✅ Computed FFN recomputation (`offload_ffn`) to off-load FFN weights and save VRAM
+- ✅ Thread-local bump allocator (bumpalo) to reduce memory fragmentation across forward passes
 
 ### Implementation Recommendations
 1. **Maintain GGUF v3 Compliance**: Stay current with GGUF specification as Ollama evolves
-2. **Modular Quantization Design**: Isolate dequantization kernels for easy extension
+2. **✅ Modular Quantization Design**: Dequantization kernels now isolated into 5 submodules (`q`, `k_quant`, `ternary`, `mxfp`, `iq`) with `pub use *` re-exports — adding a new format requires only a new file + one match arm in `tensor.rs`
 3. **Configuration-Driven Model Loading**: Allow runtime selection of optimization strategies
 4. **Benchmark-Driven Development**: Use criterion benchmarks to validate optimization impact
 5. **Community Contributions**: Encourage hardware-specific optimizations via well-defined extension points
