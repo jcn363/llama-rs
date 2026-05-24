@@ -249,23 +249,15 @@ pub fn default_mul(a: &[f32], b: &[f32]) -> Vec<f32> {
 
 /// Default RMSNorm implementation.
 pub fn default_rms_norm(x: &[f32], weight: &[f32], eps: f32) -> Vec<f32> {
-    assert_eq!(x.len(), weight.len(), "RMSNorm: dimension mismatch");
-    let mean_sq: f32 = x.iter().map(|v| v * v).sum::<f32>() / x.len() as f32;
-    let rms = (mean_sq + eps).sqrt();
-    x.iter()
-        .zip(weight.iter())
-        .map(|(v, w)| (v / rms) * w)
-        .collect()
+    // Delegate to SIMD implementation for performance, fallback to scalar if unavailable.
+    // The improvements module provides a DRY implementation.
+    crate::improvements::rms_norm_simd(x, weight, eps)
 }
 
 /// Default SiLU (Swish) activation: x * sigmoid(x)
 pub fn default_silu(x: &[f32]) -> Vec<f32> {
-    x.iter()
-        .map(|v| {
-            let sigmoid = 1.0 / (1.0 + (-v).exp());
-            v * sigmoid
-        })
-        .collect()
+    // Use SIMD implementation from improvements module.
+    crate::improvements::silu_simd(x)
 }
 
 /// Default GELU activation: x * Φ(x) where Φ is the standard Gaussian CDF approximation.

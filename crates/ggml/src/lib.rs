@@ -17,7 +17,7 @@
 //!
 //! The sub‑modules are declared here and can be expanded as needed.
 
-pub mod backend;
+pub mod improvements;
 pub mod dtype;
 pub mod graph;
 pub mod tensor;
