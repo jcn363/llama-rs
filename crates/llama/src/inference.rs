@@ -21,23 +21,6 @@ pub fn embed_token(
     Ok(embeddings[start..end].to_vec())
 }
 
-/// Apply RMSNorm to a vector.
-///
-/// RMSNorm(x) = x / RMS(x) * weight, where RMS(x) = sqrt(mean(x^2) + eps)
-pub fn rms_norm(x: &[f32], weight: &[f32], eps: f32) -> Vec<f32> {
-    assert_eq!(x.len(), weight.len(), "RMSNorm: dimension mismatch");
-
-    // Compute RMS
-    let mean_sq: f32 = x.iter().map(|v| v * v).sum::<f32>() / x.len() as f32;
-    let rms = (mean_sq + eps).sqrt();
-
-    // Normalize and scale
-    x.iter()
-        .zip(weight.iter())
-        .map(|(v, w)| (v / rms) * w)
-        .collect()
-}
-
 /// Apply LayerNorm to a vector.
 ///
 /// LayerNorm(x) = (x - mean(x)) / sqrt(var(x) + eps) * weight + bias
@@ -57,30 +40,6 @@ pub fn layer_norm(x: &[f32], weight: &[f32], bias: Option<&[f32]>, eps: f32) -> 
             let w = weight[i];
             let b = bias.and_then(|b| b.get(i).copied()).unwrap_or(0.0);
             normalized * w + b
-        })
-        .collect()
-}
-
-/// Apply SiLU (Swish) activation: x * sigmoid(x)
-pub fn silu(x: &[f32]) -> Vec<f32> {
-    x.iter()
-        .map(|v| {
-            let sigmoid = 1.0 / (1.0 + (-v).exp());
-            v * sigmoid
-        })
-        .collect()
-}
-
-/// Apply GELU activation: x * Φ(x) where Φ is the standard Gaussian CDF approximation.
-/// Used by Gemma and other models for GeGLU FFN.
-pub fn gelu(x: &[f32]) -> Vec<f32> {
-    x.iter()
-        .map(|v| {
-            // Approximation: 0.5 * x * (1 + tanh(sqrt(2/π) * (x + 0.044715 * x³)))
-            let sqrt_2_over_pi = 0.797_884_6;
-            let inner = sqrt_2_over_pi * (v + 0.044715 * v * v * v);
-            let tanh = (inner.exp() - (-inner).exp()) / (inner.exp() + (-inner).exp());
-            0.5 * v * (1.0 + tanh)
         })
         .collect()
 }

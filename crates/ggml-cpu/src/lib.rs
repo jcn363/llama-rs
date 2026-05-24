@@ -35,6 +35,8 @@ pub use matmul::matmul_f32;
 mod backend;
 pub use backend::{CpuBackend, reset_bump_allocator};
 
+pub mod quant_dot;
+
 // ─── Tests ──────────────────────────────────────────────────────────────────
 
 #[cfg(test)]

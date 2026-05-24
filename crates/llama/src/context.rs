@@ -11,12 +11,23 @@ use std::time::Instant;
 use crate::attention::multi_head_attention_with_cache;
 use crate::backend::BackendType;
 use crate::inference::{
-    SamplingConfig, embed_token, gelu, layer_norm, relu_squared, rms_norm, sample_logits, silu,
+    SamplingConfig, embed_token, layer_norm, relu_squared, sample_logits,
 };
 use crate::kv_cache::CacheStrategy;
 use crate::profile::ProfileResult;
 use crate::{Model, NormType};
-use ggml::backend::Backend;
+use ggml::backend::{Backend, QuantType};
+use gguf::GgmlType;
+
+/// Map a [`gguf::GgmlType`] to [`ggml::backend::QuantType`] if we have a kernel for it.
+fn quant_type_from_ggml(t: GgmlType) -> Option<QuantType> {
+    match t {
+        GgmlType::Q4_0 => Some(QuantType::Q4_0),
+        GgmlType::Q4_1 => Some(QuantType::Q4_1),
+        GgmlType::Q8_0 => Some(QuantType::Q8_0),
+        _ => None,
+    }
+}
 
 /// Configuration for inference.
 #[derive(Debug, Clone)]
@@ -189,6 +200,44 @@ impl InferenceContext {
         Ok(toks)
     }
 
+    /// Load a weight tensor and compute `weight @ input` in the most efficient
+    /// way supported by the backend.
+    ///
+    /// If the tensor is in a quantized format for which a direct dot-product
+    /// kernel exists (Q4_0, Q8_0, Q4_1), the raw quantized bytes are passed
+    /// to [`Backend::mat_vec_quant`], avoiding dequantization entirely.
+    /// Otherwise the tensor is dequantized to f32 and [`Backend::mat_vec`] is used.
+    fn mat_vec_weight(
+        &self,
+        name: &str,
+        rows: usize,
+        cols: usize,
+        input: &[f32],
+    ) -> Result<Vec<f32>, gguf::GgufError> {
+        let id = self
+            .model
+            .interned
+            .strings
+            .iter()
+            .position(|s| s == name)
+            .ok_or_else(|| {
+                gguf::GgufError::DecodeError(format!("Tensor not found: {name}"))
+            })?;
+        let td = self.model.tensors.get(&id).ok_or_else(|| {
+            gguf::GgufError::DecodeError(format!("Tensor not found: {name}"))
+        })?;
+        Ok(match quant_type_from_ggml(td.info.dtype) {
+            Some(qt) => {
+                let (raw, _ty) = td.get_quantized_raw()?;
+                self.backend.mat_vec_quant(raw, qt, rows, cols, input)
+            }
+            None => {
+                let f32_data = td.get()?;
+                self.backend.mat_vec(&f32_data, rows, cols, input)
+            }
+        })
+    }
+
     /// Run a single forward pass through the model for a given token.
     /// Returns logits of shape (vocab_size,).
     fn forward_pass(&self, token_id: usize) -> anyhow::Result<Vec<f32>> {
@@ -248,8 +297,11 @@ impl InferenceContext {
         // Helper: apply the correct norm for the architecture.
         let apply_norm = |x: &[f32], weight: &[f32], eps: f32| -> Vec<f32> {
             match norm_type {
-                NormType::RmsNorm => rms_norm(x, weight, eps),
-                NormType::LayerNorm => layer_norm(x, weight, None, eps),
+                NormType::RmsNorm => self.backend.rms_norm(x, weight, eps),
+                NormType::LayerNorm => {
+                    // LayerNorm is not yet implemented in Backend trait, fallback to standalone
+                    layer_norm(x, weight, None, eps)
+                },
             }
         };
 
@@ -276,48 +328,41 @@ impl InferenceContext {
             let (attn_input, ffn_input) = (x.clone(), x.clone());
 
             // ─── Attention ───
-            if let (Ok(q_weight), Ok(k_weight), Ok(v_weight)) = (
-                self.model.get_tensor(&q_proj_name),
-                self.model.get_tensor(&k_proj_name),
-                self.model.get_tensor(&v_proj_name),
+            if let (Ok(q), Ok(k), Ok(v)) = (
+                self.mat_vec_weight(&q_proj_name, n_head * head_dim, n_embd, &attn_input),
+                self.mat_vec_weight(&k_proj_name, n_head_kv * head_dim, n_embd, &attn_input),
+                self.mat_vec_weight(&v_proj_name, n_head_kv * head_dim, n_embd, &attn_input),
             ) {
                 let attn_start = Instant::now();
-                let mut q = self
-                    .backend
-                    .mat_vec(&q_weight, n_head * head_dim, n_embd, &attn_input);
-                let mut k =
-                    self.backend
-                        .mat_vec(&k_weight, n_head_kv * head_dim, n_embd, &attn_input);
-                let v = self
-                    .backend
-                    .mat_vec(&v_weight, n_head_kv * head_dim, n_embd, &attn_input);
+                let mut q = q;
+                let mut k = k;
 
-                // ─── QK-norm (Gemma2): per-head RMSNorm after projection, before RoPE ───
-                if self.model.has_qk_norm {
-                    let qk_norm_eps = self.model.qk_norm_eps;
-                    if let Ok(q_norm_weight) = self
-                        .model
-                        .get_tensor(&format!("blk.{}.attn_q_norm.weight", layer_idx))
-                    {
-                        for h in 0..n_head {
-                            let start = h * head_dim;
-                            let slice = &mut q[start..start + head_dim];
-                            let normed = rms_norm(slice, &q_norm_weight, qk_norm_eps);
-                            slice.copy_from_slice(&normed);
-                        }
-                    }
-                    if let Ok(k_norm_weight) = self
-                        .model
-                        .get_tensor(&format!("blk.{}.attn_k_norm.weight", layer_idx))
-                    {
-                        for h in 0..n_head_kv {
-                            let start = h * head_dim;
-                            let slice = &mut k[start..start + head_dim];
-                            let normed = rms_norm(slice, &k_norm_weight, qk_norm_eps);
-                            slice.copy_from_slice(&normed);
-                        }
-                    }
-                }
+                 // ─── QK-norm (Gemma2): per-head RMSNorm after projection, before RoPE ───
+                 if self.model.has_qk_norm {
+                     let qk_norm_eps = self.model.qk_norm_eps;
+                     if let Ok(q_norm_weight) = self
+                         .model
+                         .get_tensor(&format!("blk.{}.attn_q_norm.weight", layer_idx))
+                     {
+                         for h in 0..n_head {
+                             let start = h * head_dim;
+                             let slice = &mut q[start..start + head_dim];
+                             let normed = self.backend.rms_norm(slice, &q_norm_weight, qk_norm_eps);
+                             slice.copy_from_slice(&normed);
+                         }
+                     }
+                     if let Ok(k_norm_weight) = self
+                         .model
+                         .get_tensor(&format!("blk.{}.attn_k_norm.weight", layer_idx))
+                     {
+                         for h in 0..n_head_kv {
+                             let start = h * head_dim;
+                             let slice = &mut k[start..start + head_dim];
+                             let normed = self.backend.rms_norm(slice, &k_norm_weight, qk_norm_eps);
+                             slice.copy_from_slice(&normed);
+                         }
+                     }
+                 }
 
                 let mut kv_cache = self.model.kv_cache.write().expect("lock poisoned");
                 let position_offset = kv_cache.get_layer_ref(layer_idx).cur_len;
@@ -336,13 +381,12 @@ impl InferenceContext {
                 );
 
                 let attn_out_name = format!("blk.{}.attn_output.weight", layer_idx);
-                if let Ok(attn_out_weight) = self.model.get_tensor(&attn_out_name) {
-                    let attn_proj = self.backend.mat_vec(
-                        &attn_out_weight,
-                        n_embd,
-                        n_head * head_dim,
-                        &attn_output,
-                    );
+                if let Ok(attn_proj) = self.mat_vec_weight(
+                    &attn_out_name,
+                    n_embd,
+                    n_head * head_dim,
+                    &attn_output,
+                ) {
                     attn_output_vec = Some(attn_proj);
                 } else {
                     attn_output_vec = Some(attn_output);
@@ -368,26 +412,22 @@ impl InferenceContext {
             let up_name = format!("blk.{}.ffn_up.weight", layer_idx);
             let down_name = format!("blk.{}.ffn_down.weight", layer_idx);
 
-            if let (Ok(gate), Ok(up), Ok(down)) = (
-                self.model.get_tensor(&gate_name),
-                self.model.get_tensor(&up_name),
-                self.model.get_tensor(&down_name),
-            ) {
+            if self.model.get_tensor(&gate_name).is_ok()
+                && self.model.get_tensor(&up_name).is_ok()
+                && self.model.get_tensor(&down_name).is_ok()
+            {
                 let gate_proj = self
-                    .backend
-                    .mat_vec(&gate, self.model.n_ff, n_embd, &ffn_input);
+                    .mat_vec_weight(&gate_name, self.model.n_ff, n_embd, &ffn_input)?;
                 let up_proj = self
-                    .backend
-                    .mat_vec(&up, self.model.n_ff, n_embd, &ffn_input);
+                    .mat_vec_weight(&up_name, self.model.n_ff, n_embd, &ffn_input)?;
                 let activated_gate = match arch {
-                    "gemma" | "gemma2" => gelu(&gate_proj),
+                    "gemma" | "gemma2" => self.backend.gelu(&gate_proj),
                     "phi3" | "phi3small" | "phi3.5" => relu_squared(&gate_proj),
-                    _ => silu(&gate_proj),
+                    _ => self.backend.silu(&gate_proj),
                 };
                 let ffn_hidden = self.backend.mul(&activated_gate, &up_proj);
                 let ffn_output = self
-                    .backend
-                    .mat_vec(&down, n_embd, self.model.n_ff, &ffn_hidden);
+                    .mat_vec_weight(&down_name, n_embd, self.model.n_ff, &ffn_hidden)?;
                 ffn_output_vec = Some(ffn_output);
             }
             let ffn_ms = ffn_start.elapsed().as_secs_f64() * 1000.0;
@@ -419,7 +459,7 @@ impl InferenceContext {
                         if let Ok(post_attn_norm_weight) =
                             self.model.get_tensor(&post_attn_norm_name)
                         {
-                            x = rms_norm(&x, &post_attn_norm_weight, self.model.norm_eps);
+                            x = self.backend.rms_norm(&x, &post_attn_norm_weight, self.model.norm_eps);
                         }
                     }
 
@@ -442,13 +482,13 @@ impl InferenceContext {
             x = apply_norm(&x, &final_norm, self.model.norm_eps);
         }
 
-        let logits = if let Ok(output_weight) = self.model.get_tensor("output.weight") {
-            self.backend
-                .mat_vec(&output_weight, self.model.vocab_size, n_embd, &x)
-        } else {
-            self.backend
-                .mat_vec(&token_embd, self.model.vocab_size, n_embd, &x)
-        };
+        let logits =
+            if let Ok(logits) = self.mat_vec_weight("output.weight", self.model.vocab_size, n_embd, &x) {
+                logits
+            } else {
+                self.backend
+                    .mat_vec(&token_embd, self.model.vocab_size, n_embd, &x)
+            };
         profile.output_ms = output_start.elapsed().as_secs_f64() * 1000.0;
         profile.total_ms = total_start.elapsed().as_secs_f64() * 1000.0;
 

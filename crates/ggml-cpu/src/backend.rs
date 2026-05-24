@@ -253,7 +253,7 @@ impl CpuBackend {
 
 // ─── Backend trait implementation ─────────────────────────────────────────────
 
-use ggml::backend::{Backend, BackendInfo};
+use ggml::backend::{Backend, BackendInfo, QuantType};
 
 impl Backend for CpuBackend {
     fn info(&self) -> BackendInfo {
@@ -290,6 +290,75 @@ impl Backend for CpuBackend {
         }
     }
 
+    /// Quantized matrix-vector product.
+    ///
+    /// Dispatches to the appropriate `QuantDot` kernel for each row,
+    /// with parallel dispatch across threads when the matrix is large enough.
+    fn mat_vec_quant(
+        &self,
+        weight: &[u8],
+        quant_type: QuantType,
+        rows: usize,
+        cols: usize,
+        input: &[f32],
+    ) -> Vec<f32> {
+        let block_size = quant_type.block_size();
+        let block_bytes = quant_type.block_bytes();
+        let n_blocks_per_row = cols.div_ceil(block_size);
+
+        // Select the quantized dot kernel (fn pointer is Sync)
+        let dot_row: fn(&[u8], &[f32], usize) -> f32 = match quant_type {
+            QuantType::Q4_0 => {
+                |q, inp, c| {
+                    crate::quant_dot::quant_dot_row(
+                        &crate::quant_dot::q4_0::Q4_0Dot,
+                        q,
+                        inp,
+                        c,
+                    )
+                }
+            }
+            QuantType::Q8_0 => {
+                |q, inp, c| {
+                    crate::quant_dot::quant_dot_row(
+                        &crate::quant_dot::q8_0::Q8_0Dot,
+                        q,
+                        inp,
+                        c,
+                    )
+                }
+            }
+            QuantType::Q4_1 => {
+                |q, inp, c| {
+                    crate::quant_dot::quant_dot_row(
+                        &crate::quant_dot::q4_1::Q4_1Dot,
+                        q,
+                        inp,
+                        c,
+                    )
+                }
+            }
+        };
+
+        use rayon::prelude::*;
+        if rows < self.parallel_min_rows || self.n_threads <= 1 {
+            (0..rows)
+                .map(|r| {
+                    let row_offset = r * n_blocks_per_row * block_bytes;
+                    dot_row(&weight[row_offset..], input, cols)
+                })
+                .collect()
+        } else {
+            (0..rows)
+                .into_par_iter()
+                .map(|r| {
+                    let row_offset = r * n_blocks_per_row * block_bytes;
+                    dot_row(&weight[row_offset..], input, cols)
+                })
+                .collect()
+        }
+    }
+
     /// Element-wise addition.
     fn add(&self, a: &[f32], b: &[f32]) -> Vec<f32> {
         a.iter().zip(b.iter()).map(|(x, y)| x + y).collect()
@@ -298,5 +367,38 @@ impl Backend for CpuBackend {
     /// Element-wise multiplication.
     fn mul(&self, a: &[f32], b: &[f32]) -> Vec<f32> {
         a.iter().zip(b.iter()).map(|(x, y)| x * y).collect()
+    }
+
+
+
+    /// Root Mean Square Normalization: `y = (x / RMS(x)) * weight`
+    /// where `RMS(x) = sqrt(mean(x^2) + eps)`.
+    fn rms_norm(&self, x: &[f32], weight: &[f32], eps: f32) -> Vec<f32> {
+        // Use the default implementation for now - can be optimized with SIMD later
+        ggml::backend::default_rms_norm(x, weight, eps)
+    }
+
+    /// Sigmoid Linear Unit (`SiLU`) activation: `y = x * sigmoid(x)`
+    fn silu(&self, x: &[f32]) -> Vec<f32> {
+        x.iter()
+            .map(|v| {
+                let sigmoid = 1.0 / (1.0 + (-v).exp());
+                v * sigmoid
+            })
+            .collect()
+    }
+
+    /// Gaussian Error Linear Unit (GELU) activation:
+    /// `y = x * Φ(x)` where Φ is the standard Gaussian CDF approximation.
+    fn gelu(&self, x: &[f32]) -> Vec<f32> {
+        x.iter()
+            .map(|v| {
+                // Approximation: 0.5 * x * (1 + tanh(sqrt(2/π) * (x + 0.044_715 * x³)))
+                let sqrt_2_over_pi = 0.797_884_6;
+                let inner = sqrt_2_over_pi * (v + 0.044_715 * v * v * v);
+                let tanh = (inner.exp() - (-inner).exp()) / (inner.exp() + (-inner).exp());
+                0.5 * v * (1.0 + tanh)
+            })
+            .collect()
     }
 }

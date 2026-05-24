@@ -36,7 +36,8 @@ pub mod tokenizer;
 pub use attention::{apply_rope_with_config, multi_head_attention_with_cache};
 pub use backend::{BackendType, create_backend};
 pub use context::{InferenceContext, ModelConfig};
-pub use ggml::backend::{Backend, BackendInfo};
+pub use ggml::backend::{Backend, BackendInfo, QuantType};
+pub use gguf::GgmlType;
 pub use inference::dot_product;
 pub use kv_cache::{CacheStrategy, KvCache, KvCacheManager};
 pub use profile::ProfileResult;
@@ -127,6 +128,15 @@ impl TensorData {
             *write = Some(arc.clone());
         }
         Ok(arc)
+    }
+
+    /// Return the raw quantized tensor bytes and its GGML type.
+    ///
+    /// This avoids dequantization entirely — the caller can pass the bytes
+    /// directly to [`Backend::mat_vec_quant`] for faster inference.
+    pub fn get_quantized_raw(&self) -> Result<(&[u8], gguf::GgmlType), gguf::GgufError> {
+        let raw = self.mmap_tensor.as_slice()?;
+        Ok((raw, self.info.dtype))
     }
 }
 

@@ -23,6 +23,7 @@ pub mod graph;
 pub mod tensor;
 
 // Re‑export the most important items for a convenient top‑level API.
+pub use backend::QuantType;
 pub use dtype::DType;
 pub use graph::Graph;
 pub use tensor::Tensor;

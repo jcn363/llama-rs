@@ -1,4 +1,5 @@
 use criterion::{Criterion, criterion_group, criterion_main};
+use ggml::backend::{Backend, QuantType};
 use ggml::{DType, Tensor};
 use ggml_cpu::{CpuBackend, cpu_features, dot_f32};
 
@@ -92,11 +93,79 @@ fn cpu_feature_benchmark(c: &mut Criterion) {
     group.finish();
 }
 
+/// Build a synthetic Q4_0 quantized weight matrix from f32 values.
+fn build_q4_0_weights(values: &[f32]) -> Vec<u8> {
+    use half::f16;
+    let n = values.len();
+    // Pad to block boundary
+    let n_blocks = n.div_ceil(32);
+    let mut out = Vec::with_capacity(n_blocks * 18);
+    for b in 0..n_blocks {
+        let start = b * 32;
+        // Compute scale = max absolute value / 7 (Q4_0 range is -8..7)
+        let mut max_abs = 0.0f32;
+        for i in 0..32 {
+            let idx = start + i;
+            let v = if idx < n { values[idx] } else { 0.0 };
+            max_abs = max_abs.max(v.abs());
+        }
+        let scale = if max_abs == 0.0 { 1.0 } else { max_abs / 7.0 };
+        let inv_scale = if scale == 0.0 { 1.0 } else { 1.0 / scale };
+        let scale_bytes = f16::from_f32(scale).to_le_bytes();
+        out.extend_from_slice(&scale_bytes);
+        for i in 0..16 {
+            let idx0 = start + i * 2;
+            let idx1 = start + i * 2 + 1;
+            let v0 = if idx0 < n { values[idx0] } else { 0.0 };
+            let v1 = if idx1 < n { values[idx1] } else { 0.0 };
+            let q0 = ((v0 * inv_scale).round() as i8).clamp(-8, 7).wrapping_add(8) as u8 & 0x0F;
+            let q1 = ((v1 * inv_scale).round() as i8).clamp(-8, 7).wrapping_add(8) as u8 & 0x0F;
+            out.push(q0 | (q1 << 4));
+        }
+    }
+    out
+}
+
+fn quantized_matvec_benchmark(c: &mut Criterion) {
+    let backend = CpuBackend::new(1, 0);
+    let parallel_backend = CpuBackend::new(0, 0);
+
+    let sizes = [(256, 256), (512, 512), (1024, 4096)];
+    for &(rows, cols) in &sizes {
+        let mut group = c.benchmark_group(&format!("quant_matvec_{rows}x{cols}"));
+
+        // Generate f32 weight data
+        let weight: Vec<f32> = (0..rows * cols)
+            .map(|i| ((i as u64).wrapping_mul(42).wrapping_add(7) % 1000) as f32 * 0.001)
+            .collect();
+        let input: Vec<f32> = (0..cols).map(|i| (i as f32) * 0.001).collect();
+        let quantized = build_q4_0_weights(&weight);
+
+        // F32 baseline
+        group.bench_function("f32_baseline", |b| {
+            b.iter(|| backend.mat_vec(&weight, rows, cols, &input))
+        });
+
+        // Q4_0 quantized (single thread)
+        group.bench_function("q4_0_quant", |b| {
+            b.iter(|| backend.mat_vec_quant(&quantized, QuantType::Q4_0, rows, cols, &input))
+        });
+
+        // Q4_0 quantized (parallel)
+        group.bench_function("q4_0_parallel", |b| {
+            b.iter(|| parallel_backend.mat_vec_quant(&quantized, QuantType::Q4_0, rows, cols, &input))
+        });
+
+        group.finish();
+    }
+}
+
 criterion_group!(
     benches,
     matmul_benchmark,
     parallel_threshold_benchmark,
     dot_product_benchmark,
-    cpu_feature_benchmark
+    cpu_feature_benchmark,
+    quantized_matvec_benchmark
 );
 criterion_main!(benches);

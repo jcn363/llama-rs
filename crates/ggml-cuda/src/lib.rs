@@ -532,6 +532,26 @@ impl Backend for CudaBackend {
     fn mul(&self, a: &[f32], b: &[f32]) -> Vec<f32> {
         ggml::backend::default_mul(a, b)
     }
+
+    /// Root Mean Square Normalization: `y = (x / RMS(x)) * weight`
+    /// where `RMS(x) = sqrt(mean(x^2) + eps)`.
+    /// CPU fallback implementation.
+    fn rms_norm(&self, x: &[f32], weight: &[f32], eps: f32) -> Vec<f32> {
+        ggml::backend::default_rms_norm(x, weight, eps)
+    }
+
+    /// Sigmoid Linear Unit (`SiLU`) activation: `y = x * sigmoid(x)`
+    /// CPU fallback implementation.
+    fn silu(&self, x: &[f32]) -> Vec<f32> {
+        ggml::backend::default_silu(x)
+    }
+
+    /// Gaussian Error Linear Unit (`GELU`) activation:
+    /// `y = x * Φ(x)` where Φ is the standard Gaussian CDF.
+    /// CPU fallback implementation.
+    fn gelu(&self, x: &[f32]) -> Vec<f32> {
+        ggml::backend::default_gelu(x)
+    }
 }
 
 // ─── Tests ──────────────────────────────────────────────────────────────────
