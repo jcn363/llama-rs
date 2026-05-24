@@ -13,6 +13,7 @@ const BLOCK_N: usize = 16;
 /// * `b` - Matrix B with shape `[n, k]`
 /// * `c` - Output matrix with shape `[m, n]` (must be pre-allocated)
 /// * `n_threads` - Number of threads for parallel execution
+/// * `min_parallel_rows` - Minimum rows of A before parallel dispatch is worthwhile.
 pub fn matmul_f32(
     a: &[f32],
     b: &[f32],
@@ -21,6 +22,7 @@ pub fn matmul_f32(
     n: usize,
     k: usize,
     n_threads: usize,
+    min_parallel_rows: usize,
 ) {
     assert_eq!(a.len(), m * k, "A must have shape [{m}, {k}]");
     assert_eq!(b.len(), n * k, "B must have shape [{n}, {k}]");
@@ -32,7 +34,8 @@ pub fn matmul_f32(
         n_threads
     };
 
-    if n_threads <= 1 {
+    // Don't parallelize tiny matmuls
+    if n_threads <= 1 || m < min_parallel_rows {
         // Single-threaded
         matmul_f32_block(a, b, c, n, k, 0, m, 0, n);
         return;

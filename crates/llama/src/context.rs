@@ -5,6 +5,7 @@
 //! text generation.
 
 use bumpalo::Bump;
+use std::sync::Arc;
 use std::time::Instant;
 
 use crate::attention::multi_head_attention_with_cache;
@@ -71,7 +72,10 @@ pub struct InferenceContext {
     pub cuda_backend: Option<ggml_cuda::CudaBackend>,
     #[cfg(not(feature = "cuda"))]
     #[allow(dead_code)]
+    /// Optional CUDA backend for GPU-accelerated matmul (disabled).
     pub cuda_backend: Option<()>,
+    /// Tokens currently in the KV cache (for prefix caching).
+    pub cached_tokens: Vec<usize>,
 }
 
 impl InferenceContext {
@@ -109,6 +113,7 @@ impl InferenceContext {
             #[cfg(not(feature = "cuda"))]
             cuda_backend: None,
             bump: Bump::new(),
+            cached_tokens: Vec::new(),
         }
     }
 
@@ -124,13 +129,62 @@ impl InferenceContext {
     }
 
     /// Generate token IDs for a prompt using actual inference.
-    pub fn generate(&self, prompt: &str, n_predict: usize) -> anyhow::Result<Vec<usize>> {
+    pub fn generate(&mut self, prompt: &str, n_predict: usize) -> anyhow::Result<Vec<usize>> {
         let mut toks = self.encode(prompt);
 
         if toks.len() > self.config.n_ctx {
             toks.truncate(self.config.n_ctx);
         }
 
+        // Phase 1: Prepare KV cache according to strategy.
+        // IMPORTANT: drop the lock before Phase 2 (prefill), because
+        // forward_pass() also acquires the KV cache write lock.
+        {
+            let mut kv_cache = self.model.kv_cache.write().expect("lock poisoned");
+            match self.config.cache_strategy {
+                CacheStrategy::Prefix => {
+                    // Find longest common prefix between new prompt and cached tokens
+                    let common_prefix_len = toks
+                        .iter()
+                        .zip(self.cached_tokens.iter())
+                        .take_while(|(a, b)| a == b)
+                        .count();
+                    kv_cache.truncate_all(common_prefix_len);
+                }
+                _ => {
+                    kv_cache.reset();
+                }
+            }
+        }
+
+        // Phase 2: Run prefill for the required tokens.
+        // The KV cache lock has been released — forward_pass can acquire it.
+        match self.config.cache_strategy {
+            CacheStrategy::Prefix => {
+                let common_prefix_len = toks
+                    .iter()
+                    .zip(self.cached_tokens.iter())
+                    .take_while(|(a, b)| a == b)
+                    .count();
+                if toks.len() > common_prefix_len {
+                    let remaining_tokens = &toks[common_prefix_len..];
+                    for chunk in remaining_tokens.chunks(self.config.n_batch) {
+                        self.prefill(chunk)?;
+                    }
+                }
+                self.cached_tokens = toks.clone();
+            }
+            _ => {
+                self.cached_tokens.clear();
+                if !toks.is_empty() {
+                    for chunk in toks.chunks(self.config.n_batch) {
+                        self.prefill(chunk)?;
+                    }
+                }
+            }
+        }
+
+        // DECODE PHASE: Generate one token at a time
         for _i in 0..n_predict {
             let last_token = *toks.last().unwrap_or(&0);
 
@@ -157,6 +211,24 @@ impl InferenceContext {
     fn forward_pass(&self, token_id: usize) -> anyhow::Result<Vec<f32>> {
         self.forward_pass_with_profile(token_id)
             .map(|(logits, _profile)| logits)
+    }
+
+    /// Run forward pass for a batch of tokens (prefill phase).
+    /// Processes tokens in batches of size n_batch for better memory locality,
+    /// stores KV cache entries, and returns final logits.
+    pub fn prefill(&self, tokens: &[usize]) -> anyhow::Result<Vec<f32>> {
+        // Process each token in sequence, storing KV cache entries
+        // Only return the logits of the final token
+        let mut final_logits = None;
+
+        // Process in chunks of n_batch for better memory locality
+        for chunk in tokens.chunks(self.config.n_batch) {
+            for &token in chunk {
+                final_logits = Some(self.forward_pass(token)?);
+            }
+        }
+
+        final_logits.ok_or_else(|| anyhow::anyhow!("empty batch"))
     }
 
     /// Run a single forward pass with per-layer profiling.
@@ -203,6 +275,7 @@ impl InferenceContext {
             let residual = x.clone();
 
             // ─── Pre-attention norm ───
+            // ─── Pre-attention norm ───
             let attn_norm_name = format!("blk.{}.attn_norm.weight", layer_idx);
             if let Ok(attn_norm_weight) = self.model.get_tensor(&attn_norm_name) {
                 x = apply_norm(&x, &attn_norm_weight, self.model.norm_eps);
@@ -226,9 +299,27 @@ impl InferenceContext {
                 self.model.get_tensor(&v_proj_name),
             ) {
                 let attn_start = Instant::now();
-                let mut q = mat_vec(&q_weight, n_head * head_dim, n_embd, &attn_input);
-                let mut k = mat_vec(&k_weight, n_head_kv * head_dim, n_embd, &attn_input);
-                let v = mat_vec(&v_weight, n_head_kv * head_dim, n_embd, &attn_input);
+                let mut q = mat_vec(
+                    &q_weight,
+                    n_head * head_dim,
+                    n_embd,
+                    &attn_input,
+                    self.config.parallel_min_rows,
+                );
+                let mut k = mat_vec(
+                    &k_weight,
+                    n_head_kv * head_dim,
+                    n_embd,
+                    &attn_input,
+                    self.config.parallel_min_rows,
+                );
+                let v = mat_vec(
+                    &v_weight,
+                    n_head_kv * head_dim,
+                    n_embd,
+                    &attn_input,
+                    self.config.parallel_min_rows,
+                );
 
                 // ─── QK-norm (Gemma2): per-head RMSNorm after projection, before RoPE ───
                 if self.model.has_qk_norm {
@@ -275,8 +366,13 @@ impl InferenceContext {
 
                 let attn_out_name = format!("blk.{}.attn_output.weight", layer_idx);
                 if let Ok(attn_out_weight) = self.model.get_tensor(&attn_out_name) {
-                    let attn_proj =
-                        mat_vec(&attn_out_weight, n_embd, n_head * head_dim, &attn_output);
+                    let attn_proj = mat_vec(
+                        &attn_out_weight,
+                        n_embd,
+                        n_head * head_dim,
+                        &attn_output,
+                        self.config.parallel_min_rows,
+                    );
                     attn_output_vec = Some(attn_proj);
                 } else {
                     attn_output_vec = Some(attn_output);
@@ -307,15 +403,33 @@ impl InferenceContext {
                 self.model.get_tensor(&up_name),
                 self.model.get_tensor(&down_name),
             ) {
-                let gate_proj = mat_vec(&gate, self.model.n_ff, n_embd, &ffn_input);
-                let up_proj = mat_vec(&up, self.model.n_ff, n_embd, &ffn_input);
+                let gate_proj = mat_vec(
+                    &gate,
+                    self.model.n_ff,
+                    n_embd,
+                    &ffn_input,
+                    self.config.parallel_min_rows,
+                );
+                let up_proj = mat_vec(
+                    &up,
+                    self.model.n_ff,
+                    n_embd,
+                    &ffn_input,
+                    self.config.parallel_min_rows,
+                );
                 let activated_gate = match arch {
                     "gemma" | "gemma2" => gelu(&gate_proj),
                     "phi3" | "phi3small" | "phi3.5" => relu_squared(&gate_proj),
                     _ => silu(&gate_proj),
                 };
-                let ffn_hidden = mul_vec(&activated_gate, &up_proj);
-                let ffn_output = mat_vec(&down, n_embd, self.model.n_ff, &ffn_hidden);
+                let ffn_hidden = mul_vec(&activated_gate, &up_proj, self.config.parallel_min_rows);
+                let ffn_output = mat_vec(
+                    &down,
+                    n_embd,
+                    self.model.n_ff,
+                    &ffn_hidden,
+                    self.config.parallel_min_rows,
+                );
                 ffn_output_vec = Some(ffn_output);
             }
             let ffn_ms = ffn_start.elapsed().as_secs_f64() * 1000.0;
@@ -325,17 +439,17 @@ impl InferenceContext {
                 // StableLM: parallel residual -- x = x + attn_out + ffn_out
                 "stablelm" => {
                     if let Some(attn_out) = &attn_output_vec {
-                        x = add_vec(&residual, attn_out);
+                        x = add_vec(&residual, attn_out, self.config.parallel_min_rows);
                     }
                     if let Some(ffn_out) = &ffn_output_vec {
-                        x = add_vec(&x, ffn_out);
+                        x = add_vec(&x, ffn_out, self.config.parallel_min_rows);
                     }
                 }
                 // Standard sequential residual (Llama, Mistral, Qwen2, etc.)
                 _ => {
                     // Attention residual
                     if let Some(attn_out) = attn_output_vec {
-                        x = add_vec(&residual, &attn_out);
+                        x = add_vec(&residual, &attn_out, self.config.parallel_min_rows);
                     } else {
                         x = residual.clone();
                     }
@@ -354,7 +468,7 @@ impl InferenceContext {
                     // FFN residual
                     let ffn_residual = x.clone();
                     if let Some(ffn_out) = ffn_output_vec {
-                        x = add_vec(&ffn_residual, &ffn_out);
+                        x = add_vec(&ffn_residual, &ffn_out, self.config.parallel_min_rows);
                     } else {
                         x = ffn_residual;
                     }
@@ -371,9 +485,21 @@ impl InferenceContext {
         }
 
         let logits = if let Ok(output_weight) = self.model.get_tensor("output.weight") {
-            mat_vec(&output_weight, self.model.vocab_size, n_embd, &x)
+            mat_vec(
+                &output_weight,
+                self.model.vocab_size,
+                n_embd,
+                &x,
+                self.config.parallel_min_rows,
+            )
         } else {
-            mat_vec(&token_embd, self.model.vocab_size, n_embd, &x)
+            mat_vec(
+                &token_embd,
+                self.model.vocab_size,
+                n_embd,
+                &x,
+                self.config.parallel_min_rows,
+            )
         };
         profile.output_ms = output_start.elapsed().as_secs_f64() * 1000.0;
         profile.total_ms = total_start.elapsed().as_secs_f64() * 1000.0;

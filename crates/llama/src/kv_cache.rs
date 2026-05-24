@@ -17,7 +17,6 @@ pub enum CacheStrategy {
     PrefixOnly,
 }
 
-
 /// Per-layer KV cache.
 ///
 /// Layout:
@@ -74,10 +73,9 @@ impl KvCache {
     }
 
     /// Truncate the cache to a new length (for prefix caching).
-    /// Panics if `new_len > cur_len`.
+    /// If `new_len > cur_len`, this is a no-op.
     pub fn truncate(&mut self, new_len: usize) {
-        assert!(new_len <= self.cur_len);
-        self.cur_len = new_len;
+        self.cur_len = self.cur_len.min(new_len);
     }
 
     /// Append multiple tokens' key and value vectors at once.
@@ -142,7 +140,6 @@ impl KvCacheManager {
         }
     }
 
-
     /// Reset all layer caches.
     pub fn reset(&mut self) {
         for cache in &mut self.caches {
@@ -158,6 +155,18 @@ impl KvCacheManager {
     /// Get immutable reference to a specific layer's cache.
     pub fn get_layer_ref(&self, layer: usize) -> &KvCache {
         &self.caches[layer]
+    }
+
+    /// Truncate all layer caches to new_len.
+    pub fn truncate_all(&mut self, new_len: usize) {
+        for cache in &mut self.caches {
+            cache.truncate(new_len);
+        }
+    }
+
+    /// Get current sequence length (min across layers).
+    pub fn cur_len(&self) -> usize {
+        self.caches.first().map_or(0, |c| c.cur_len)
     }
 }
 

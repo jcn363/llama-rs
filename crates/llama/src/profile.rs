@@ -1,5 +1,4 @@
 /// Profiling structures and utilities for the Llama crate.
-
 use serde::{Deserialize, Serialize};
 
 /// Profiling results for a single forward pass.

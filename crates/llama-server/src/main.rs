@@ -104,7 +104,7 @@ async fn main() -> anyhow::Result<()> {
         .init();
 
     tracing::info!("Loading model from: {}", args.model);
-    let model = Model::from_file(&args.model)?;
+    let model = Model::load_from_gguf(&args.model, false)?;
     tracing::info!("{}", model.summary());
 
     let config = ModelConfig {
@@ -162,7 +162,7 @@ async fn handle_completion(
     // Non-streaming: generate all tokens then return
     let model = Arc::clone(&state.model);
 
-    let ctx = InferenceContext::new(model, state.config.clone());
+    let mut ctx = InferenceContext::new(model, state.config.clone());
     ctx.encode(&request.prompt);
 
     let generated = ctx
@@ -198,7 +198,7 @@ async fn handle_streaming(
 
     // Run inference in a blocking thread pool
     let stream = tokio::task::spawn_blocking(move || {
-        let ctx = InferenceContext::new(model, config);
+        let mut ctx = InferenceContext::new(model, config);
         ctx.encode(&prompt);
 
         let mut chunks = Vec::new();

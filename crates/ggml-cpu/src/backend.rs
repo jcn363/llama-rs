@@ -91,6 +91,24 @@ impl CpuBackend {
         }
     }
 
+    /// Run a parallel operation across rows, dispatching if above threshold.
+    pub fn parallel_for<T, F>(&self, items: &[T], f: F)
+    where
+        T: Sync,
+        F: Fn(&T) + Sync,
+    {
+        if items.len() < self.parallel_min_rows || self.n_threads <= 1 {
+            items.iter().for_each(f);
+        } else {
+            std::thread::scope(|s| {
+                let chunk_size = items.len().div_ceil(self.n_threads);
+                for chunk in items.chunks(chunk_size) {
+                    s.spawn(|| chunk.iter().for_each(&f));
+                }
+            });
+        }
+    }
+
     /// Execute matrix multiplication: `C = A * B^T`.
     ///
     /// Note: This follows ggml's unconventional matmul convention where
@@ -161,7 +179,16 @@ impl CpuBackend {
         } else {
             self.n_threads
         };
-        crate::matmul::matmul_f32(a_f32, b_f32, result_buffer, m, n, k, effective_threads);
+        crate::matmul::matmul_f32(
+            a_f32,
+            b_f32,
+            result_buffer,
+            m,
+            n,
+            k,
+            effective_threads,
+            self.parallel_min_rows,
+        );
 
         // Copy result to owned vector to create Tensor (so Tensor owns its data)
         let result_data: Vec<f32> = result_buffer.to_vec();

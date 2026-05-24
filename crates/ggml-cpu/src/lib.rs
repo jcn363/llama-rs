@@ -33,7 +33,7 @@ mod matmul;
 pub use matmul::matmul_f32;
 
 mod backend;
-pub use backend::{reset_bump_allocator, CpuBackend};
+pub use backend::{CpuBackend, reset_bump_allocator};
 
 // ─── Tests ──────────────────────────────────────────────────────────────────
 
@@ -98,7 +98,7 @@ mod tests {
         let a = [1.0, 2.0, 3.0, 4.0];
         let b = [5.0, 6.0, 7.0, 8.0];
         let mut c = [0.0; 4];
-        matmul_f32(&a, &b, &mut c, 2, 2, 2, 1);
+        matmul_f32(&a, &b, &mut c, 2, 2, 2, 1, 0);
 
         assert!((c[0] - 17.0).abs() < 0.001, "c[0] = {}", c[0]);
         assert!((c[1] - 23.0).abs() < 0.001, "c[1] = {}", c[1]);
@@ -114,7 +114,7 @@ mod tests {
         let a: Vec<f32> = (1..=6).map(|x| x as f32).collect();
         let b: Vec<f32> = (7..=15).map(|x| x as f32).collect();
         let mut c = vec![0.0; 6];
-        matmul_f32(&a, &b, &mut c, 2, 3, 3, 1);
+        matmul_f32(&a, &b, &mut c, 2, 3, 3, 1, 0);
 
         // C[0,0] = 1*7 + 2*8 + 3*9 = 50
         assert!((c[0] - 50.0).abs() < 0.001);
@@ -147,10 +147,10 @@ mod tests {
         let b: Vec<f32> = (0..n * k).map(|i| ((i + 37) % 100) as f32 * 0.01).collect();
 
         let mut c1 = vec![0.0; n * n];
-        matmul_f32(&a, &b, &mut c1, n, n, k, 1);
+        matmul_f32(&a, &b, &mut c1, n, n, k, 1, 0);
 
         let mut c2 = vec![0.0; n * n];
-        matmul_f32(&a, &b, &mut c2, n, n, k, 4);
+        matmul_f32(&a, &b, &mut c2, n, n, k, 4, 0);
 
         for i in 0..n * n {
             let diff = (c1[i] - c2[i]).abs();

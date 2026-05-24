@@ -54,13 +54,13 @@ fn parallel_threshold_benchmark(c: &mut Criterion) {
         group.bench_function("single", |bencher| {
             bencher.iter(|| single.matmul(&a, &b_tensor))
         });
-        
+
         // Auto-parallel with default threshold (128)
         let parallel = CpuBackend::new_with_min_rows(0, 128, 0);
         group.bench_function("thresh128", |bencher| {
             bencher.iter(|| parallel.matmul(&a, &b_tensor))
         });
-        
+
         // Low threshold (16) — parallel on small matrices
         let low_thresh = CpuBackend::new_with_min_rows(0, 16, 0);
         group.bench_function("thresh16", |bencher| {

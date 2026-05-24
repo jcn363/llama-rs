@@ -11,8 +11,8 @@
 //! use std::sync::Arc;
 //! use llama::{Model, ModelConfig, InferenceContext};
 //!
-//! let model = Arc::new(Model::from_file("model.gguf").unwrap());
-//! let ctx = InferenceContext::new(model, ModelConfig::default());
+//! let model = Arc::new(Model::load_from_gguf("model.gguf", false).unwrap());
+//! let mut ctx = InferenceContext::new(model, ModelConfig::default());
 //! let tokens = ctx.generate("Hello, world!", 128).unwrap();
 //! println!("{}", ctx.decode(&tokens));
 //! ```

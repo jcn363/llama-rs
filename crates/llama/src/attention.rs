@@ -273,15 +273,8 @@ pub fn multi_head_attention_with_cache(
     apply_rope_with_config(q, seq_len, head_dim, position_offset, rope_config, None);
     apply_rope_with_config(k, seq_len, head_dim, position_offset, rope_config, None);
 
-    // Store K and V in cache
-    for pos in 0..seq_len {
-        let k_offset = pos * n_head_kv * head_dim;
-        let v_offset = pos * n_head_kv * head_dim;
-        kv_cache.push(
-            &k[k_offset..k_offset + n_head_kv * head_dim],
-            &v[v_offset..v_offset + n_head_kv * head_dim],
-        );
-    }
+    // Store K and V in cache using batch push
+    kv_cache.push_batch(k, v, seq_len);
 
     let total_seq_len = position_offset + seq_len;
     let n_rep = n_head / n_head_kv; // Number of query heads per KV head (for GQA)

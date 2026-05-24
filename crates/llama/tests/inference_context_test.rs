@@ -187,7 +187,7 @@ fn test_forward_pass_produces_logits() {
     let model =
         Arc::new(Model::load_from_gguf(&gguf_path, false).expect("Failed to load test model"));
     let config = ModelConfig::default();
-    let ctx = InferenceContext::new(model, config);
+    let mut ctx = InferenceContext::new(model, config);
 
     let result = ctx.generate("test", 5);
     assert!(result.is_ok());

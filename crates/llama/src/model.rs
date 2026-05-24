@@ -13,11 +13,12 @@ use rayon::prelude::*;
 
 use crate::kv_cache::KvCacheManager;
 use crate::tokenizer;
-use crate::{InternedStrings, Model, NormType, RoPEConfig, RopeScaleType, TensorData};
+use crate::{
+    InferenceContext, InternedStrings, Model, ModelConfig, NormType, RoPEConfig, RopeScaleType,
+    TensorData,
+};
 
 impl Model {
-
-
     /// Return a concise summary of the model configuration.
     pub fn summary(&self) -> String {
         format!(
@@ -342,9 +343,18 @@ impl Model {
     }
 
     /// Run a batch of prompts, returning a vector of generated token ID sequences.
-    /// This is a simple placeholder implementation that calls `infer` for each prompt
-    /// sequentially. Future versions may implement true parallel batch inference.
-    pub fn run_batch(&self, prompts: &[&str]) -> Vec<Vec<usize>> {
-        prompts.iter().map(|p| self.infer(p)).collect()
+    /// This is a simple placeholder implementation that creates an inference context for each prompt.
+    /// Future versions may implement true parallel batch inference.
+    pub fn run_batch(self, prompts: &[&str]) -> Vec<Vec<usize>> {
+        let model_arc = Arc::new(self);
+        let mut result = Vec::new();
+        for prompt in prompts {
+            let mut context = InferenceContext::new(model_arc.clone(), ModelConfig::default());
+            match context.generate(prompt, 0) {
+                Ok(tokens) => result.push(tokens),
+                Err(_) => result.push(vec![]),
+            }
+        }
+        result
     }
 }

@@ -69,7 +69,7 @@ fn main() -> anyhow::Result<()> {
     eprintln!("Loading model from: {}", args.model);
     let start = std::time::Instant::now();
 
-    let model = Arc::new(Model::from_file(&args.model)?);
+    let model = Arc::new(Model::load_from_gguf(&args.model, args.offload_ffn)?);
     let load_time = start.elapsed();
     eprintln!("Model loaded in {:.2}s", load_time.as_secs_f32());
     eprintln!("{}", model.summary());
@@ -88,7 +88,7 @@ fn main() -> anyhow::Result<()> {
         ..Default::default()
     };
 
-    let ctx = InferenceContext::new(model, config);
+    let mut ctx = InferenceContext::new(model, config);
 
     if args.prompt.is_empty() {
         println!("Interactive mode — type your prompt (Ctrl+D to end):");

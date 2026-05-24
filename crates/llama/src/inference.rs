@@ -116,13 +116,19 @@ pub fn sample_argmax(logits: &[f32]) -> usize {
 /// - Parallel execution across rows using Rayon
 /// - SIMD-friendly 4-wide unrolling in dot product
 /// - Cache-friendly sequential row access
-pub fn mat_vec(mat: &[f32], rows: usize, cols: usize, vec: &[f32]) -> Vec<f32> {
+pub fn mat_vec(
+    mat: &[f32],
+    rows: usize,
+    cols: usize,
+    vec: &[f32],
+    parallel_min_rows: usize,
+) -> Vec<f32> {
     use rayon::prelude::*;
     assert_eq!(mat.len(), rows * cols);
     assert_eq!(vec.len(), cols);
 
     // For small matrices, sequential is faster due to overhead
-    if rows < 64 {
+    if rows < parallel_min_rows {
         (0..rows)
             .map(|r| {
                 let start = r * cols;
@@ -172,13 +178,13 @@ pub fn dot_product(a: &[f32], b: &[f32]) -> f32 {
 }
 
 /// Element-wise multiplication of two vectors.
-/// Parallelized for vectors > 1024 elements.
-pub fn mul_vec(a: &[f32], b: &[f32]) -> Vec<f32> {
+/// Parallelized for vectors > parallel_min_rows elements.
+pub fn mul_vec(a: &[f32], b: &[f32], parallel_min_rows: usize) -> Vec<f32> {
     use rayon::prelude::*;
     assert_eq!(a.len(), b.len());
     let len = a.len();
 
-    if len < 1024 {
+    if len < parallel_min_rows {
         a.iter().zip(b.iter()).map(|(x, y)| x * y).collect()
     } else {
         let mut result = vec![0.0f32; len];
@@ -191,13 +197,13 @@ pub fn mul_vec(a: &[f32], b: &[f32]) -> Vec<f32> {
 }
 
 /// Add two vectors element-wise.
-/// Parallelized for vectors > 1024 elements.
-pub fn add_vec(a: &[f32], b: &[f32]) -> Vec<f32> {
+/// Parallelized for vectors > parallel_min_rows elements.
+pub fn add_vec(a: &[f32], b: &[f32], parallel_min_rows: usize) -> Vec<f32> {
     use rayon::prelude::*;
     assert_eq!(a.len(), b.len());
     let len = a.len();
 
-    if len < 1024 {
+    if len < parallel_min_rows {
         a.iter().zip(b.iter()).map(|(x, y)| x + y).collect()
     } else {
         let mut result = vec![0.0f32; len];
