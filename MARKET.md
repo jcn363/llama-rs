@@ -150,11 +150,11 @@ To achieve complete Ollama model support, llama-rs should:
 - ✅ Thread-local bump allocator (bumpalo) to reduce memory fragmentation across forward passes
 
 ### Implementation Recommendations
-1. **Maintain GGUF v3 Compliance**: Stay current with GGUF specification as Ollama evolves
-2. **✅ Modular Quantization Design**: Dequantization kernels now isolated into 5 submodules (`q`, `k_quant`, `ternary`, `mxfp`, `iq`) with `pub use *` re-exports — adding a new format requires only a new file + one match arm in `tensor.rs`
-3. **Configuration-Driven Model Loading**: Allow runtime selection of optimization strategies
-4. **Benchmark-Driven Development**: Use criterion benchmarks to validate optimization impact
-5. **Community Contributions**: Encourage hardware-specific optimizations via well-defined extension points
+1. **✅ Maintain GGUF v3 Compliance**: `GGUF_VERSION = 3` in `constants.rs`, magic/version checks in `reader.rs` and `loader.rs`. Stay current with GGUF specification as Ollama evolves.
+2. **✅ Modular Quantization Design**: Dequantization kernels isolated into 5 submodules (`q`, `k_quant`, `ternary`, `mxfp`, `iq`) with `pub use *` re-exports — adding a new format requires only a new file + one match arm in `tensor.rs`
+3. **✅ Configuration-Driven Model Loading**: `ModelConfig` (threads, batch, context, CUDA, cache strategy, parallel threshold, FFN offload), `RoPEConfig` (dynamic scaling), and `SamplingConfig` (temperature, top-k/p) — all CLI-configurable and runtime-selectable via `InferenceContext`
+4. **✅ Benchmark-Driven Development**: Criterion benchmarks across `gguf` (header parsing), `llama` (model loading), and `ggml-cpu` (matmul) — configured at workspace level with HTML reports
+5. **✅ Community Contributions**: Modular crate architecture (`gguf`/`ggml`/`ggml-cpu`/`ggml-cuda`/`llama`) provides natural boundaries; CONTRIBUTING.md, ARCHITECTURE.md, and CODE_STYLE.md document conventions for external contributions
 
 ## Go-to-Market Recommendations
 
