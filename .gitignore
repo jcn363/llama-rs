@@ -1,8 +1,33 @@
+# Rust build artifacts
 /target/
-Cargo.lock
-test-models/
+
+# Model files (large binary files, not source)
+/models/
+/test-models/
+
+# Runtime data
 server.log
-.uncensored/
-checkpoints/
-models/
-rust_uncensored/
+
+# CodeGraph MCP database
+.codegraph/
+
+# Editor / OS junk
+.DS_Store
+*~
+*.swp
+*.swo
+
+# Uncensored agent runtime state (workspace member source is tracked)
+.uncensored/state.json
+.uncensored/history.jsonl
+.uncensored/sessions/
+.uncensored/daily/
+
+.agents/
+.cargo/
+.cursor/
+.git/
+.github/
+.specs/
+.vscode/
+*.lock

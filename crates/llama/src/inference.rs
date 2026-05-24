@@ -116,6 +116,10 @@ pub fn sample_argmax(logits: &[f32]) -> usize {
 /// - Parallel execution across rows using Rayon
 /// - SIMD-friendly 4-wide unrolling in dot product
 /// - Cache-friendly sequential row access
+///
+/// Note: The [`Backend`](ggml::backend::Backend) trait provides a pluggable
+/// equivalent; this function is kept for backward compatibility.
+#[allow(dead_code)]
 pub fn mat_vec(
     mat: &[f32],
     rows: usize,
@@ -179,6 +183,10 @@ pub fn dot_product(a: &[f32], b: &[f32]) -> f32 {
 
 /// Element-wise multiplication of two vectors.
 /// Parallelized for vectors > parallel_min_rows elements.
+///
+/// Note: The [`Backend`](ggml::backend::Backend) trait provides a pluggable
+/// equivalent; this function is kept for backward compatibility.
+#[allow(dead_code)]
 pub fn mul_vec(a: &[f32], b: &[f32], parallel_min_rows: usize) -> Vec<f32> {
     use rayon::prelude::*;
     assert_eq!(a.len(), b.len());
@@ -198,6 +206,10 @@ pub fn mul_vec(a: &[f32], b: &[f32], parallel_min_rows: usize) -> Vec<f32> {
 
 /// Add two vectors element-wise.
 /// Parallelized for vectors > parallel_min_rows elements.
+///
+/// Note: The [`Backend`](ggml::backend::Backend) trait provides a pluggable
+/// equivalent; this function is kept for backward compatibility.
+#[allow(dead_code)]
 pub fn add_vec(a: &[f32], b: &[f32], parallel_min_rows: usize) -> Vec<f32> {
     use rayon::prelude::*;
     assert_eq!(a.len(), b.len());

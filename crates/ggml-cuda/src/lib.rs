@@ -468,6 +468,72 @@ impl DeviceTensor {
     }
 }
 
+// ─── Backend trait implementation ────────────────────────────────────────────
+
+use ggml::backend::{Backend, BackendInfo};
+
+impl Backend for CudaBackend {
+    fn info(&self) -> BackendInfo {
+        BackendInfo {
+            name: "CUDA",
+            is_available: self.available,
+            total_memory: self.total_vram,
+            free_memory: self.free_vram(),
+            parallelism: self.cuda_cores,
+        }
+    }
+
+    /// Matrix-vector product using GPU-accelerated matmul.
+    ///
+    /// Copies weight and input to the device, performs `C = weight @ input^T`
+    /// via cuBLAS, and copies the result back. Falls back to CPU if CUDA is
+    /// not available or the operation fails.
+    fn mat_vec(&self, weight: &[f32], rows: usize, cols: usize, input: &[f32]) -> Vec<f32> {
+        if !self.available {
+            return ggml::backend::default_mat_vec(weight, rows, cols, input);
+        }
+
+        #[cfg(feature = "cuda")]
+        {
+            // Create tensors wrapping the host data for device copy.
+            let weight_tensor = ggml::Tensor::from_f32(&[rows, cols], weight);
+            // Reshape input as (1, cols) for matmul — result will be (rows, 1).
+            let input_tensor = ggml::Tensor::from_f32(&[1, cols], input);
+
+            match self
+                .copy_to_device(&weight_tensor)
+                .and_then(|w_dev| {
+                    let i_dev = self.copy_to_device(&input_tensor)?;
+                    Ok((w_dev, i_dev))
+                })
+                .and_then(|(w_dev, i_dev)| self.matmul(&w_dev, &i_dev))
+                .and_then(|result_dev| result_dev.to_host())
+            {
+                Ok(result) => result,
+                Err(e) => {
+                    tracing::warn!("CUDA mat_vec failed, falling back to CPU: {e}");
+                    ggml::backend::default_mat_vec(weight, rows, cols, input)
+                }
+            }
+        }
+
+        #[cfg(not(feature = "cuda"))]
+        {
+            ggml::backend::default_mat_vec(weight, rows, cols, input)
+        }
+    }
+
+    /// Element-wise addition (CPU fallback — cheap operation).
+    fn add(&self, a: &[f32], b: &[f32]) -> Vec<f32> {
+        ggml::backend::default_add(a, b)
+    }
+
+    /// Element-wise multiplication (CPU fallback — cheap operation).
+    fn mul(&self, a: &[f32], b: &[f32]) -> Vec<f32> {
+        ggml::backend::default_mul(a, b)
+    }
+}
+
 // ─── Tests ──────────────────────────────────────────────────────────────────
 
 #[cfg(test)]

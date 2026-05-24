@@ -23,6 +23,7 @@ use std::sync::{Arc, RwLock};
 // ─── Module declarations ─────────────────────────────────────────────────────
 
 mod attention;
+pub mod backend;
 mod context;
 mod inference;
 mod kv_cache;
@@ -33,7 +34,9 @@ pub mod tokenizer;
 // ─── Re-exports ──────────────────────────────────────────────────────────────
 
 pub use attention::{apply_rope_with_config, multi_head_attention_with_cache};
+pub use backend::{BackendType, create_backend};
 pub use context::{InferenceContext, ModelConfig};
+pub use ggml::backend::{Backend, BackendInfo};
 pub use inference::dot_product;
 pub use kv_cache::{CacheStrategy, KvCache, KvCacheManager};
 pub use profile::ProfileResult;

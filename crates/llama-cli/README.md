@@ -6,6 +6,7 @@ Command‑line interface for running Llama models.
 
 - `llama_cli::main` – entry point for the binary.
 - Uses the `llama` crate for model loading and inference.
+- Accepts `--backend auto|cpu|cuda` CLI flag to select hardware backend.
 
 ## Build Instructions
 

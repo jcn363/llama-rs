@@ -9,23 +9,24 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use crate::attention::multi_head_attention_with_cache;
+use crate::backend::BackendType;
 use crate::inference::{
-    SamplingConfig, add_vec, embed_token, gelu, layer_norm, mat_vec, mul_vec, relu_squared,
-    rms_norm, sample_logits, silu,
+    SamplingConfig, embed_token, gelu, layer_norm, relu_squared, rms_norm, sample_logits, silu,
 };
 use crate::kv_cache::CacheStrategy;
 use crate::profile::ProfileResult;
 use crate::{Model, NormType};
-#[cfg(feature = "cuda")]
-use ggml_cuda;
+use ggml::backend::Backend;
 
 /// Configuration for inference.
 #[derive(Debug, Clone)]
 pub struct ModelConfig {
     /// Number of inference threads.
     pub n_threads: usize,
-    /// Whether to use CUDA for matmul.
+    /// Whether to use CUDA for matmul (legacy flag, see `backend_type`).
     pub use_cuda: bool,
+    /// Backend type selection (Auto, Cpu, Cuda). Overrides `use_cuda`.
+    pub backend_type: BackendType,
     /// Context window size.
     pub n_ctx: usize,
     /// Batch size for prompt processing (independently configurable from n_ctx).
@@ -45,6 +46,7 @@ impl Default for ModelConfig {
         Self {
             n_threads: 4,
             use_cuda: false,
+            backend_type: BackendType::Auto,
             n_ctx: 2048,
             n_batch: 512,
             parallel_min_rows: 128,
@@ -67,13 +69,8 @@ pub struct InferenceContext {
     pub sampling: SamplingConfig,
     /// Thread‑local bump allocator for temporary buffers (reused across forward passes).
     pub bump: bumpalo::Bump,
-    /// Optional CUDA backend for GPU-accelerated matmul.
-    #[cfg(feature = "cuda")]
-    pub cuda_backend: Option<ggml_cuda::CudaBackend>,
-    #[cfg(not(feature = "cuda"))]
-    #[allow(dead_code)]
-    /// Optional CUDA backend for GPU-accelerated matmul (disabled).
-    pub cuda_backend: Option<()>,
+    /// Hardware backend for tensor operations (CPU, CUDA, etc.).
+    pub backend: Arc<dyn Backend>,
     /// Tokens currently in the KV cache (for prefix caching).
     pub cached_tokens: Vec<usize>,
 }
@@ -90,28 +87,14 @@ impl InferenceContext {
             model.unk_token_id,
             model.add_bos_token,
         );
-        #[cfg(feature = "cuda")]
-        let cuda_backend = if config.use_cuda {
-            match ggml_cuda::CudaBackend::new() {
-                Ok(b) => Some(b),
-                Err(e) => {
-                    tracing::warn!("CUDA requested but unavailable: {e}");
-                    None
-                }
-            }
-        } else {
-            None
-        };
+        let backend = crate::backend::create_backend(&config);
 
         Self {
             model,
             config,
             tokenizer,
             sampling: SamplingConfig::default(),
-            #[cfg(feature = "cuda")]
-            cuda_backend,
-            #[cfg(not(feature = "cuda"))]
-            cuda_backend: None,
+            backend,
             bump: Bump::new(),
             cached_tokens: Vec::new(),
         }
@@ -299,27 +282,15 @@ impl InferenceContext {
                 self.model.get_tensor(&v_proj_name),
             ) {
                 let attn_start = Instant::now();
-                let mut q = mat_vec(
-                    &q_weight,
-                    n_head * head_dim,
-                    n_embd,
-                    &attn_input,
-                    self.config.parallel_min_rows,
-                );
-                let mut k = mat_vec(
-                    &k_weight,
-                    n_head_kv * head_dim,
-                    n_embd,
-                    &attn_input,
-                    self.config.parallel_min_rows,
-                );
-                let v = mat_vec(
-                    &v_weight,
-                    n_head_kv * head_dim,
-                    n_embd,
-                    &attn_input,
-                    self.config.parallel_min_rows,
-                );
+                let mut q = self
+                    .backend
+                    .mat_vec(&q_weight, n_head * head_dim, n_embd, &attn_input);
+                let mut k =
+                    self.backend
+                        .mat_vec(&k_weight, n_head_kv * head_dim, n_embd, &attn_input);
+                let v = self
+                    .backend
+                    .mat_vec(&v_weight, n_head_kv * head_dim, n_embd, &attn_input);
 
                 // ─── QK-norm (Gemma2): per-head RMSNorm after projection, before RoPE ───
                 if self.model.has_qk_norm {
@@ -366,12 +337,11 @@ impl InferenceContext {
 
                 let attn_out_name = format!("blk.{}.attn_output.weight", layer_idx);
                 if let Ok(attn_out_weight) = self.model.get_tensor(&attn_out_name) {
-                    let attn_proj = mat_vec(
+                    let attn_proj = self.backend.mat_vec(
                         &attn_out_weight,
                         n_embd,
                         n_head * head_dim,
                         &attn_output,
-                        self.config.parallel_min_rows,
                     );
                     attn_output_vec = Some(attn_proj);
                 } else {
@@ -403,33 +373,21 @@ impl InferenceContext {
                 self.model.get_tensor(&up_name),
                 self.model.get_tensor(&down_name),
             ) {
-                let gate_proj = mat_vec(
-                    &gate,
-                    self.model.n_ff,
-                    n_embd,
-                    &ffn_input,
-                    self.config.parallel_min_rows,
-                );
-                let up_proj = mat_vec(
-                    &up,
-                    self.model.n_ff,
-                    n_embd,
-                    &ffn_input,
-                    self.config.parallel_min_rows,
-                );
+                let gate_proj = self
+                    .backend
+                    .mat_vec(&gate, self.model.n_ff, n_embd, &ffn_input);
+                let up_proj = self
+                    .backend
+                    .mat_vec(&up, self.model.n_ff, n_embd, &ffn_input);
                 let activated_gate = match arch {
                     "gemma" | "gemma2" => gelu(&gate_proj),
                     "phi3" | "phi3small" | "phi3.5" => relu_squared(&gate_proj),
                     _ => silu(&gate_proj),
                 };
-                let ffn_hidden = mul_vec(&activated_gate, &up_proj, self.config.parallel_min_rows);
-                let ffn_output = mat_vec(
-                    &down,
-                    n_embd,
-                    self.model.n_ff,
-                    &ffn_hidden,
-                    self.config.parallel_min_rows,
-                );
+                let ffn_hidden = self.backend.mul(&activated_gate, &up_proj);
+                let ffn_output = self
+                    .backend
+                    .mat_vec(&down, n_embd, self.model.n_ff, &ffn_hidden);
                 ffn_output_vec = Some(ffn_output);
             }
             let ffn_ms = ffn_start.elapsed().as_secs_f64() * 1000.0;
@@ -439,17 +397,17 @@ impl InferenceContext {
                 // StableLM: parallel residual -- x = x + attn_out + ffn_out
                 "stablelm" => {
                     if let Some(attn_out) = &attn_output_vec {
-                        x = add_vec(&residual, attn_out, self.config.parallel_min_rows);
+                        x = self.backend.add(&residual, attn_out);
                     }
                     if let Some(ffn_out) = &ffn_output_vec {
-                        x = add_vec(&x, ffn_out, self.config.parallel_min_rows);
+                        x = self.backend.add(&x, ffn_out);
                     }
                 }
                 // Standard sequential residual (Llama, Mistral, Qwen2, etc.)
                 _ => {
                     // Attention residual
                     if let Some(attn_out) = attn_output_vec {
-                        x = add_vec(&residual, &attn_out, self.config.parallel_min_rows);
+                        x = self.backend.add(&residual, &attn_out);
                     } else {
                         x = residual.clone();
                     }
@@ -468,7 +426,7 @@ impl InferenceContext {
                     // FFN residual
                     let ffn_residual = x.clone();
                     if let Some(ffn_out) = ffn_output_vec {
-                        x = add_vec(&ffn_residual, &ffn_out, self.config.parallel_min_rows);
+                        x = self.backend.add(&ffn_residual, &ffn_out);
                     } else {
                         x = ffn_residual;
                     }
@@ -485,21 +443,11 @@ impl InferenceContext {
         }
 
         let logits = if let Ok(output_weight) = self.model.get_tensor("output.weight") {
-            mat_vec(
-                &output_weight,
-                self.model.vocab_size,
-                n_embd,
-                &x,
-                self.config.parallel_min_rows,
-            )
+            self.backend
+                .mat_vec(&output_weight, self.model.vocab_size, n_embd, &x)
         } else {
-            mat_vec(
-                &token_embd,
-                self.model.vocab_size,
-                n_embd,
-                &x,
-                self.config.parallel_min_rows,
-            )
+            self.backend
+                .mat_vec(&token_embd, self.model.vocab_size, n_embd, &x)
         };
         profile.output_ms = output_start.elapsed().as_secs_f64() * 1000.0;
         profile.total_ms = total_start.elapsed().as_secs_f64() * 1000.0;

@@ -250,3 +250,53 @@ impl CpuBackend {
         self.n_threads
     }
 }
+
+// ─── Backend trait implementation ─────────────────────────────────────────────
+
+use ggml::backend::{Backend, BackendInfo};
+
+impl Backend for CpuBackend {
+    fn info(&self) -> BackendInfo {
+        BackendInfo {
+            name: "CPU",
+            is_available: true,
+            total_memory: 0,
+            free_memory: 0,
+            parallelism: self.n_threads,
+        }
+    }
+
+    /// Matrix-vector product: `y = weight @ input`
+    ///
+    /// Uses SIMD-accelerated dot product per row, with parallel dispatch
+    /// across threads when the matrix is large enough.
+    fn mat_vec(&self, weight: &[f32], rows: usize, cols: usize, input: &[f32]) -> Vec<f32> {
+        use rayon::prelude::*;
+        if rows < self.parallel_min_rows || self.n_threads <= 1 {
+            (0..rows)
+                .map(|r| {
+                    let start = r * cols;
+                    crate::simd::dot_f32(&weight[start..start + cols], input)
+                })
+                .collect()
+        } else {
+            (0..rows)
+                .into_par_iter()
+                .map(|r| {
+                    let start = r * cols;
+                    crate::simd::dot_f32(&weight[start..start + cols], input)
+                })
+                .collect()
+        }
+    }
+
+    /// Element-wise addition.
+    fn add(&self, a: &[f32], b: &[f32]) -> Vec<f32> {
+        a.iter().zip(b.iter()).map(|(x, y)| x + y).collect()
+    }
+
+    /// Element-wise multiplication.
+    fn mul(&self, a: &[f32], b: &[f32]) -> Vec<f32> {
+        a.iter().zip(b.iter()).map(|(x, y)| x * y).collect()
+    }
+}

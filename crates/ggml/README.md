@@ -4,8 +4,9 @@ Low‑level linear algebra library powering the Llama inference engine.
 
 ## Key Public APIs
 
-- `ggml::tensor::Tensor` – core tensor type.
-- `ggml::ops::*` – matrix multiplication, softmax, etc.
+- `ggml::tensor::Tensor` – core multi-dimensional array type.
+- `ggml::backend::Backend` – object-safe trait for hardware-accelerated tensor math.
+- `ggml::backend::BackendInfo` – metadata struct (name, availability, memory, parallelism).
 
 ## Build Instructions
 

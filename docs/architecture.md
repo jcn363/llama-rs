@@ -38,11 +38,25 @@ graph LR
     GGUF -->|uses| COMMON
 ```
 
-## Deployment
+## Hardware Backend Plugin System
 
-* Build the binaries with `cargo build --release` (CUDA is enabled by default, requires CUDA toolkit).
-* Deploy the `llama‑server` binary to a host with the desired model file (`model.gguf`).
-* Optionally expose the server behind a reverse proxy (e.g., Nginx) for TLS termination.
+The project uses a trait-based plugin architecture for hardware acceleration:
+
+| Component | Role |
+|-----------|------|
+| `ggml::backend::Backend` (trait) | Object-safe trait defining `mat_vec`, `add`, `mul` with CPU defaults |
+| `ggml_cpu::CpuBackend` | CPU implementation — SIMD-accelerated via AVX/SSE4.2 + `std::thread::scope` |
+| `ggml_cuda::CudaBackend` | CUDA implementation — cuBLAS `gemm` with transparent CPU fallback |
+| `llama::create_backend` | Factory: `(&ModelConfig) -> Arc<dyn Backend>`, priority chain CUDA → CPU |
+
+**Selection priority:**
+1. CUDA (if `--backend cuda` or `auto` + CUDA available)
+2. CPU (always available fallback)
+
+**CLI:**
+```bash
+llama-cli -m model.gguf --backend cuda -p "Hello" -n 128
+```
 
 ## Scaling
 

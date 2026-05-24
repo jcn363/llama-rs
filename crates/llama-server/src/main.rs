@@ -15,7 +15,7 @@ use axum::{
 use clap::Parser;
 use futures::StreamExt;
 use futures::stream::Stream;
-use llama::{InferenceContext, Model, ModelConfig};
+use llama::{BackendType, InferenceContext, Model, ModelConfig};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tracing_subscriber::EnvFilter;
@@ -48,9 +48,13 @@ struct Args {
     #[arg(long, default_value_t = 512)]
     batch_size: usize,
 
-    /// Use CUDA acceleration if available.
+    /// Use CUDA acceleration if available (legacy, prefer `--backend`).
     #[arg(long, default_value_t = false)]
     use_cuda: bool,
+
+    /// Backend to use: auto, cpu, cuda (default: auto).
+    #[arg(long, default_value_t = String::from("auto"))]
+    backend: String,
 }
 
 /// Shared server state.
@@ -107,6 +111,12 @@ async fn main() -> anyhow::Result<()> {
     let model = Model::load_from_gguf(&args.model, false)?;
     tracing::info!("{}", model.summary());
 
+    let backend_type = match args.backend.as_str() {
+        "cpu" => BackendType::Cpu,
+        "cuda" => BackendType::Cuda,
+        _ => BackendType::Auto,
+    };
+
     let config = ModelConfig {
         n_threads: if args.threads == 0 {
             std::thread::available_parallelism().map_or(1, |n| n.get())
@@ -114,6 +124,7 @@ async fn main() -> anyhow::Result<()> {
             args.threads
         },
         use_cuda: args.use_cuda,
+        backend_type,
         n_ctx: args.ctx_size,
         n_batch: args.batch_size,
         ..Default::default()

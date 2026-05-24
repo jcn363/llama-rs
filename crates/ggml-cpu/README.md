@@ -4,8 +4,9 @@ CPU‑only backend for the GGML library, exposing optimized kernels.
 
 ## Key Public APIs
 
-- `ggml_cpu::cpu_backend::CpuBackend` – entry point for CPU execution.
-- `ggml_cpu::ops::*` – CPU‑specific implementations.
+- `ggml_cpu::CpuBackend` – implements `ggml::backend::Backend` trait for CPU execution.
+- `ggml_cpu::dot_f32` – SIMD dot product (AVX → SSE4.2 → scalar).
+- `ggml_cpu::matmul_f32` – block-tiled matrix multiplication (16×16, parallel via `std::thread::scope`).
 
 ## Build Instructions
 

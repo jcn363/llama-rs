@@ -6,6 +6,7 @@ Provides an HTTP server exposing Llama inference via a REST API.
 
 - `llama_server::run` – starts the server.
 - API endpoints are defined in `src/main.rs`.
+- Accepts `--backend auto|cpu|cuda` CLI flag to select hardware backend.
 
 ## Build Instructions
 

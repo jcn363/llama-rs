@@ -5,7 +5,7 @@
 #![deny(missing_docs)]
 
 use clap::Parser;
-use llama::{InferenceContext, Model, ModelConfig};
+use llama::{BackendType, InferenceContext, Model, ModelConfig};
 use std::sync::Arc;
 
 /// Command-line arguments for llama-cli.
@@ -36,9 +36,13 @@ struct Args {
     #[arg(short = 'n', long, default_value_t = 128)]
     n_predict: usize,
 
-    /// Use CUDA acceleration if available.
+    /// Use CUDA acceleration if available (legacy, prefer `--backend`).
     #[arg(long, default_value_t = false)]
     use_cuda: bool,
+
+    /// Backend to use: auto, cpu, cuda (default: auto).
+    #[arg(long, default_value_t = String::from("auto"))]
+    backend: String,
 
     /// Offload FFN weights to RAM (load on demand) to save VRAM.
     #[arg(long, default_value_t = false)]
@@ -74,6 +78,12 @@ fn main() -> anyhow::Result<()> {
     eprintln!("Model loaded in {:.2}s", load_time.as_secs_f32());
     eprintln!("{}", model.summary());
 
+    let backend_type = match args.backend.as_str() {
+        "cpu" => BackendType::Cpu,
+        "cuda" => BackendType::Cuda,
+        _ => BackendType::Auto,
+    };
+
     let config = ModelConfig {
         n_threads: if args.threads == 0 {
             std::thread::available_parallelism().map_or(1, |n| n.get())
@@ -81,6 +91,7 @@ fn main() -> anyhow::Result<()> {
             args.threads
         },
         use_cuda: args.use_cuda,
+        backend_type,
         n_ctx: args.ctx_size,
         n_batch: args.batch_size,
         offload_ffn: args.offload_ffn,
