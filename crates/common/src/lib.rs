@@ -9,10 +9,10 @@
 
 /// Command-line argument parsing.
 pub mod args {
-    use clap::Parser;
+    use clap::Args;
 
     /// Common arguments for llama inference tools.
-    #[derive(Parser, Debug)]
+    #[derive(Args, Debug, Clone)]
     pub struct CommonArgs {
         /// Path to the model file (GGUF format).
         #[arg(short, long)]

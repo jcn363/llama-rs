@@ -78,7 +78,7 @@ pub fn sample_argmax(logits: &[f32]) -> usize {
 ///
 /// Note: The [`Backend`](ggml::backend::Backend) trait provides a pluggable
 /// equivalent; this function is kept for backward compatibility.
-#[allow(dead_code)]
+#[expect(dead_code)]
 pub fn mat_vec(
     mat: &[f32],
     rows: usize,
@@ -145,7 +145,7 @@ pub fn dot_product(a: &[f32], b: &[f32]) -> f32 {
 ///
 /// Note: The [`Backend`](ggml::backend::Backend) trait provides a pluggable
 /// equivalent; this function is kept for backward compatibility.
-#[allow(dead_code)]
+#[expect(dead_code)]
 pub fn mul_vec(a: &[f32], b: &[f32], parallel_min_rows: usize) -> Vec<f32> {
     use rayon::prelude::*;
     assert_eq!(a.len(), b.len());
@@ -168,7 +168,7 @@ pub fn mul_vec(a: &[f32], b: &[f32], parallel_min_rows: usize) -> Vec<f32> {
 ///
 /// Note: The [`Backend`](ggml::backend::Backend) trait provides a pluggable
 /// equivalent; this function is kept for backward compatibility.
-#[allow(dead_code)]
+#[expect(dead_code)]
 pub fn add_vec(a: &[f32], b: &[f32], parallel_min_rows: usize) -> Vec<f32> {
     use rayon::prelude::*;
     assert_eq!(a.len(), b.len());

@@ -346,18 +346,16 @@ mod tests {
         assert_eq!(reader.metadata_count(), 5);
 
         let arch = reader.get_kv("general.architecture").unwrap();
-        if let GgufValue::Str(s) = arch {
-            assert_eq!(s, "llama");
-        } else {
-            panic!("expected string");
-        }
+        assert!(
+            matches!(arch, GgufValue::Str(s) if s == "llama"),
+            "expected string 'llama', got {arch:?}"
+        );
 
         let embd = reader.get_kv("llama.embedding_length").unwrap();
-        if let GgufValue::U32(v) = embd {
-            assert_eq!(*v, 256);
-        } else {
-            panic!("expected u32");
-        }
+        assert!(
+            matches!(embd, GgufValue::U32(v) if *v == 256),
+            "expected U32(256), got {embd:?}"
+        );
 
         let t1 = reader.find_tensor("token_embd.weight").unwrap();
         assert_eq!(t1.shape, vec![256, 4096]);

@@ -1,6 +1,10 @@
 # llama.rs — LLaMa inference in Rust
 
 ![llama](media/llama1-banner.png)
+[![CI](https://github.com/jcn363/llama-rs/actions/workflows/ci.yml/badge.svg)](https://github.com/jcn363/llama-rs/actions/workflows/ci.yml)
+[![CI macOS](https://github.com/jcn363/llama-rs/actions/workflows/ci-macos.yml/badge.svg)](https://github.com/jcn363/llama-rs/actions/workflows/ci-macos.yml)
+[![CI Windows](https://github.com/jcn363/llama-rs/actions/workflows/ci-windows.yml/badge.svg)](https://github.com/jcn363/llama-rs/actions/workflows/ci-windows.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 A Rust port of [llama.cpp](https://github.com/ggml-org/llama.cpp), optimized for **AMD Opteron 3280** (bdver1) + **NVIDIA GTX 1050** (2GB VRAM).
 
@@ -17,13 +21,15 @@ llama-rs/
 │   ├── ggml-cuda/     # CUDA backend — cuBLAS matmul, VRAM tracking (requires CUDA toolkit)
 │   ├── llama/         # Inference engine — transformer forward pass, attention, KV cache
 │   ├── common/        # Shared utilities — argument parsing, sampling config
+│   ├── config/        # Unified configuration — Config struct, env-based loading
+│   ├── error/         # Unified error handling — Error enum, Result<T> alias
 │   ├── llama-cli/     # CLI binary for interactive text generation
 │   └── llama-server/  # HTTP server with /completion and /health endpoints
 ├── .cargo/            # cargo config (target-cpu=bdver1)
 ├── .github/workflows/ # CI: format → clippy → test → deny → doc
 ├── test-models/       # Test GGUF files (downloaded separately, gitignored)
 ├── media/             # Visual identity system and design assets
-├── Cargo.toml         # Workspace root (9 members)
+├── Cargo.toml         # Workspace root (10 members)
 ├── rustfmt.toml       # Formatting: max_width=100, 4-space indent
 └── deny.toml          # License policy (MIT, Apache-2.0, Unlicense)
 ```
@@ -87,6 +93,44 @@ cargo test --workspace
 cargo bench -p ggml-cpu --bench cpu_bench
 cargo bench -p llama --bench kv_cache
 cargo bench -p llama --bench attention
+```
+
+## New Crates (Configuration & Error Handling)
+
+The `config` and `error` crates provide unified configuration and error handling across the workspace:
+
+```rust
+// Use unified configuration from env vars
+use config::Config;
+
+let cfg = Config::from_env();
+dbg!(cfg.model_path);    // LLAMA_MODEL_PATH env var
+dbg!(cfg.num_threads);   // LLAMA_NUM_THREADS env var
+
+// Use unified error type
+use error::{Error, Result};
+
+fn load_model(path: &str) -> Result<()> {
+    if path.is_empty() {
+        return Err(Error::Config("empty path".into()));
+    }
+    // std::io::Error auto-converts via From
+    let _data = std::fs::read(path)?;
+    Ok(())
+}
+```
+
+The `common` crate provides shared argument definitions and sampling configuration:
+
+```rust
+use common::args::CommonArgs;
+use clap::Parser;
+
+#[derive(Parser)]
+struct MyArgs {
+    #[clap(flatten)]
+    common: CommonArgs,
+}
 ```
 
 ## Features
@@ -230,7 +274,7 @@ if !model_path.exists() {
 | 12 | ✅ | KV cache strategies (prefix caching, push_batch, O(1) reset) |
 | 13 | ✅ | Parallel matmul threshold, configuration-driven design |
 
-**52 tests pass** across all crates (48 unit/integration + 4 doctests).
+**95+ tests pass** across all crates (unit, integration, and doctests).
 
 ## License
 

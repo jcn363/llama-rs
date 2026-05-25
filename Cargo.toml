@@ -1,13 +1,14 @@
 [workspace]
 resolver = "2"
 members = [
-    ".uncensored/rust_persistence",
     "crates/gguf",
     "crates/ggml",
     "crates/ggml-cpu",
     "crates/ggml-cuda",
     "crates/llama",
     "crates/common",
+    "crates/config",
+    "crates/error",
     "crates/llama-cli",
     "crates/llama-server",
 ]
@@ -16,44 +17,35 @@ members = [
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.85"
-license = "MIT"
-repository = "https://github.com/jcn363/llama.cpp"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/jcn363/llama-rs"
 
 [workspace.dependencies]
-# Internal crates
-gguf = { path = "crates/gguf" }
+# Internal workspace crates
 ggml = { path = "crates/ggml" }
 ggml-cpu = { path = "crates/ggml-cpu" }
 ggml-cuda = { path = "crates/ggml-cuda" }
+gguf = { path = "crates/gguf" }
 llama = { path = "crates/llama" }
 common = { path = "crates/common" }
+config = { path = "crates/config" }
+error = { path = "crates/error" }
 
-# External crates
-byteorder = "1.5"
-memmap2 = "0.9"
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-half = { version = "2.4", features = ["serde"] }
-bytemuck = { version = "1.21", features = ["derive"] }
-thiserror = "2.0"
-anyhow = "1.0"
-ndarray = "0.16"
-rayon = "1.10"
+# External dependencies
+thiserror = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
 tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-clap = { version = "4.5", features = ["derive"] }
-tokio = { version = "1.43", features = ["full"] }
+clap = { version = "4", features = ["derive"] }
+rayon = "1.5"
+bytemuck = "1"
+half = { version = "2.3", features = ["bytemuck"] }
+bumpalo = "3"
+cudarc = { version = "0.19", default-features = true }
+byteorder = "1"
+memmap2 = "0.9"
 criterion = { version = "0.5", features = ["html_reports"] }
-bumpalo = { version = "3.20.3", features = ["boxed"] }
-# CUDA (optional, feature-gated per-crate)
-cudarc = "0.16"
-
-[workspace.lints.clippy]
-# Require pedantic lint group for all workspace crates
-pedantic = { level = "allow", priority = -1 }
-
-[profile.release]
-opt-level = 3
-lto = "thin"
-codegen-units = 1
-strip = "debuginfo"
+anyhow = "1"
+tokio = { version = "1", features = ["full"] }
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+proptest = "1"

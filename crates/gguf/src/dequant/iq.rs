@@ -442,7 +442,7 @@ pub fn dequantize_iq4_nl(raw: &[u8]) -> Result<Vec<f32>, GgufError> {
 
 /// ``IQ4_XS``: 4-bit, extra small, 256 elems/block, 136 bytes/block.
 /// Layout: [d: f16][scales_h: u16][scales_l: u8×4][qs: u8×128]
-/// scales_h is a single uint16 (scale bits), scales_l[4] gives per 64-elem group scale lows.
+/// scales_h is a single uint16 (scale bits), `scales_l[4]` gives per 64-elem group scale lows.
 /// qs: 2 × 4-bit values per byte.
 pub fn dequantize_iq4_xs(raw: &[u8]) -> Result<Vec<f32>, GgufError> {
     const QK_K: usize = 256;

@@ -2,17 +2,17 @@
 // Supports MHA, GQA (Grouped Query Attention), and MQA (Multi-Query Attention).
 
 /// KV cache strategy: controls when and how the cache is trimmed.
-/// Strategy for managing the KV cache memory.
-#[allow(missing_docs)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CacheStrategy {
     /// Full cache — never trim (default).
     Full,
     /// Prefix caching — trim during generation for long contexts.
     Prefix,
-    /// Sliding‑window caching — keep only the most recent `size` tokens.
-    /// `size` – maximum number of tokens to retain.
-    SlidingWindow { size: usize },
+    /// Sliding‑window caching — keep only the most recent tokens.
+    SlidingWindow {
+        /// Maximum number of tokens to retain.
+        size: usize,
+    },
     /// Prefix‑only caching — keep only the initial prefix up to a fixed length.
     PrefixOnly,
 }

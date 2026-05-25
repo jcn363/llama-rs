@@ -3,7 +3,7 @@
 //! Block layout: [f16 scale (2 bytes)] + [f16 min (2 bytes)] + [16 bytes of 4-bit nibbles] = 20 bytes for 32 f32 values.
 //! Each nibble is an unsigned 4-bit value (0..15).
 //! Dequant: value * d + m  (where d = scale, m = min).
-//! Dot product: d · Σ(nibble[i] · input[i]) + m · Σ(input[i])
+//! Dot product: `d * Σ(nibble[i] * input[i]) + m * Σ(input[i])`
 
 use crate::quant_dot::QuantDot;
 use half::f16;
@@ -31,9 +31,9 @@ impl QuantDot for Q4_1Dot {
         for i in 0..16 {
             let byte = quantized[4 + i];
             // Nibble values are 0..15, always safe for i8
-            #[allow(clippy::cast_possible_wrap)]
+            #[expect(clippy::cast_possible_wrap)]
             let lo = (byte & 0x0F) as i8;
-            #[allow(clippy::cast_possible_wrap)]
+            #[expect(clippy::cast_possible_wrap)]
             let hi = (byte >> 4) as i8;
             sum_nibble_input += f32::from(lo) * input[i * 2];
             sum_nibble_input += f32::from(hi) * input[i * 2 + 1];

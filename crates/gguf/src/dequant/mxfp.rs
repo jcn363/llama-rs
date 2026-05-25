@@ -25,8 +25,8 @@ fn e8m0_to_f32(e: u8) -> f32 {
 /// Convert a UE4M3 byte to an f32 multiplier.
 ///
 /// UE4M3 is an unsigned 7-bit OCP MX format:
-/// - Bit [6:3]: exponent (4 bits, bias = 7)
-/// - Bit [2:0]: mantissa (3 bits, implicit leading 1)
+/// - Bits `[6:3]`: exponent (4 bits, bias = 7)
+/// - Bits `[2:0]`: mantissa (3 bits, implicit leading 1)
 /// - High bit (bit 7) is padding/unused.
 ///
 /// For exponent == 0 and mantissa != 0: subnormal `2^(1-7) * mantissa/8`.

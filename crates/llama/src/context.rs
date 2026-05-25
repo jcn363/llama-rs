@@ -10,9 +10,7 @@ use std::time::Instant;
 
 use crate::attention::multi_head_attention_with_cache;
 use crate::backend::BackendType;
-use crate::inference::{
-    SamplingConfig, embed_token, layer_norm, relu_squared, sample_logits,
-};
+use crate::inference::{SamplingConfig, embed_token, layer_norm, relu_squared, sample_logits};
 use crate::kv_cache::CacheStrategy;
 use crate::profile::ProfileResult;
 use crate::{Model, NormType};
@@ -220,12 +218,12 @@ impl InferenceContext {
             .strings
             .iter()
             .position(|s| s == name)
-            .ok_or_else(|| {
-                gguf::GgufError::DecodeError(format!("Tensor not found: {name}"))
-            })?;
-        let td = self.model.tensors.get(&id).ok_or_else(|| {
-            gguf::GgufError::DecodeError(format!("Tensor not found: {name}"))
-        })?;
+            .ok_or_else(|| gguf::GgufError::DecodeError(format!("Tensor not found: {name}")))?;
+        let td = self
+            .model
+            .tensors
+            .get(&id)
+            .ok_or_else(|| gguf::GgufError::DecodeError(format!("Tensor not found: {name}")))?;
         Ok(match quant_type_from_ggml(td.info.dtype) {
             Some(qt) => {
                 let (raw, _ty) = td.get_quantized_raw()?;
@@ -301,12 +299,11 @@ impl InferenceContext {
                 NormType::LayerNorm => {
                     // LayerNorm is not yet implemented in Backend trait, fallback to standalone
                     layer_norm(x, weight, None, eps)
-                },
+                }
             }
         };
 
         for layer_idx in 0..n_layers {
-            let layer_start = Instant::now();
             let residual = x.clone();
 
             // ─── Pre-attention norm ───
@@ -337,32 +334,32 @@ impl InferenceContext {
                 let mut q = q;
                 let mut k = k;
 
-                 // ─── QK-norm (Gemma2): per-head RMSNorm after projection, before RoPE ───
-                 if self.model.has_qk_norm {
-                     let qk_norm_eps = self.model.qk_norm_eps;
-                     if let Ok(q_norm_weight) = self
-                         .model
-                         .get_tensor(&format!("blk.{}.attn_q_norm.weight", layer_idx))
-                     {
-                         for h in 0..n_head {
-                             let start = h * head_dim;
-                             let slice = &mut q[start..start + head_dim];
-                             let normed = self.backend.rms_norm(slice, &q_norm_weight, qk_norm_eps);
-                             slice.copy_from_slice(&normed);
-                         }
-                     }
-                     if let Ok(k_norm_weight) = self
-                         .model
-                         .get_tensor(&format!("blk.{}.attn_k_norm.weight", layer_idx))
-                     {
-                         for h in 0..n_head_kv {
-                             let start = h * head_dim;
-                             let slice = &mut k[start..start + head_dim];
-                             let normed = self.backend.rms_norm(slice, &k_norm_weight, qk_norm_eps);
-                             slice.copy_from_slice(&normed);
-                         }
-                     }
-                 }
+                // ─── QK-norm (Gemma2): per-head RMSNorm after projection, before RoPE ───
+                if self.model.has_qk_norm {
+                    let qk_norm_eps = self.model.qk_norm_eps;
+                    if let Ok(q_norm_weight) = self
+                        .model
+                        .get_tensor(&format!("blk.{}.attn_q_norm.weight", layer_idx))
+                    {
+                        for h in 0..n_head {
+                            let start = h * head_dim;
+                            let slice = &mut q[start..start + head_dim];
+                            let normed = self.backend.rms_norm(slice, &q_norm_weight, qk_norm_eps);
+                            slice.copy_from_slice(&normed);
+                        }
+                    }
+                    if let Ok(k_norm_weight) = self
+                        .model
+                        .get_tensor(&format!("blk.{}.attn_k_norm.weight", layer_idx))
+                    {
+                        for h in 0..n_head_kv {
+                            let start = h * head_dim;
+                            let slice = &mut k[start..start + head_dim];
+                            let normed = self.backend.rms_norm(slice, &k_norm_weight, qk_norm_eps);
+                            slice.copy_from_slice(&normed);
+                        }
+                    }
+                }
 
                 let mut kv_cache = self.model.kv_cache.write().expect("lock poisoned");
                 let position_offset = kv_cache.get_layer_ref(layer_idx).cur_len;
@@ -381,12 +378,9 @@ impl InferenceContext {
                 );
 
                 let attn_out_name = format!("blk.{}.attn_output.weight", layer_idx);
-                if let Ok(attn_proj) = self.mat_vec_weight(
-                    &attn_out_name,
-                    n_embd,
-                    n_head * head_dim,
-                    &attn_output,
-                ) {
+                if let Ok(attn_proj) =
+                    self.mat_vec_weight(&attn_out_name, n_embd, n_head * head_dim, &attn_output)
+                {
                     attn_output_vec = Some(attn_proj);
                 } else {
                     attn_output_vec = Some(attn_output);
@@ -416,18 +410,17 @@ impl InferenceContext {
                 && self.model.get_tensor(&up_name).is_ok()
                 && self.model.get_tensor(&down_name).is_ok()
             {
-                let gate_proj = self
-                    .mat_vec_weight(&gate_name, self.model.n_ff, n_embd, &ffn_input)?;
-                let up_proj = self
-                    .mat_vec_weight(&up_name, self.model.n_ff, n_embd, &ffn_input)?;
+                let gate_proj =
+                    self.mat_vec_weight(&gate_name, self.model.n_ff, n_embd, &ffn_input)?;
+                let up_proj = self.mat_vec_weight(&up_name, self.model.n_ff, n_embd, &ffn_input)?;
                 let activated_gate = match arch {
                     "gemma" | "gemma2" => self.backend.gelu(&gate_proj),
                     "phi3" | "phi3small" | "phi3.5" => relu_squared(&gate_proj),
                     _ => self.backend.silu(&gate_proj),
                 };
                 let ffn_hidden = self.backend.mul(&activated_gate, &up_proj);
-                let ffn_output = self
-                    .mat_vec_weight(&down_name, n_embd, self.model.n_ff, &ffn_hidden)?;
+                let ffn_output =
+                    self.mat_vec_weight(&down_name, n_embd, self.model.n_ff, &ffn_hidden)?;
                 ffn_output_vec = Some(ffn_output);
             }
             let ffn_ms = ffn_start.elapsed().as_secs_f64() * 1000.0;
@@ -459,7 +452,11 @@ impl InferenceContext {
                         if let Ok(post_attn_norm_weight) =
                             self.model.get_tensor(&post_attn_norm_name)
                         {
-                            x = self.backend.rms_norm(&x, &post_attn_norm_weight, self.model.norm_eps);
+                            x = self.backend.rms_norm(
+                                &x,
+                                &post_attn_norm_weight,
+                                self.model.norm_eps,
+                            );
                         }
                     }
 
@@ -474,7 +471,6 @@ impl InferenceContext {
             }
 
             profile.layer_times.push((layer_idx, attn_ms, ffn_ms));
-            let _layer_total = layer_start.elapsed();
         }
 
         let output_start = Instant::now();
@@ -482,13 +478,14 @@ impl InferenceContext {
             x = apply_norm(&x, &final_norm, self.model.norm_eps);
         }
 
-        let logits =
-            if let Ok(logits) = self.mat_vec_weight("output.weight", self.model.vocab_size, n_embd, &x) {
-                logits
-            } else {
-                self.backend
-                    .mat_vec(&token_embd, self.model.vocab_size, n_embd, &x)
-            };
+        let logits = if let Ok(logits) =
+            self.mat_vec_weight("output.weight", self.model.vocab_size, n_embd, &x)
+        {
+            logits
+        } else {
+            self.backend
+                .mat_vec(&token_embd, self.model.vocab_size, n_embd, &x)
+        };
         profile.output_ms = output_start.elapsed().as_secs_f64() * 1000.0;
         profile.total_ms = total_start.elapsed().as_secs_f64() * 1000.0;
 

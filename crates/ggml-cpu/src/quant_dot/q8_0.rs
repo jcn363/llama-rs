@@ -2,7 +2,7 @@
 //!
 //! Block layout: [f16 scale (2 bytes)] + [32 × i8 weights (32 bytes)] = 34 bytes for 32 f32 values.
 //! Each weight byte is the actual signed integer value.
-//! Dot product: scale * Σ(weight[i] * input[i])
+//! Dot product: `scale * Σ(weight[i] * input[i])`
 
 use crate::quant_dot::QuantDot;
 use half::f16;
@@ -27,7 +27,7 @@ impl QuantDot for Q8_0Dot {
         let mut sum = 0.0f32;
         for i in 0..32 {
             // Nibble values are -128..127, always safe for i8
-            #[allow(clippy::cast_possible_wrap)]
+            #[expect(clippy::cast_possible_wrap)]
             let w = quantized[2 + i] as i8;
             sum += f32::from(w) * input[i];
         }

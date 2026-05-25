@@ -8,7 +8,7 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
-half = "2.3"
+half = { workspace = true }
 rayon = { workspace = true }
 
 byteorder = { workspace = true }

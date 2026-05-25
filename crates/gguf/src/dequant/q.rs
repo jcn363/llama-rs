@@ -9,7 +9,7 @@ use super::u16_from_le;
 /// ``Q4_0``: 4-bit quantization, variant 0.
 /// Block size: 32 elements.
 /// Layout: [d: f16][qs: 16 bytes]
-/// Each byte in qs contains 2 4-bit values: qs[i] & 0xF, qs[i] >> 4
+/// Each byte in qs contains 2 4-bit values: `qs[i] & 0xF`, `qs[i] >> 4`
 pub fn dequantize_q4_0(raw: &[u8]) -> Result<Vec<f32>, GgufError> {
     const QK4_0: usize = 32;
     const BLOCK_SIZE: usize = 2 + 16; // d (2 bytes) + qs (16 bytes)

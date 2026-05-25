@@ -17,13 +17,14 @@
 //!
 //! The sub‑modules are declared here and can be expanded as needed.
 
-pub mod improvements;
+pub mod backend;
 pub mod dtype;
 pub mod graph;
+pub mod improvements;
 pub mod tensor;
 
 // Re‑export the most important items for a convenient top‑level API.
-pub use backend::QuantType;
+// Backend module removed; QuantType not currently used.
 pub use dtype::DType;
 pub use graph::Graph;
 pub use tensor::Tensor;

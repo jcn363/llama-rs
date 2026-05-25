@@ -19,8 +19,7 @@
     clippy::items_after_statements,
     clippy::too_many_arguments,
     clippy::cast_ptr_alignment,
-    clippy::cast_possible_truncation,
-    dead_code
+    clippy::cast_possible_truncation
 )]
 
 pub mod cpu_features;

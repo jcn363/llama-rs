@@ -9,7 +9,7 @@ repository.workspace = true
 
 [dependencies]
 ggml = { workspace = true }
-cudarc = { workspace = true, features = ["f16"], optional = true }
+cudarc = { workspace = true, optional = true }
 tracing = { workspace = true }
 half = { workspace = true }
 thiserror = { workspace = true }

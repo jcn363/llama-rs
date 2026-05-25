@@ -118,8 +118,14 @@ fn build_q4_0_weights(values: &[f32]) -> Vec<u8> {
             let idx1 = start + i * 2 + 1;
             let v0 = if idx0 < n { values[idx0] } else { 0.0 };
             let v1 = if idx1 < n { values[idx1] } else { 0.0 };
-            let q0 = ((v0 * inv_scale).round() as i8).clamp(-8, 7).wrapping_add(8) as u8 & 0x0F;
-            let q1 = ((v1 * inv_scale).round() as i8).clamp(-8, 7).wrapping_add(8) as u8 & 0x0F;
+            let q0 = ((v0 * inv_scale).round() as i8)
+                .clamp(-8, 7)
+                .wrapping_add(8) as u8
+                & 0x0F;
+            let q1 = ((v1 * inv_scale).round() as i8)
+                .clamp(-8, 7)
+                .wrapping_add(8) as u8
+                & 0x0F;
             out.push(q0 | (q1 << 4));
         }
     }
@@ -153,7 +159,9 @@ fn quantized_matvec_benchmark(c: &mut Criterion) {
 
         // Q4_0 quantized (parallel)
         group.bench_function("q4_0_parallel", |b| {
-            b.iter(|| parallel_backend.mat_vec_quant(&quantized, QuantType::Q4_0, rows, cols, &input))
+            b.iter(|| {
+                parallel_backend.mat_vec_quant(&quantized, QuantType::Q4_0, rows, cols, &input)
+            })
         });
 
         group.finish();

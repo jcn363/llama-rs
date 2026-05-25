@@ -75,7 +75,7 @@ pub struct CudaBackend {
 
 #[cfg(feature = "cuda")]
 struct CudaState {
-    #[allow(dead_code)]
+    #[expect(dead_code)]
     context: std::sync::Arc<cudarc::driver::CudaContext>,
     stream: std::sync::Arc<cudarc::driver::CudaStream>,
     blas: cudarc::cublas::CudaBlas,
@@ -243,7 +243,7 @@ impl CudaBackend {
             let data: &[f32] = if tensor.dtype() == ggml::DType::F32 {
                 // SAFETY: Tensor data is guaranteed correct length and
                 // alignment for f32 when dtype is F32.
-                #[allow(clippy::cast_ptr_alignment)]
+                #[expect(clippy::cast_ptr_alignment)]
                 unsafe {
                     std::slice::from_raw_parts(
                         tensor.data().as_ptr().cast::<f32>(),
@@ -258,7 +258,7 @@ impl CudaBackend {
 
             let dev_data = state
                 .stream
-                .memcpy_stod(data)
+                .clone_htod(data)
                 .map_err(|e| CudaError::RuntimeError(format!("failed to copy to device: {e}")))?;
 
             Ok(DeviceTensor {
@@ -328,7 +328,7 @@ impl CudaBackend {
 
             // cuBLAS: C = alpha * op(A) * op(B) + beta * C
             // C = A × B^T  =>  op(A)=N, op(B)=T
-            #[allow(clippy::cast_possible_wrap)]
+            #[expect(clippy::cast_possible_wrap)]
             let config = GemmConfig {
                 transa: cudarc::cublas::sys::cublasOperation_t::CUBLAS_OP_N,
                 transb: cudarc::cublas::sys::cublasOperation_t::CUBLAS_OP_T,
@@ -399,7 +399,6 @@ pub struct DeviceTensor {
     #[cfg(feature = "cuda")]
     dev_data: Option<cudarc::driver::CudaSlice<f32>>,
     #[cfg(not(feature = "cuda"))]
-    #[allow(dead_code)]
     dev_data: Option<()>,
 }
 
@@ -455,7 +454,7 @@ impl DeviceTensor {
 
             let host_data = dev_data
                 .stream()
-                .memcpy_dtov(dev_data)
+                .clone_dtoh(dev_data)
                 .map_err(|e| CudaError::RuntimeError(format!("failed to copy from device: {e}")))?;
 
             Ok(host_data)

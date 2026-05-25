@@ -75,7 +75,7 @@ pub struct BackendInfo {
 ///
 /// 1. Create a struct for your backend (e.g. `VulkanBackend`).
 /// 2. Implement `Backend` for it.
-/// 3. Register it with [`BackendRegistry`] so it participates in auto-selection.
+/// 3. Register it with `BackendRegistry` so it participates in auto-selection.
 ///
 /// # Notes on object-safety
 ///
@@ -139,7 +139,6 @@ pub trait Backend: Send + Sync {
     fn mul(&self, a: &[f32], b: &[f32]) -> Vec<f32> {
         default_mul(a, b)
     }
-
 }
 
 // ─── Default (CPU fallback) implementations ──────────────────────────────────

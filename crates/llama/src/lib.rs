@@ -38,7 +38,7 @@ pub use backend::{BackendType, create_backend};
 pub use context::{InferenceContext, ModelConfig};
 pub use ggml::backend::{Backend, BackendInfo, QuantType};
 pub use gguf::GgmlType;
-pub use inference::dot_product;
+pub use inference::{SamplingConfig, dot_product};
 pub use kv_cache::{CacheStrategy, KvCache, KvCacheManager};
 pub use profile::ProfileResult;
 pub use tokenizer::SimpleTokenizer;
