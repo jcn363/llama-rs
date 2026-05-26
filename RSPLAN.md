@@ -90,7 +90,7 @@ Modified:
 > (`UiConfig`, TOML deps, new error variants). The plan's §12 file list and
 > §8 estimates have been adjusted accordingly.
 >
-> **Status update (Round 8 — 2026-05-26):** M0–M9 are done (8 of 14 milestones).
+> **Status update (Round 9 — 2026-05-26):** M0–M9 are done (8 of 14 milestones).
 > `llama-ui` compiles with zero errors/warnings. All workspace tests pass.
 > - M1–M8: ✅ All done
 > - **M9 Session export/import UI: ✅ Done** (Export JSON/MD/Plain + Import buttons, `rfd` file dialogs, DRY helper)
