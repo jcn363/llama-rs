@@ -412,14 +412,14 @@ New variants to add to `crates/error::Error`:
 | Milestone | Description | Depends on | Effort | Status |
 |-----------|-------------|------------|--------|--------|
 | **M0 – Scoping** | Decide GUI framework (`iced`/`egui`/`relm4`). Prototype SSE + scrollable list in each. Finalize name. | — | 1 day | ✅ **Done** — iced chosen, name "llama-ui" finalized |
-| **M1 – Scaffolding** | Add crate dirs, workspace deps (`reqwest`, `toml`, `futures`, `tokio-stream`, `tower-http`, `tower`), workspace `[features]` flag, extend `crates/config` with `UiConfig`+TOML, extend `crates/error` with new variants. Build passes. | M0 | 0.5 day | ⚠️ **~90% — compiles except `llama-ui`** (iced 0.13 API mismatch). All crates exist, deps in workspace Cargo.toml, UiConfig done, error variants done. `cargo build` succeeds for everything except `llama-ui`. |
+| **M1 – Scaffolding** | Add crate dirs, workspace deps (`reqwest`, `toml`, `futures`, `tokio-stream`, `tower-http`, `tower`), workspace `[features]` flag, extend `crates/config` with `UiConfig`+TOML, extend `crates/error` with new variants. Build passes. | M0 | 0.5 day | ✅ **Done** — all crates compile, deps in workspace Cargo.toml, UiConfig done, error variants done. |
 | **M2 – Codebase fixes** | Unify `SamplingConfig`; fix `/completion` sampler passthrough; add `generate_from_tokens(tokens, n_predict)`; fix streaming O(n²); add `/samplers`. | — | 2 days | ✅ **Done** — all items resolved. See §1 issue table. |
 | **M3 – Model mgmt crate** | Downloader, manifest, GGUF metadata extraction, auto‑scan, tests | M1 | 2 days | ✅ **Done** — `llama-ui-models` crate with `Manifest`, `download_model()`, `extract_metadata()`, `scan()`. Unit tests pass. |
 | **M4 – Session + templates** | `ChatMessage`, `Session`, serde, export/import, tests **+** `common::chat_templates` (minijinja, tests) | M1 | 2 days | ✅ **Done** — `llama-ui-session` crate with export JSON/MD/plain. `common::chat_templates` with ChatML/Llama/Gemma/StableLM/fallback. Unit tests pass. |
-| **M5 – GUI skeleton** | Main window, model picker, non‑streaming send/receive (hardcoded template), sandbox spawn via `llama-ui-sandbox-client` | M1, M2 | 2 days | ❌ **Broken** — code written against iced 0.12 API, but `iced = "0.13"` in Cargo.toml. `Application` trait restructured, `Command` module path changed, `Appearance` type removed. Must fix API usage before GUI works. |
+| **M5 – GUI skeleton** | Main window, model picker, non‑streaming send/receive, sandbox spawn via `llama-ui-sandbox-client` | M1, M2 | 2 days | ✅ **Done** — iced 0.13 API fix applied. Sandbox spawn + health on StartChat. Non‑streaming `/completion` wired. SSE subscription ready. |
 | **M5a – Sandbox-client crate** | Spawn, health check, port allocation, crash detection, graceful shutdown, cancel token | M1 | 1.5 days | ✅ **Done** — `llama-ui-sandbox-client` crate with `SandboxClient`. Spawn, health, port allocation, systemd-run cgroup, graceful shutdown (SIGTERM→SIGKILL), crash probe. Unit tests pass. |
-| M6 – Streaming + tokenizer | SSE subscription, `/tokenize` endpoint, token display, context‑overflow tracking, cancel‑in‑flight. | M5 | 1 day | ⏳ **Partial** — server SSE streaming works with `generate_from_tokens` (O(n²) fixed). `handle_streaming` implemented. ❌ `/tokenize` endpoint not added. ❌ GUI not wired for streaming yet. |
-| M7 – Sampling sliders | Bind to unified `SamplingConfig`, POST to `/samplers` | M5, M2 | 0.5 day | ⏳ **Not started** — waiting on M5 compile fix |
+| **M6 – Streaming + tokenizer** | SSE subscription, `/tokenize` endpoint, token display, context‑overflow tracking, cancel‑in‑flight. | M5 | 1 day | ✅ **Done** — `/tokenize` endpoint on `llama-server`. SSE `iced::Subscription`. Non-streaming send/receive. Token display + context overflow warning (80%→banner, 95%→alert). Cancel via `Arc<AtomicBool>`. |
+| **M7 – Sampling sliders** | Bind to unified `SamplingConfig`, POST to `/samplers` | M5, M2 | 0.5 day | ✅ **Done** — Temperature/Top-K/Top-P/RepeatPenalty sliders in chat view. Each change POSTs to `/samplers`. Params included in `/completion` requests. |
 | M8 – Backend dropdown | Detection logic wired to sandbox restart | M5 | 0.5 day | ⏳ **Not started** |
 | M9 – Session export/import UI | Button wiring, format selection, file dialogs | M4, M5 | 1 day | ⏳ **Not started** — library code complete, needs UI wiring |
 | M10 – Dual‑model | Second pane, two sandbox instances, port mgmt, VRAM check, sync toggle | M5, M5a | 2.5 days | ⏳ **Not started** |
@@ -428,9 +428,7 @@ New variants to add to `crates/error::Error`:
 | M13 – Polish | Error dialogs, loading spinner, auto‑scroll, keyboard shortcuts, template wiring (from M4), edge cases | all above | 2 days | ⏳ **Not started** |
 | M14 – CI & docs | Tiny test model in `test-models/`, integration tests, CI pipeline, README | all above | 1.5 days | ⏳ **Not started** |
 
-> **⚠️ Critical blocker: `llama-ui` does not compile.** The code was written against iced 0.12 but Cargo.toml pins `iced = "0.13"`. The iced 0.13 release restructured the `Application` trait, removed the standalone `iced::Command` module path, and removed the `Appearance` type. Fixing this is the single highest-priority task — it blocks M6+ and is the gating dependency for all further UI work.
-
-**Remaining effort estimate:** ~9.5 person-days (down from ~20.5) — M1/M2/M3/M4/M5a are done, M5 needs ~0.5d API fix, then 9 days for M6–M14. The iced API fix is the critical path blocker.
+**Remaining effort estimate:** ~7.5 person-days — M0–M7 are done (6 of 14 milestones). Remaining: M8–M14.
 
 ### Dependency graph
 
@@ -440,27 +438,12 @@ M0 ─→ M1 ─┬─→ M3 ─┐   ✅ Done
            └─→ M2 ─┤   ✅ Done
            └─→ M5a ─┤  ✅ Done
                     ↓
-              ⚠️  M5  ←── FIX ICED API FIRST
+                 M5  ✅ Done
                     ↓
-              M6 → M7 → M8 → M9 → M10 → M11 → M12 → M13 → M14
-              ↑      ↑     ↑                 ↑
-              └─ M2 ─┘     └── M2 + M6       └── M4 (template wiring)
+              M6 → M7   ✅ Done
+                    ↓
+              M8 → M9 → M10 → M11 → M12 → M13 → M14
 ```
-
-> **Critical path (current):** M5 (fix iced API) → M6 → M10 (estimated ~6.5 days remaining).
-> M2 is already complete. M3, M4, M5a are done and need no further work.
->
-> **M5 currently does not compile** — the code was written for iced 0.12 but
-> `Cargo.toml` pins `iced = "0.13"`. The Application trait, Command module, and
-> Appearance type all changed. Fix is ~0.5 day of API surface adjustments.
-> Until this is fixed, no GUI milestones (M6–M14) can proceed.
->
-> **M5 uses non‑streaming `/completion`** for basic send/receive (this code exists
-> in `SandboxClient::complete()`). M6 upgrades to SSE.
->
-> **M5 uses a hardcoded template** (system + "\n" + prompt). M4's proper template
-> rendering is already implemented in `common::chat_templates` and should be
-> wired in during M13 polish (or earlier if convenient).
 
 ---
 
@@ -565,7 +548,7 @@ can run in CI.
 - `crates/common/src/lib.rs` — ✅ `SamplingConfig` made canonical; `pub mod chat_templates;` added.
 - `crates/common/src/chat_templates.rs` — ✅ **Created** — Jinja rendering, builtin templates, tests.
 - `crates/llama/src/context.rs` — ✅ `generate_from_tokens(tokens, n_predict)` added.
-- `crates/llama-server/src/main.rs` — ✅ Sampler passthrough fixed; `/samplers` added; streaming uses `generate_from_tokens`. ❌ `/tokenize` still missing.
+- `crates/llama-server/src/main.rs` — ✅ Sampler passthrough fixed; `/samplers` added; streaming uses `generate_from_tokens`; `/tokenize` endpoint added.
 - `crates/llama-server/Cargo.toml` — ✅ `features = ["cuda"]` added to `llama` dep; `tower-http`, `tower`, `futures` promoted to workspace deps.
 - `crates/config/Cargo.toml` — ✅ `toml` dep added.
 - `crates/config/src/lib.rs` — ✅ `UiConfig` struct + load/save TOML added alongside `Config::from_env()`.
@@ -574,7 +557,7 @@ can run in CI.
 **New files created (status):**
 - `crates/llama-ui/Cargo.toml` — ✅
 - `crates/llama-ui/src/main.rs` — ✅
-- `crates/llama-ui/src/app.rs` — ✅ (⚠️ needs iced 0.13 API fix)
+- `crates/llama-ui/src/app.rs` — ✅ Fixed iced 0.13 API. M6+M7 features: sandbox spawn, non-streaming + SSE streaming, token tracking, context overflow, sampler sliders
 - `crates/llama-ui/src/model_picker.rs` — ❌ Not yet created (inline in `app.rs`)
 - `crates/llama-ui/src/chat_area.rs` — ❌ Not yet created (inline in `app.rs`)
 - `crates/llama-ui/src/sampler_sliders.rs` — ❌ Not yet created
@@ -591,26 +574,44 @@ can run in CI.
 
 ## 13. Next Steps
 
-> ⚠️ **Current state:** M0–M5a implementation is largely complete *except* `llama-ui` does not compile due to iced 0.13 API changes. All library crates (`llama-ui-models`, `llama-ui-session`, `llama-ui-sandbox-client`, `crates/common::chat_templates`, `crates/config::UiConfig`, `crates/error` variants) are done and tested. The 4 new llama-ui crates are **untracked** in git — they should be committed after the compile fix.
+> **Current state:** M0–M7 are done and committed (6 of 14 milestones). `llama-ui` compiles with zero errors/warnings. All workspace tests pass. Next: M8 – Backend dropdown.
 
-1. **🔥 M5 fix — Compile llama-ui** (0.5d). Fix iced 0.13 API incompatibilities in `app.rs` and `main.rs`:
-   - Replace `iced::Application` trait with `iced::application()` function pattern (iced 0.13 removed `Application` trait in favor of function-based API)
-   - Replace `iced::Command` references with correct iced 0.13 types
-   - Remove or replace `Appearance` type usage
-   - Verify: `cargo build -p llama-ui` succeeds
+1. **M8 — Backend dropdown** (0.5d). Detection logic wired to sandbox restart on switch.
+   - Detect available backends (CPU always, CUDA if `nvidia-smi` available)
+   - Dropdown in chat header to switch backend
+   - On change: stop sandbox → restart with `--backend <name>`
+   - On failure: fall back to CPU with warning toast
 
-2. **M6 — Streaming + tokenizer** (1d). Add:
-   - `/tokenize` endpoint to `llama-server` (`POST /tokenize { "text": "..." }` → `{ "tokens": [...], "count": N }`)
-   - SSE subscription in `llama-ui` via `iced::Subscription` wrapping `reqwest` stream
-   - Token display and context‑overflow tracking (warning at 80%, rolling window at 95%)
-   - Cancel in‑flight via `CancellationToken`
+2. **M9 — Session export/import UI** (1d). Button wiring for JSON/MD/plain export.
+   - Export buttons use `llama-ui-session` library (format, serialisation)
+   - `rfd` (rust file dialog) for save/open dialogs
+   - Import: parse file → restore session state
 
-3. **M7 — Sampling sliders** (0.5d). Wire UI sliders to `/samplers` endpoint.
+3. **M10 — Dual-model** (2.5d). Second chat pane + two sandbox instances.
+   - Vertical split layout
+   - Two `SandboxClient` instances, independent ports
+   - Shared chat history (optional sync toggle)
+   - VRAM/RAM constraint checks
 
-4. **M8 — Backend dropdown** (0.5d). Detection + sandbox restart on switch.
+4. **M11 — Sandbox resource UI** (1d). Memory + CPU sliders.
+   - Bind to `ResourceLimits` in `llama-ui-sandbox-client`
+   - On change: restart sandbox with new limits
+   - systemd-run cgroup (with graceful skip if unavailable)
 
-5. **M9 — Session export/import UI** (1d). Button wiring for JSON/MD/plain export.
+5. **M12 — Settings + full-screen** (1d). Prefs TOML UI, theme, keybindings.
+   - Wire `config::UiConfig` to settings panel
+   - Theme selector, font size, startup behavior
+   - F11 full-screen toggle, Ctrl+, for settings
 
-6. **M10+** — Dual‑model, resource controls, settings, polish, CI.
+6. **M13 — Polish** (2d). Error dialogs, spinner, auto-scroll, shortcuts.
+   - Wire `common::chat_templates` for proper Jinja rendering
+   - Auto-scroll to bottom on new message
+   - Keyboard shortcuts (Ctrl+Enter send, Shift+Enter newline, Ctrl+L clear)
+   - Loading spinner during model start
+
+7. **M14 — CI & docs** (1.5d). Integration tests, CI pipeline, README.
+   - Tiny test model for integration tests
+   - `cargo test --workspace` in CI
+   - README with build/run instructions
 
 *This plan supersedes earlier drafts. Refer to it during implementation phases.*
