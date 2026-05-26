@@ -12,7 +12,8 @@ use iced::keyboard;
 use iced::keyboard::key::Named as NamedKey;
 use iced::stream;
 use iced::widget::{
-    button, column, container, pick_list, row, scrollable, slider, text, text_input, vertical_rule,
+    button, column, pick_list, row, scrollable, slider, text_input, vertical_rule,
+    text, container,
 };
 use iced::{Element, Fill, Subscription, Task, Theme, window};
 use llama_ui_models::Manifest;
@@ -82,7 +83,7 @@ impl ChatPane {
 }
 
 /// Application state.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct LlamaApp {
     /// Current view state.
     state: AppState,
@@ -94,6 +95,18 @@ pub struct LlamaApp {
     active_pane: usize,
     /// Status message.
     status: String,
+}
+
+impl Default for LlamaApp {
+    fn default() -> Self {
+        Self {
+            state: AppState::ModelPicker,
+            models: Vec::new(),
+            panes: Vec::new(),
+            active_pane: 0,
+            status: String::new(),
+        }
+    }
 }
 
 /// Model information for display.
@@ -122,17 +135,7 @@ pub enum AppState {
     Settings,
 }
 
-impl Default for LlamaApp {
-    fn default() -> Self {
-        LlamaApp {
-            state: AppState::default(),
-            models: Vec::new(),
-            panes: Vec::new(),
-            active_pane: 0,
-            status: String::new(),
-        }
-    }
-}
+
 
 /// Messages that update the application state.
 #[derive(Debug, Clone)]
@@ -904,25 +907,26 @@ pub fn subscription(state: &LlamaApp) -> Subscription<Message> {
 /// View for model picker.
 fn view_model_picker(state: &LlamaApp) -> Element<'_, Message> {
     let mut children = vec![
-        text("llama-ui").size(32).into(),
-        text(&state.status).size(16).into(),
+        iced::widget::text("llama-ui").size(32).into(),
+        iced::widget::text(&state.status).size(16).into(),
     ];
 
     for (i, model) in state.models.iter().enumerate() {
-        let btn = button(text(&model.name).size(18))
+        let btn = button(iced::widget::text(&model.name).size(18))
+            .style(iced::theme::Button::Primary)
             .on_press(Message::ModelSelected(i))
             .padding(10);
         children.push(btn.into());
     }
 
     children.push(
-        button(text("Start Chat").size(20))
+        button(iced::widget::text("Start Chat").size(20))
             .on_press(Message::StartChat)
             .padding(20)
             .into(),
     );
 
-    container(column(children))
+    iced::widget::container(column(children))
         .center_x(Fill)
         .center_y(Fill)
         .padding(20)
@@ -952,14 +956,14 @@ fn render_pane(state: &LlamaApp, pane: usize) -> Element<'_, Message> {
                     pct * 100.0
                 )
             };
-            children.push(text(warning).size(13).into());
+            children.push(iced::widget::text(warning).size(13).into());
         }
     }
 
     // Backend selector
     children.push(
         row![
-            text("Backend:").size(14),
+            iced::widget::text("Backend:").size(14),
             pick_list(
                 vec!["auto", "cpu", "cuda"],
                 Some(p.backend.as_str()),
@@ -974,10 +978,10 @@ fn render_pane(state: &LlamaApp, pane: usize) -> Element<'_, Message> {
     // ─── M12: Settings + Full-screen buttons ──────────────────
     children.push(
         row![
-            button(text("⚙ Settings").size(12))
+            button(iced::widget::text("⚙ Settings").size(12))
                 .on_press(Message::OpenSettings)
                 .padding(4),
-            button(text("⛶ Fullscreen").size(12))
+            button(iced::widget::text("⛶ Fullscreen").size(12))
                 .on_press(Message::ToggleFullscreen)
                 .padding(4),
         ]
@@ -988,7 +992,7 @@ fn render_pane(state: &LlamaApp, pane: usize) -> Element<'_, Message> {
     // ─── M11: Resource limit sliders ──────────────────────────
     children.push(
         row![
-            text(format!("Mem: {} MB", p.resource_limits.memory_mb)).size(12),
+            iced::widget::text(format!("Mem: {} MB", p.resource_limits.memory_mb)).size(12),
             slider(
                 256.0..=32768.0,
                 p.resource_limits.memory_mb as f32,
@@ -1002,7 +1006,7 @@ fn render_pane(state: &LlamaApp, pane: usize) -> Element<'_, Message> {
     );
     children.push(
         row![
-            text(format!("CPU: {}%", p.resource_limits.cpu_percent)).size(12),
+            iced::widget::text(format!("CPU: {}%", p.resource_limits.cpu_percent)).size(12),
             slider(
                 10.0..=400.0,
                 f32::from(p.resource_limits.cpu_percent),
@@ -1022,13 +1026,13 @@ fn render_pane(state: &LlamaApp, pane: usize) -> Element<'_, Message> {
             Role::Assistant => "AI",
             Role::System => "System",
         };
-        children.push(text(format!("{}: {}", role, msg.content)).size(14).into());
+        children.push(iced::widget::text(format!("{}: {}", role, msg.content)).size(14).into());
     }
 
     // Token counter
     if p.total_tokens > 0 {
         children.push(
-            text(format!(
+            iced::widget::text(format!(
                 "Tokens: {}/{} ({:.0}%)",
                 p.total_tokens,
                 p.context_limit,
@@ -1046,7 +1050,7 @@ fn render_pane(state: &LlamaApp, pane: usize) -> Element<'_, Message> {
     // ─── M7: Sampler sliders ────────────────────────────────
     children.push(
         row![
-            text(format!("T: {:.2}", p.temperature)).size(12),
+            iced::widget::text(format!("T: {:.2}", p.temperature)).size(12),
             slider(0.0..=2.0, p.temperature, move |v| {
                 Message::TemperatureChanged(pane, v)
             })
@@ -1058,7 +1062,7 @@ fn render_pane(state: &LlamaApp, pane: usize) -> Element<'_, Message> {
     );
     children.push(
         row![
-            text(format!("K: {}", p.top_k)).size(12),
+            iced::widget::text(format!("K: {}", p.top_k)).size(12),
             slider(0.0..=100.0, p.top_k, move |v| Message::TopKChanged(pane, v))
                 .step(1.0)
                 .width(Fill),
@@ -1068,7 +1072,7 @@ fn render_pane(state: &LlamaApp, pane: usize) -> Element<'_, Message> {
     );
     children.push(
         row![
-            text(format!("P: {:.2}", p.top_p)).size(12),
+            iced::widget::text(format!("P: {:.2}", p.top_p)).size(12),
             slider(0.00..=1.00, p.top_p, move |v| Message::TopPChanged(pane, v))
                 .step(0.01)
                 .width(Fill),
@@ -1078,7 +1082,7 @@ fn render_pane(state: &LlamaApp, pane: usize) -> Element<'_, Message> {
     );
     children.push(
         row![
-            text(format!("RP: {:.2}", p.repeat_penalty)).size(12),
+            iced::widget::text(format!("RP: {:.2}", p.repeat_penalty)).size(12),
             slider(1.00..=2.00, p.repeat_penalty, move |v| {
                 Message::RepeatPenaltyChanged(pane, v)
             })
@@ -1092,16 +1096,16 @@ fn render_pane(state: &LlamaApp, pane: usize) -> Element<'_, Message> {
     // ─── M9: Export/Import buttons ──────────────────────────
     children.push(
         row![
-            button(text("Export JSON").size(12))
+            button(iced::widget::text("Export JSON").size(12))
                 .on_press(Message::ExportJson)
                 .padding(6),
-            button(text("Export MD").size(12))
+            button(iced::widget::text("Export MD").size(12))
                 .on_press(Message::ExportMarkdown)
                 .padding(6),
-            button(text("Export TXT").size(12))
+            button(iced::widget::text("Export TXT").size(12))
                 .on_press(Message::ExportPlain)
                 .padding(6),
-            button(text("Import").size(12))
+            button(iced::widget::text("Import").size(12))
                 .on_press(Message::ImportSession)
                 .padding(6),
         ]
@@ -1122,14 +1126,14 @@ fn render_pane(state: &LlamaApp, pane: usize) -> Element<'_, Message> {
     // Send / Cancel buttons row
     if p.is_streaming {
         children.push(
-            button(text("■ Stop").size(16))
+            button(iced::widget::text("■ Stop").size(16))
                 .on_press(Message::CancelGeneration(pane))
                 .padding(10)
                 .into(),
         );
     } else {
         children.push(
-            button(text("Send").size(16))
+            button(iced::widget::text("Send").size(16))
                 .on_press(Message::Send(pane))
                 .padding(10)
                 .into(),
@@ -1138,10 +1142,10 @@ fn render_pane(state: &LlamaApp, pane: usize) -> Element<'_, Message> {
 
     // Status
     if !state.status.is_empty() {
-        children.push(text(&state.status).size(12).into());
+        children.push(iced::widget::text(&state.status).size(12).into());
     }
 
-    container(scrollable(column(children)).width(Fill).height(Fill))
+    iced::widget::container(scrollable(column(children)).width(Fill).height(Fill))
         .width(Fill)
         .height(Fill)
         .padding(20)
@@ -1151,7 +1155,7 @@ fn render_pane(state: &LlamaApp, pane: usize) -> Element<'_, Message> {
 /// Chat view — renders a row of panes with a separator between them.
 fn view_chat(state: &LlamaApp) -> Element<'_, Message> {
     if state.panes.is_empty() {
-        return container(text("No panes").size(24))
+        return iced::widget::container(iced::widget::text("No panes").size(24))
             .center_x(Fill)
             .center_y(Fill)
             .into();
@@ -1170,9 +1174,9 @@ fn view_chat(state: &LlamaApp) -> Element<'_, Message> {
 
 /// Loading view.
 fn view_loading(state: &LlamaApp) -> Element<'_, Message> {
-    container(column(vec![
-        text("Loading...").size(24).into(),
-        text(&state.status).size(16).into(),
+    iced::widget::container(column(vec![
+        iced::widget::text("Loading...").size(24).into(),
+        iced::widget::text(&state.status).size(16).into(),
     ]))
     .center_x(Fill)
     .center_y(Fill)
@@ -1181,10 +1185,10 @@ fn view_loading(state: &LlamaApp) -> Element<'_, Message> {
 
 /// Error view.
 fn view_error(err: &str) -> Element<'_, Message> {
-    container(column(vec![
-        text("Error").size(24).into(),
-        text(err).size(16).into(),
-        button(text("Back").size(16))
+    iced::widget::container(column(vec![
+        iced::widget::text("Error").size(24).into(),
+        iced::widget::text(err).size(16).into(),
+        button(iced::widget::text("Back").size(16))
             .on_press(Message::ModelSelected(0))
             .padding(10)
             .into(),
@@ -1198,46 +1202,46 @@ fn view_error(err: &str) -> Element<'_, Message> {
 fn view_settings(state: &LlamaApp) -> Element<'_, Message> {
     let mut children: Vec<Element<'_, Message>> = Vec::new();
 
-    children.push(text("Settings").size(24).into());
+    children.push(iced::widget::text("Settings").size(24).into());
     children.push(
-        text(format!("Panes: {}", state.panes.len()))
+        iced::widget::text(format!("Panes: {}", state.panes.len()))
             .size(14)
             .into(),
     );
     children.push(
-        text(format!("Models: {}", state.models.len()))
+        iced::widget::text(format!("Models: {}", state.models.len()))
             .size(14)
             .into(),
     );
 
-    children.push(text("").size(8).into());
-    children.push(text("Keyboard Shortcuts").size(18).into());
-    children.push(text("Esc — Close Settings").size(14).into());
-    children.push(text("F11 — Toggle Full-screen").size(14).into());
-    children.push(text("Enter (in text input) — Send message").size(14).into());
+    children.push(iced::widget::text("").size(8).into());
+    children.push(iced::widget::text("Keyboard Shortcuts").size(18).into());
+    children.push(iced::widget::text("Esc — Close Settings").size(14).into());
+    children.push(iced::widget::text("F11 — Toggle Full-screen").size(14).into());
+    children.push(iced::widget::text("Enter (in text input) — Send message").size(14).into());
 
-    children.push(text("").size(8).into());
-    children.push(text("General").size(18).into());
+    children.push(iced::widget::text("").size(8).into());
+    children.push(iced::widget::text("General").size(18).into());
     children.push(
-        text("Full-screen: toggle with F11 or the button in the chat view.")
+        iced::widget::text("Full-screen: toggle with F11 or the button in the chat view.")
             .size(14)
             .into(),
     );
     children.push(
-        text("Resource limits (memory/CPU) are set per-pane in the chat view.")
+        iced::widget::text("Resource limits (memory/CPU) are set per-pane in the chat view.")
             .size(14)
             .into(),
     );
 
     // Back to chat
     children.push(
-        button(text("← Back to Chat").size(16))
+        button(iced::widget::text("← Back to Chat").size(16))
             .on_press(Message::CloseSettings)
             .padding(10)
             .into(),
     );
 
-    container(scrollable(column(children)).width(Fill).height(Fill))
+    iced::widget::container(scrollable(column(children)).width(Fill).height(Fill))
         .width(Fill)
         .height(Fill)
         .padding(20)
