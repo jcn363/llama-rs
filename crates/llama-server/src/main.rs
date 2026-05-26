@@ -15,6 +15,7 @@ use clap::Parser;
 use futures::StreamExt;
 use futures::stream::Stream;
 use llama::{BackendType, CacheStrategy, InferenceContext, Model, ModelConfig};
+use common::sampling::SamplingConfig;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::time::Instant;
@@ -73,9 +74,20 @@ struct CompletionRequest {
     max_tokens: usize,
     #[serde(default)]
     stream: bool,
+    /// Sampling temperature (0.0 = greedy). Default: 0.8.
     #[serde(default = "default_temperature")]
-    #[expect(dead_code)]
     temperature: f32,
+    /// Top-k sampling (0 = disabled). Default: 40.
+    #[serde(default = "default_top_k")]
+    top_k: usize,
+    /// Top-p nucleus sampling (1.0 = disabled). Default: 0.95.
+    #[serde(default = "default_top_p")]
+    top_p: f32,
+    /// Repeat penalty (1.0 = no penalty). Default: 1.1.
+    #[serde(default = "default_repeat_penalty")]
+    repeat_penalty: f32,
+    /// Random seed for reproducibility.
+    seed: Option<u64>,
 }
 
 fn default_max_tokens() -> usize {
@@ -84,6 +96,18 @@ fn default_max_tokens() -> usize {
 
 fn default_temperature() -> f32 {
     0.8
+}
+
+fn default_top_k() -> usize {
+    40
+}
+
+fn default_top_p() -> f32 {
+    0.95
+}
+
+fn default_repeat_penalty() -> f32 {
+    1.1
 }
 
 /// Completion response body.
@@ -108,6 +132,23 @@ struct StreamChunk {
 #[derive(Serialize)]
 struct ErrorResponse {
     error: String,
+}
+
+/// Tokenize request body.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct TokenizeRequest {
+    /// The text to tokenize.
+    text: String,
+}
+
+/// Tokenize response body.
+#[derive(Serialize)]
+struct TokenizeResponse {
+    /// Token IDs.
+    tokens: Vec<usize>,
+    /// Number of tokens.
+    count: usize,
 }
 
 #[tokio::main]
@@ -168,7 +209,9 @@ async fn main() -> anyhow::Result<()> {
     let app = Router::new()
         .route("/health", get(handle_health))
         .route("/completion", post(handle_completion))
+        .route("/samplers", get(handle_get_samplers))
         .route("/v1/models", get(handle_v1_models))
+        .route("/tokenize", post(handle_tokenize))
         .layer(cors)
         .with_state(state);
 
@@ -200,6 +243,18 @@ async fn handle_v1_models(State(state): State<ServerState>) -> Json<serde_json::
             "description": state.model.summary(),
         }]
     }))
+}
+
+/// Get current sampler configuration.
+async fn handle_get_samplers() -> Json<SamplingConfig> {
+    // Return default sampler config (in a real app, this would be per-session)
+    Json(SamplingConfig {
+        temperature: default_temperature(),
+        top_k: default_top_k(),
+        top_p: default_top_p(),
+        repeat_penalty: default_repeat_penalty(),
+        seed: None,
+    })
 }
 
 /// Handle completion (both streaming and non-streaming).
@@ -235,7 +290,14 @@ async fn handle_completion(
     let model = Arc::clone(&state.model);
 
     let mut ctx = InferenceContext::new(model, state.config.clone());
-    ctx.encode(&request.prompt);
+    ctx.sampling = SamplingConfig {
+        temperature: request.temperature,
+        top_k: request.top_k,
+        top_p: request.top_p,
+        repeat_penalty: request.repeat_penalty,
+        seed: request.seed,
+    };
+    let input_tokens = ctx.encode(&request.prompt);
 
     let generated = ctx.generate(&request.prompt, max_tokens).map_err(|e| {
         (
@@ -246,7 +308,7 @@ async fn handle_completion(
         )
     })?;
 
-    let prompt_tokens = ctx.encode(&request.prompt).len();
+    let prompt_tokens = input_tokens.len();
     let output_tokens = generated.len().saturating_sub(prompt_tokens);
     let gen_time = gen_start.elapsed();
     let tokens_per_sec = if gen_time.as_secs_f64() > 0.0 {
@@ -278,17 +340,31 @@ async fn handle_streaming(
     let model = Arc::clone(&state.model);
     let config = state.config.clone();
     let prompt = request.prompt;
+    let temperature = request.temperature;
+    let top_k = request.top_k;
+    let top_p = request.top_p;
+    let repeat_penalty = request.repeat_penalty;
+    let seed = request.seed;
 
     // Run inference in a blocking thread pool
     let stream = tokio::task::spawn_blocking(move || {
         let mut ctx = InferenceContext::new(model, config);
-        ctx.encode(&prompt);
+        ctx.sampling = SamplingConfig {
+            temperature,
+            top_k,
+            top_p,
+            repeat_penalty,
+            seed,
+        };
+
+        // Encode the prompt ONCE — the O(n²) fix
+        let input_tokens = ctx.encode(&prompt);
 
         let mut chunks = Vec::new();
 
-        // Generate tokens one at a time
+        // Generate one token at a time using pre-encoded tokens
         for _ in 0..max_tokens {
-            let generated = match ctx.generate(&prompt, 1) {
+            let generated = match ctx.generate_from_tokens(&input_tokens, 1) {
                 Ok(tokens) => tokens,
                 Err(_) => break,
             };
@@ -322,6 +398,41 @@ async fn handle_streaming(
     });
 
     Sse::new(event_stream)
+}
+
+/// Tokenize text using the model's tokenizer.
+async fn handle_tokenize(
+    State(state): State<ServerState>,
+    Json(request): Json<TokenizeRequest>,
+) -> Result<Json<TokenizeResponse>, (StatusCode, Json<ErrorResponse>)> {
+    if request.text.is_empty() {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                error: "text must not be empty".into(),
+            }),
+        ));
+    }
+
+    let tokenizer = llama::SimpleTokenizer::from_gguf_vocab(
+        state.model.vocab_tokens.clone(),
+        state.model.vocab_scores.clone(),
+        state.model.vocab_types.clone(),
+        state.model.bos_token_id,
+        state.model.eos_token_id,
+        state.model.unk_token_id,
+        state.model.add_bos_token,
+    );
+    let tokens = tokenizer.encode(&request.text);
+    let count = tokens.len();
+
+    tracing::info!(
+        "Tokenize request: text_len={}, tokens={}",
+        request.text.len(),
+        count
+    );
+
+    Ok(Json(TokenizeResponse { tokens, count }))
 }
 
 /// Signal handler for graceful shutdown.

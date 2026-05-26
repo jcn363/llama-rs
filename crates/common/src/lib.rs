@@ -47,16 +47,21 @@ pub mod args {
 /// Sampling strategies for text generation.
 pub mod sampling {
     /// Configuration for token sampling.
-    #[derive(Debug, Clone)]
+    ///
+    /// This is the **canonical** `SamplingConfig` for the entire workspace.
+    /// The `llama` crate re-exports this type — do NOT define a second copy.
+    #[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize)]
     pub struct SamplingConfig {
-        /// Temperature for sampling (0.0 = greedy).
+        /// Temperature for sampling (0.0 = greedy argmax).
         pub temperature: f32,
-        /// Top-k sampling (0 = disabled).
+        /// Top-k sampling (0 = disabled, full vocab).
         pub top_k: usize,
-        /// Top-p sampling (0.0 = disabled).
+        /// Top-p nucleus sampling (0.0 = disabled, 1.0 = disabled).
         pub top_p: f32,
         /// Repeat penalty (1.0 = no penalty).
         pub repeat_penalty: f32,
+        /// Optional random seed for reproducibility.
+        pub seed: Option<u64>,
     }
 
     impl Default for SamplingConfig {
@@ -66,10 +71,14 @@ pub mod sampling {
                 top_k: 40,
                 top_p: 0.95,
                 repeat_penalty: 1.1,
+                seed: None,
             }
         }
     }
 }
+
+/// Chat template rendering using Jinja (minijinja).
+pub mod chat_templates;
 
 #[cfg(test)]
 mod tests {
@@ -82,5 +91,6 @@ mod tests {
         assert!(config.top_k > 0);
         assert!(config.top_p > 0.0 && config.top_p <= 1.0);
         assert!(config.repeat_penalty >= 1.0);
+        assert!(config.seed.is_none());
     }
 }

@@ -319,34 +319,23 @@ pub fn sample_categorical(probs: &[f32], rng: &mut fastrand::Rng) -> usize {
 }
 
 /// Sampling configuration for text generation.
-#[derive(Debug, Clone, Copy)]
-pub struct SamplingConfig {
-    /// Temperature for softmax (default: 0.8).
-    pub temperature: f32,
-    /// Top-k filtering (default: 40). 0 = disabled.
-    pub top_k: usize,
-    /// Top-p (nucleus) filtering (default: 0.95). 0.0 = disabled.
-    pub top_p: f32,
-    /// Random seed for reproducibility (default: random).
-    pub seed: Option<u64>,
-}
-
-impl Default for SamplingConfig {
-    fn default() -> Self {
-        Self {
-            temperature: 0.8,
-            top_k: 40,
-            top_p: 0.95,
-            seed: None,
-        }
-    }
-}
+///
+/// Re-exported from `common` to avoid duplication across the workspace.
+/// This is the **single canonical type** — all crates use `common::sampling::SamplingConfig`.
+pub use common::sampling::SamplingConfig;
 
 /// Sample the next token from logits using the given configuration.
 ///
-/// Applies temperature, top-k, top-p filtering, then samples categorically.
-/// If temperature is 0, uses greedy argmax sampling.
-pub fn sample_logits(logits: &[f32], config: &SamplingConfig) -> usize {
+/// Applies repeat penalty, temperature, top-k, top-p filtering, then samples
+/// categorically. If temperature is 0, uses greedy argmax sampling.
+///
+/// `prev_tokens` is the sequence of token IDs generated so far (including prompt),
+/// used for repeat penalty. Pass `&[]` to disable.
+pub fn sample_logits(
+    logits: &[f32],
+    config: &SamplingConfig,
+    prev_tokens: &[usize],
+) -> usize {
     // Greedy sampling when temperature is 0
     if config.temperature <= 0.0 {
         return sample_argmax(logits);
@@ -357,11 +346,18 @@ pub fn sample_logits(logits: &[f32], config: &SamplingConfig) -> usize {
         rng = fastrand::Rng::with_seed(seed);
     }
 
-    // Apply top-k filtering
-    let filtered = if config.top_k > 0 && config.top_k < logits.len() {
-        apply_top_k(logits, config.top_k)
+    // Apply repeat penalty to the raw logits
+    let logits = if config.repeat_penalty > 1.0 && !prev_tokens.is_empty() {
+        apply_repeat_penalty(logits, prev_tokens, config.repeat_penalty)
     } else {
         logits.to_vec()
+    };
+
+    // Apply top-k filtering
+    let filtered = if config.top_k > 0 && config.top_k < logits.len() {
+        apply_top_k(&logits, config.top_k)
+    } else {
+        logits
     };
 
     // Apply top-p filtering
@@ -376,6 +372,24 @@ pub fn sample_logits(logits: &[f32], config: &SamplingConfig) -> usize {
 
     // Sample from the distribution
     sample_categorical(&probs, &mut rng)
+}
+
+/// Apply repeat penalty to logits.
+///
+/// For each token in `prev_tokens`, its logit is penalized:
+/// - If logit < 0: logit *= penalty
+/// - If logit >= 0: logit /= penalty
+///
+/// This reduces the probability of repeating tokens.
+fn apply_repeat_penalty(logits: &[f32], prev_tokens: &[usize], penalty: f32) -> Vec<f32> {
+    let mut result = logits.to_vec();
+    for &token_id in prev_tokens {
+        if token_id < result.len() {
+            let v = result[token_id];
+            result[token_id] = if v < 0.0 { v * penalty } else { v / penalty };
+        }
+    }
+    result
 }
 
 #[cfg(test)]

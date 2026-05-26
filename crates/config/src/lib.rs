@@ -2,14 +2,14 @@
 
 //! Configuration module for the llama-rs workspace.
 //!
-//! Provides a unified `Config` struct that can be loaded from environment
-//! variables or a configuration file. This is a minimal implementation that
-//! can be expanded as needed.
+//! Provides a unified `Config` struct loaded from environment variables,
+//! and a `UiConfig` struct for GUI preferences (TOML-based).
 
 use std::env;
 use std::path::PathBuf;
+use toml;
 
-/// Central configuration for the application.
+/// Central configuration for the application (CLI/server).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Config {
     /// Optional path to a model file.
@@ -64,6 +64,106 @@ impl Config {
     }
 }
 
+/// UI preferences for the llama-ui desktop application.
+///
+/// Stored as TOML at `$XDG_CONFIG_HOME/llama-ui/prefs.toml`.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct UiConfig {
+    /// Theme name ("dark", "light", "system").
+    #[serde(default = "default_theme")]
+    pub theme: String,
+    /// Font size for chat text.
+    #[serde(default = "default_font_size")]
+    pub font_size: u16,
+    /// Default max tokens for generation.
+    #[serde(default = "default_max_tokens")]
+    pub max_tokens: usize,
+    /// Whether to start maximized.
+    #[serde(default)]
+    pub start_maximized: bool,
+    /// Default temperature.
+    #[serde(default = "default_temperature")]
+    pub temperature: f32,
+    /// Default top-k.
+    #[serde(default = "default_top_k")]
+    pub top_k: usize,
+    /// Default top-p.
+    #[serde(default = "default_top_p")]
+    pub top_p: f32,
+}
+
+fn default_theme() -> String {
+    "dark".into()
+}
+fn default_font_size() -> u16 {
+    14
+}
+fn default_max_tokens() -> usize {
+    512
+}
+fn default_temperature() -> f32 {
+    0.8
+}
+fn default_top_k() -> usize {
+    40
+}
+fn default_top_p() -> f32 {
+    0.95
+}
+
+impl Default for UiConfig {
+    fn default() -> Self {
+        Self {
+            theme: default_theme(),
+            font_size: default_font_size(),
+            max_tokens: default_max_tokens(),
+            start_maximized: false,
+            temperature: default_temperature(),
+            top_k: default_top_k(),
+            top_p: default_top_p(),
+        }
+    }
+}
+
+impl UiConfig {
+    /// Path to the UI preferences file.
+    fn path() -> PathBuf {
+        let base = if let Ok(dir) = env::var("XDG_CONFIG_HOME") {
+            PathBuf::from(dir)
+        } else {
+            let home = env::var("HOME").unwrap_or_else(|_| "/tmp".into());
+            PathBuf::from(home).join(".config")
+        };
+        base.join("llama-ui").join("prefs.toml")
+    }
+
+    /// Load UI config from TOML file, or return defaults.
+    pub fn load() -> Self {
+        let path = Self::path();
+        if path.exists() {
+            match std::fs::read_to_string(&path) {
+                Ok(content) => match toml::from_str(&content) {
+                    Ok(cfg) => return cfg,
+                    Err(e) => tracing::warn!("Failed to parse UiConfig: {e}"),
+                },
+                Err(e) => tracing::warn!("Failed to read UiConfig: {e}"),
+            }
+        }
+        Self::default()
+    }
+
+    /// Save UI config to TOML file.
+    pub fn save(&self) -> Result<(), Box<dyn std::error::Error>> {
+        let path = Self::path();
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        let content = toml::to_string_pretty(self)?;
+        std::fs::write(&path, content)?;
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -110,5 +210,32 @@ mod tests {
         let cfg = Config::default();
         let _cloned = cfg.clone();
         let _debug = format!("{cfg:?}");
+    }
+
+    #[test]
+    fn ui_config_defaults() {
+        let cfg = UiConfig::default();
+        assert_eq!(cfg.theme, "dark");
+        assert_eq!(cfg.font_size, 14);
+        assert_eq!(cfg.max_tokens, 512);
+    }
+
+    #[test]
+    fn ui_config_toml_roundtrip() {
+        let cfg = UiConfig {
+            theme: "light".into(),
+            font_size: 16,
+            max_tokens: 1024,
+            start_maximized: true,
+            temperature: 0.7,
+            top_k: 50,
+            top_p: 0.9,
+        };
+        let toml_str = toml::to_string_pretty(&cfg).unwrap();
+        let parsed: UiConfig = toml::from_str(&toml_str).unwrap();
+        assert_eq!(parsed.theme, "light");
+        assert_eq!(parsed.font_size, 16);
+        assert_eq!(parsed.max_tokens, 1024);
+        assert!(parsed.start_maximized);
     }
 }

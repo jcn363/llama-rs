@@ -1,0 +1,33 @@
+[package]
+name = "llama-ui"
+description = "Desktop GUI for llama-rs LLM inference"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "llama-ui"
+path = "src/main.rs"
+
+[dependencies]
+llama = { workspace = true, features = ["cuda"] }
+common = { workspace = true }
+config = { workspace = true }
+error = { workspace = true }
+llama-ui-models = { workspace = true }
+llama-ui-session = { workspace = true }
+llama-ui-sandbox-client = { workspace = true }
+reqwest = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+tokio = { workspace = true }
+futures = { workspace = true }
+tokio-stream = { workspace = true }
+anyhow = { workspace = true }
+tracing-subscriber = { workspace = true }
+iced = "0.13"
+chrono = "0.4"
+dirs = "5.0"

@@ -120,6 +120,86 @@ impl InferenceContext {
         self.tokenizer.encode(text)
     }
 
+    /// Generate token IDs starting from pre-encoded tokens.
+    ///
+    /// Prefills the KV cache for the given tokens, then generates `n_predict`
+    /// new tokens one at a time. This is the O(n²)-free streaming variant —
+    /// encode the prompt once, call this to generate.
+    pub fn generate_from_tokens(
+        &mut self,
+        tokens: &[usize],
+        n_predict: usize,
+    ) -> anyhow::Result<Vec<usize>> {
+        let mut toks = tokens.to_vec();
+
+        // Phase 1: Prepare KV cache
+        {
+            let mut kv_cache = self.model.kv_cache.write().expect("lock poisoned");
+            match self.config.cache_strategy {
+                CacheStrategy::Prefix => {
+                    let common_prefix_len = toks
+                        .iter()
+                        .zip(self.cached_tokens.iter())
+                        .take_while(|(a, b)| a == b)
+                        .count();
+                    kv_cache.truncate_all(common_prefix_len);
+                }
+                _ => {
+                    kv_cache.reset();
+                }
+            }
+        }
+
+        // Phase 2: Prefill
+        match self.config.cache_strategy {
+            CacheStrategy::Prefix => {
+                let common_prefix_len = toks
+                    .iter()
+                    .zip(self.cached_tokens.iter())
+                    .take_while(|(a, b)| a == b)
+                    .count();
+                if toks.len() > common_prefix_len {
+                    let remaining = &toks[common_prefix_len..];
+                    for chunk in remaining.chunks(self.config.n_batch) {
+                        self.prefill(chunk)?;
+                    }
+                }
+                self.cached_tokens = toks.clone();
+            }
+            _ => {
+                self.cached_tokens.clear();
+                if !toks.is_empty() {
+                    for chunk in toks.chunks(self.config.n_batch) {
+                        self.prefill(chunk)?;
+                    }
+                }
+            }
+        }
+
+        // Phase 3: Generate new tokens
+        let input_len = toks.len();
+        for _ in 0..n_predict {
+            let last_token = *toks.last().unwrap_or(&0);
+
+            match self.forward_pass(last_token) {
+                Ok(logits) => {
+                    let next_token = sample_logits(&logits, &self.sampling, &toks);
+                    toks.push(next_token);
+
+                    if next_token == self.model.eos_token_id {
+                        break;
+                    }
+                }
+                Err(_) => {
+                    toks.push(0);
+                }
+            }
+        }
+
+        // Return only newly generated tokens
+        Ok(toks[input_len..].to_vec())
+    }
+
     /// Generate token IDs for a prompt using actual inference.
     pub fn generate(&mut self, prompt: &str, n_predict: usize) -> anyhow::Result<Vec<usize>> {
         let mut toks = self.encode(prompt);
@@ -182,7 +262,7 @@ impl InferenceContext {
 
             match self.forward_pass(last_token) {
                 Ok(logits) => {
-                    let next_token = sample_logits(&logits, &self.sampling);
+                    let next_token = sample_logits(&logits, &self.sampling, &toks);
                     toks.push(next_token);
 
                     if next_token == self.model.eos_token_id {
@@ -197,6 +277,8 @@ impl InferenceContext {
 
         Ok(toks)
     }
+
+    // (the generate function continues below)
 
     /// Load a weight tensor and compute `weight @ input` in the most efficient
     /// way supported by the backend.
@@ -512,7 +594,7 @@ impl InferenceContext {
 
             match self.forward_pass_with_profile(last_token) {
                 Ok((logits, profile)) => {
-                    let next_token = sample_logits(&logits, &self.sampling);
+                    let next_token = sample_logits(&logits, &self.sampling, &toks);
                     toks.push(next_token);
                     profiles.push(profile);
 

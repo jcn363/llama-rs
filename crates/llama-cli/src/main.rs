@@ -119,6 +119,7 @@ fn main() -> anyhow::Result<()> {
         temperature: args.temperature,
         top_k: args.top_k,
         top_p: args.top_p,
+        repeat_penalty: 1.1,
         seed: args.seed,
     };
 

@@ -1,6 +1,6 @@
 [package]
-name = "config"
-description = "Unified configuration for llama-rs workspace"
+name = "llama-ui-session"
+description = "Chat session persistence and management for llama-ui"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -10,9 +10,8 @@ repository.workspace = true
 [dependencies]
 serde = { workspace = true }
 serde_json = { workspace = true }
-tracing = { workspace = true }
 thiserror = { workspace = true }
-toml = "0.5"
+common = { workspace = true }
 
 [dev-dependencies]
-proptest = { workspace = true }
+tempfile = "3.8"
