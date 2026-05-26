@@ -10,26 +10,30 @@ A Rust port of [llama.cpp](https://github.com/ggml-org/llama.cpp), optimized for
 
 ## Project Structure & Module Organization
 
-The workspace splits concerns across 8 domain crates, each handling a specific subsystem:
+The workspace splits concerns across 12 domain crates, each handling a specific subsystem:
 
 ```
 llama-rs/
 ├── crates/
-│   ├── gguf/          # GGUF v3 parser — file format, tensor info, dequantization
-│   ├── ggml/          # Core tensor library — Tensor, DType, computation graphs
-│   ├── ggml-cpu/      # CPU backend — AVX/SSE4.2 SIMD matmul, block-tiling
-│   ├── ggml-cuda/     # CUDA backend — cuBLAS matmul, VRAM tracking (requires CUDA toolkit)
-│   ├── llama/         # Inference engine — transformer forward pass, attention, KV cache
-│   ├── common/        # Shared utilities — argument parsing, sampling config
-│   ├── config/        # Unified configuration — Config struct, env-based loading
-│   ├── error/         # Unified error handling — Error enum, Result<T> alias
-│   ├── llama-cli/     # CLI binary for interactive text generation
-│   └── llama-server/  # HTTP server with /completion and /health endpoints
+│   ├── gguf/                    # GGUF v3 parser — file format, tensor info, dequantization
+│   ├── ggml/                    # Core tensor library — Tensor, DType, computation graphs
+│   ├── ggml-cpu/                # CPU backend — AVX/SSE4.2 SIMD matmul, block-tiling
+│   ├── ggml-cuda/               # CUDA backend — cuBLAS matmul, VRAM tracking (requires CUDA toolkit)
+│   ├── llama/                   # Inference engine — transformer forward pass, attention, KV cache
+│   ├── common/                  # Shared utilities — argument parsing, sampling config, chat templates
+│   ├── config/                  # Unified configuration — Config struct, env-based loading
+│   ├── error/                   # Unified error handling — Error enum, Result<T> alias
+│   ├── llama-cli/               # CLI binary for interactive text generation
+│   ├── llama-server/            # HTTP server with /completion and /health endpoints
+│   ├── llama-ui/                # Desktop GUI (iced 0.13.1) — multi-pane chat interface
+│   ├── llama-ui-models/         # Model discovery, manifest, GGUF metadata extraction
+│   ├── llama-ui-session/        # Chat history, session persistence, export (JSON/MD/plain)
+│   └── llama-ui-sandbox-client/ # Sandbox server spawning with resource limits
 ├── .cargo/            # cargo config (target-cpu=bdver1)
 ├── .github/workflows/ # CI: format → clippy → test → deny → doc
 ├── test-models/       # Test GGUF files (downloaded separately, gitignored)
 ├── media/             # Visual identity system and design assets
-├── Cargo.toml         # Workspace root (10 members)
+├── Cargo.toml         # Workspace root (14 members)
 ├── rustfmt.toml       # Formatting: max_width=100, 4-space indent
 └── deny.toml          # License policy (MIT, Apache-2.0, Unlicense)
 ```
@@ -94,6 +98,55 @@ cargo bench -p ggml-cpu --bench cpu_bench
 cargo bench -p llama --bench kv_cache
 cargo bench -p llama --bench attention
 ```
+
+## Desktop UI (llama-ui)
+
+A native Rust desktop application for interactive LLM inference with a full-screen GUI.
+
+### Building llama-ui
+
+```bash
+# Build the UI (requires iced 0.13.1)
+cargo build -p llama-ui --release
+
+# Run the UI
+./target/release/llama-ui
+```
+
+### Features
+
+- **Multi-pane chat interface** — Multiple independent conversations with different models
+- **Model management** — Download, scan, and select GGUF models
+- **Session persistence** — Save/load chat history in JSON, Markdown, or plain text
+- **Keyboard shortcuts**:
+  - `Escape` — Close settings panel
+  - `F11` — Toggle fullscreen
+  - `Ctrl+Enter` — Send message (in active pane)
+- **Real-time streaming** — SSE-based token streaming with visual feedback
+- **Resource monitoring** — Context usage warnings (80%) and alerts (95%)
+- **Sandbox isolation** — Optional cgroup resource limits (memory, CPU)
+- **Chat templates** — Support for ChatML, Llama, Gemma, StableLM formats
+
+### Architecture
+
+The UI is built on:
+- **`llama-ui`** — Main application (iced 0.13.1 function-based API)
+- **`llama-ui-models`** — Model discovery and metadata
+- **`llama-ui-session`** — Chat history and export (JSON/MD/plain)
+- **`llama-ui-sandbox-client`** — Sandbox server spawning with resource limits
+- **`llama-server`** — HTTP backend (streaming `/completion`, `/health`, `/tokenize`)
+
+### Integration Tests
+
+```bash
+# Run UI integration tests (requires test-models/tiny-llm-Q4_K_M.gguf)
+cargo test --test integration_test -p llama-ui
+```
+
+Tests verify:
+- Model entry creation and metadata
+- Session creation and message management
+- Export to JSON and Markdown formats
 
 ## New Crates (Configuration & Error Handling)
 
