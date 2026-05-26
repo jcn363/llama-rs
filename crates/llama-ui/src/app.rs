@@ -9,7 +9,7 @@ use std::time::Duration;
 
 use futures::sink::SinkExt;
 use iced::stream;
-use iced::widget::{button, column, container, scrollable, text, text_input};
+use iced::widget::{button, column, container, row, scrollable, slider, text, text_input};
 use iced::{Element, Fill, Subscription, Task, Theme};
 use llama_ui_models::Manifest;
 use llama_ui_sandbox_client::SandboxClient;
@@ -43,6 +43,15 @@ pub struct LlamaApp {
     total_tokens: usize,
     /// Model's context limit (n_ctx).
     context_limit: usize,
+    // ─── M7: Sampler parameters ────────────────────────────
+    /// Sampling temperature.
+    temperature: f32,
+    /// Top-k sampling (0 = disabled).
+    top_k: f32,
+    /// Top-p nucleus sampling.
+    top_p: f32,
+    /// Repeat penalty.
+    repeat_penalty: f32,
 }
 
 /// Model information for display.
@@ -89,6 +98,10 @@ impl Default for LlamaApp {
             cancelled: Arc::new(AtomicBool::new(false)),
             total_tokens: 0,
             context_limit: 4096,
+            temperature: 0.8,
+            top_k: 40.0,
+            top_p: 0.95,
+            repeat_penalty: 1.1,
         }
     }
 }
@@ -122,6 +135,15 @@ pub enum Message {
     StreamChunk(String),
     /// SSE stream finished cleanly.
     StreamEnded,
+    // ─── M7: Sampler slider messages ────────────────────────
+    /// Temperature slider changed.
+    TemperatureChanged(f32),
+    /// Top-k slider changed.
+    TopKChanged(f32),
+    /// Top-p slider changed.
+    TopPChanged(f32),
+    /// Repeat penalty slider changed.
+    RepeatPenaltyChanged(f32),
 }
 
 /// Update the application state.
@@ -222,6 +244,10 @@ pub fn update(state: &mut LlamaApp, message: Message) -> Task<Message> {
 
             let addr = state.server_address.clone();
             let max_tokens = 512usize;
+            let temperature = state.temperature;
+            let top_k = state.top_k;
+            let top_p = state.top_p;
+            let repeat_penalty = state.repeat_penalty;
 
             Task::perform(
                 async move {
@@ -232,6 +258,10 @@ pub fn update(state: &mut LlamaApp, message: Message) -> Task<Message> {
                             "prompt": prompt,
                             "max_tokens": max_tokens,
                             "stream": false,
+                            "temperature": temperature,
+                            "top_k": top_k,
+                            "top_p": top_p,
+                            "repeat_penalty": repeat_penalty,
                         }))
                         .send()
                         .await
@@ -387,7 +417,61 @@ pub fn update(state: &mut LlamaApp, message: Message) -> Task<Message> {
             state.is_streaming = false;
             Task::none()
         }
+
+        // ─── M7: Sampler slider changes ──────────────────────
+        Message::TemperatureChanged(val) => {
+            state.temperature = val;
+            fire_update_sampler(state)
+        }
+        Message::TopKChanged(val) => {
+            state.top_k = val;
+            fire_update_sampler(state)
+        }
+        Message::TopPChanged(val) => {
+            state.top_p = val;
+            fire_update_sampler(state)
+        }
+        Message::RepeatPenaltyChanged(val) => {
+            state.repeat_penalty = val;
+            fire_update_sampler(state)
+        }
     }
+}
+
+/// Send the current sampler config to the server.
+fn fire_update_sampler(state: &LlamaApp) -> Task<Message> {
+    if state.server_address.is_empty() {
+        return Task::none();
+    }
+    let addr = state.server_address.clone();
+    let temperature = state.temperature;
+    let top_k = state.top_k;
+    let top_p = state.top_p;
+    let repeat_penalty = state.repeat_penalty;
+
+    Task::perform(
+        async move {
+            let client = reqwest::Client::new();
+            let resp = client
+                .post(format!("{}/samplers", addr))
+                .json(&serde_json::json!({
+                    "temperature": temperature,
+                    "top_k": top_k,
+                    "top_p": top_p,
+                    "repeat_penalty": repeat_penalty,
+                }))
+                .send()
+                .await
+                .map_err(|e| e.to_string())?;
+            let body: serde_json::Value =
+                resp.json().await.map_err(|e| e.to_string())?;
+            Ok::<String, String>(body.to_string())
+        },
+        |result| match result {
+            Ok(_) => Message::SandboxStatus("Samplers updated".to_string()),
+            Err(e) => Message::Error(e),
+        },
+    )
 }
 
 /// View the application UI.
@@ -413,6 +497,10 @@ pub fn subscription(state: &LlamaApp) -> Subscription<Message> {
 
     let addr = state.server_address.clone();
     let cancelled = state.cancelled.clone();
+    let temperature = state.temperature;
+    let top_k = state.top_k;
+    let top_p = state.top_p;
+    let repeat_penalty = state.repeat_penalty;
 
     // Build prompt from full conversation history
     let prompt = state
@@ -453,6 +541,10 @@ pub fn subscription(state: &LlamaApp) -> Subscription<Message> {
                         "prompt": prompt,
                         "max_tokens": 512,
                         "stream": true,
+                        "temperature": temperature,
+                        "top_k": top_k,
+                        "top_p": top_p,
+                        "repeat_penalty": repeat_penalty,
                     }))
                     .send()
                     .await
@@ -593,6 +685,48 @@ fn view_chat(state: &LlamaApp) -> Element<'_, Message> {
         );
     }
 
+    // ─── M7: Sampler sliders ────────────────────────────────
+    children.push(
+        row![
+            text(format!("T: {:.2}", state.temperature)).size(12),
+            slider(0.0..=2.0, state.temperature, Message::TemperatureChanged)
+                .step(0.05)
+                .width(Fill),
+        ]
+        .spacing(4)
+        .into(),
+    );
+    children.push(
+        row![
+            text(format!("K: {}", state.top_k)).size(12),
+            slider(0.0..=100.0, state.top_k, Message::TopKChanged)
+                .step(1.0)
+                .width(Fill),
+        ]
+        .spacing(4)
+        .into(),
+    );
+    children.push(
+        row![
+            text(format!("P: {:.2}", state.top_p)).size(12),
+            slider(0.00..=1.00, state.top_p, Message::TopPChanged)
+                .step(0.01)
+                .width(Fill),
+        ]
+        .spacing(4)
+        .into(),
+    );
+    children.push(
+        row![
+            text(format!("RP: {:.2}", state.repeat_penalty)).size(12),
+            slider(1.00..=2.00, state.repeat_penalty, Message::RepeatPenaltyChanged)
+                .step(0.05)
+                .width(Fill),
+        ]
+        .spacing(4)
+        .into(),
+    );
+
     // Input area
     children.push(
         text_input("Type your message...", &state.input_text)
@@ -732,6 +866,10 @@ impl LlamaApp {
                         cancelled: Arc::new(AtomicBool::new(false)),
                         total_tokens: 0,
                         context_limit: 4096,
+                        temperature: 0.8,
+                        top_k: 40.0,
+                        top_p: 0.95,
+                        repeat_penalty: 1.1,
                     },
                     Task::none(),
                 )
