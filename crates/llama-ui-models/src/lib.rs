@@ -4,7 +4,7 @@
 
 #![deny(missing_docs)]
 
-use error::Result;
+use common::error::{Result, Error};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
@@ -41,17 +41,17 @@ pub struct Manifest {
 impl Manifest {
     /// Load manifest from a JSON file path.
     pub fn load(path: &PathBuf) -> Result<Self> {
-        let content = std::fs::read_to_string(path).map_err(error::Error::Io)?;
+        let content = std::fs::read_to_string(path).map_err(Error::Io)?;
         let manifest: Self =
-            serde_json::from_str(&content).map_err(|e| error::Error::Parse(e.to_string()))?;
+            serde_json::from_str(&content).map_err(|e| Error::Parse(e.to_string()))?;
         Ok(manifest)
     }
 
     /// Save manifest to a JSON file path.
     pub fn save(&self, path: &PathBuf) -> Result<()> {
         let content =
-            serde_json::to_string_pretty(self).map_err(|e| error::Error::Parse(e.to_string()))?;
-        std::fs::write(path, content).map_err(error::Error::Io)?;
+            serde_json::to_string_pretty(self).map_err(|e| Error::Parse(e.to_string()))?;
+        std::fs::write(path, content).map_err(Error::Io)?;
         Ok(())
     }
 
@@ -105,7 +105,7 @@ impl Manifest {
     /// Extract GGUF metadata from a model file and update the manifest entry in place.
     pub fn extract_metadata(path: &PathBuf, entry: &mut ModelEntry) -> Result<()> {
         let reader =
-            gguf::GgufReader::from_file(path).map_err(|e| error::Error::GgufMeta(e.to_string()))?;
+            gguf::GgufReader::from_file(path).map_err(|e| Error::GgufMeta(e.to_string()))?;
 
         // Read architecture from GGUF metadata
         if let Some(gguf::GgufValue::Str(s)) = reader.get_kv("general.architecture") {
@@ -156,13 +156,13 @@ pub async fn download_model(url: &str, dest: &PathBuf, progress: impl Fn(u64, u6
     let client = reqwest::Client::builder()
         .user_agent("llama-ui/0.1")
         .build()
-        .map_err(|e| error::Error::Network(e.to_string()))?;
+        .map_err(|e| Error::Network(e.to_string()))?;
 
     let response = client
         .get(url)
         .send()
         .await
-        .map_err(|e| error::Error::Network(e.to_string()))?;
+        .map_err(|e| Error::Network(e.to_string()))?;
     let total = response.content_length().unwrap_or(0);
     let mut downloaded: u64 = 0;
 
@@ -171,7 +171,7 @@ pub async fn download_model(url: &str, dest: &PathBuf, progress: impl Fn(u64, u6
 
     use futures::StreamExt;
     while let Some(chunk) = stream.next().await {
-        let chunk = chunk.map_err(|e| error::Error::Network(e.to_string()))?;
+        let chunk = chunk.map_err(|e| Error::Network(e.to_string()))?;
         file.write_all(&chunk)?;
         downloaded += chunk.len() as u64;
         progress(downloaded, total);
