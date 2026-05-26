@@ -30,10 +30,6 @@ pub mod args {
         #[arg(long, default_value_t = 512)]
         pub batch_size: usize,
 
-        /// Use CUDA acceleration if available.
-        #[arg(long, default_value_t = false)]
-        pub use_cuda: bool,
-
         /// Minimum matrix rows for parallel matmul (default: 128).
         #[arg(long, default_value_t = 128)]
         pub parallel_min_rows: usize,

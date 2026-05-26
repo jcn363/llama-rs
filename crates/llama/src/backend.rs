@@ -36,26 +36,21 @@ pub enum BackendType {
 /// Create a hardware backend based on the configuration.
 ///
 /// Selection priority:
-/// 1. If `BackendType::Cuda` or `Auto` with `use_cuda = true`, try CUDA.
-/// 2. Fall back to CPU.
+/// 1. `BackendType::Auto` — try CUDA, fall back to CPU.
+/// 2. `BackendType::Cuda` — use CUDA, panic if unavailable.
+/// 3. `BackendType::Cpu` — use CPU unconditionally.
 ///
 /// The returned [`Backend`] trait object can be used for all tensor
 /// operations in the inference pipeline.
 ///
 /// # Panics
 ///
-/// Panics if CPU backend creation fails (should never happen).
+/// Panics if the requested backend cannot be created.
 #[must_use]
 pub fn create_backend(config: &ModelConfig) -> Arc<dyn Backend> {
-    // Determine whether to attempt CUDA.
-    let try_cuda = match config.backend_type {
-        BackendType::Cuda => true,
-        BackendType::Auto | BackendType::Cpu => config.use_cuda,
-    };
-
-    // Attempt CUDA backend if requested and feature-enabled.
+    // Attempt CUDA for Auto or Cuda modes (only when feature is enabled).
     #[cfg(feature = "cuda")]
-    if try_cuda {
+    if config.backend_type != BackendType::Cpu {
         match ggml_cuda::CudaBackend::new() {
             Ok(cuda) => {
                 let info = cuda.info();
@@ -67,14 +62,13 @@ pub fn create_backend(config: &ModelConfig) -> Arc<dyn Backend> {
                 return Arc::new(cuda);
             }
             Err(e) => {
-                tracing::warn!("CUDA requested but unavailable: {e}");
+                if config.backend_type == BackendType::Cuda {
+                    panic!("CUDA backend explicitly requested but unavailable: {e}");
+                }
+                tracing::warn!("CUDA unavailable, falling back to CPU: {e}");
             }
         }
     }
-
-    // Suppress unused-variable warning when cuda feature is disabled.
-    #[cfg(not(feature = "cuda"))]
-    let _ = try_cuda;
 
     // Fall back to CPU.
     let cpu = CpuBackend::new_with_min_rows(

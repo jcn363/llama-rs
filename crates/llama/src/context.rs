@@ -32,9 +32,7 @@ fn quant_type_from_ggml(t: GgmlType) -> Option<QuantType> {
 pub struct ModelConfig {
     /// Number of inference threads.
     pub n_threads: usize,
-    /// Whether to use CUDA for matmul (legacy flag, see `backend_type`).
-    pub use_cuda: bool,
-    /// Backend type selection (Auto, Cpu, Cuda). Overrides `use_cuda`.
+    /// Backend type selection (Auto, Cpu, Cuda).
     pub backend_type: BackendType,
     /// Context window size.
     pub n_ctx: usize,
@@ -54,7 +52,6 @@ impl Default for ModelConfig {
     fn default() -> Self {
         Self {
             n_threads: 4,
-            use_cuda: false,
             backend_type: BackendType::Auto,
             n_ctx: 2048,
             n_batch: 512,

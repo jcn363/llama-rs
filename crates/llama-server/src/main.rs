@@ -190,7 +190,6 @@ async fn main() -> anyhow::Result<()> {
     };
     let config = ModelConfig {
         n_threads,
-        use_cuda: common.use_cuda,
         backend_type,
         n_ctx: common.ctx_size,
         n_batch: common.batch_size,

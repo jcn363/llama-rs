@@ -1,4 +1,4 @@
-use llama::{InferenceContext, Model, ModelConfig};
+use llama::{BackendType, InferenceContext, Model, ModelConfig};
 use std::io::{Seek, Write};
 use std::sync::Arc;
 
@@ -153,7 +153,7 @@ fn test_model_config_default() {
     assert_eq!(config.n_threads, 4);
     assert_eq!(config.n_ctx, 2048);
     assert_eq!(config.n_batch, 512);
-    assert!(!config.use_cuda);
+    assert_eq!(config.backend_type, llama::BackendType::Auto);
 }
 
 #[test]

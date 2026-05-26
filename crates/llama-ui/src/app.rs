@@ -9,7 +9,9 @@ use std::time::Duration;
 
 use futures::sink::SinkExt;
 use iced::stream;
-use iced::widget::{button, column, container, row, scrollable, slider, text, text_input};
+use iced::widget::{
+    button, column, container, pick_list, row, scrollable, slider, text, text_input,
+};
 use iced::{Element, Fill, Subscription, Task, Theme};
 use llama_ui_models::Manifest;
 use llama_ui_sandbox_client::SandboxClient;
@@ -43,6 +45,9 @@ pub struct LlamaApp {
     total_tokens: usize,
     /// Model's context limit (n_ctx).
     context_limit: usize,
+    // ─── M8: Backend ────────────────────────────────────────
+    /// Backend in use ("auto", "cpu", "cuda").
+    backend: String,
     // ─── M7: Sampler parameters ────────────────────────────
     /// Sampling temperature.
     temperature: f32,
@@ -98,6 +103,7 @@ impl Default for LlamaApp {
             cancelled: Arc::new(AtomicBool::new(false)),
             total_tokens: 0,
             context_limit: 4096,
+            backend: "auto".to_string(),
             temperature: 0.8,
             top_k: 40.0,
             top_p: 0.95,
@@ -135,6 +141,9 @@ pub enum Message {
     StreamChunk(String),
     /// SSE stream finished cleanly.
     StreamEnded,
+    // ─── M8: Backend changed ────────────────────────────────
+    /// Backend selection changed.
+    BackendChanged(String),
     // ─── M7: Sampler slider messages ────────────────────────
     /// Temperature slider changed.
     TemperatureChanged(f32),
@@ -165,11 +174,12 @@ pub fn update(state: &mut LlamaApp, message: Message) -> Task<Message> {
 
             let model = state.models[state.selected_model].clone();
 
+            let backend = state.backend.clone();
             Task::perform(
                 async move {
                     let binary = SandboxClient::resolve_binary().map_err(|e| e.to_string())?;
                     let mut client =
-                        SandboxClient::new(binary, model.path, "auto", "llama-ui");
+                        SandboxClient::new(binary, model.path, &backend, "llama-ui");
                     client.spawn().map_err(|e| e.to_string())?;
                     client
                         .wait_for_ready(Duration::from_secs(30))
@@ -197,7 +207,7 @@ pub fn update(state: &mut LlamaApp, message: Message) -> Task<Message> {
             match SandboxClient::resolve_binary() {
                 Ok(binary) => {
                     let mut client =
-                        SandboxClient::new(binary, model.path, "auto", "llama-ui");
+                        SandboxClient::new(binary, model.path, &state.backend, "llama-ui");
                     // We can't re-spawn, but we store it for health/stop
                     client.port = port;
                     state.sandbox = Some(client);
@@ -416,6 +426,44 @@ pub fn update(state: &mut LlamaApp, message: Message) -> Task<Message> {
             state.state = AppState::Error(err);
             state.is_streaming = false;
             Task::none()
+        }
+
+        // ─── M8: Backend changed — restart sandbox ───────────
+        Message::BackendChanged(backend) => {
+            if backend == state.backend {
+                return Task::none();
+            }
+            // Stop existing sandbox
+            if let Some(ref mut client) = state.sandbox {
+                client.stop();
+            }
+            state.sandbox = None;
+            state.backend = backend;
+            state.server_address.clear();
+            state.state = AppState::Loading;
+            state.status = format!("Restarting with {} backend...", state.backend);
+
+            let model = state.models[state.selected_model].clone();
+            let backend = state.backend.clone();
+
+            Task::perform(
+                async move {
+                    let binary =
+                        SandboxClient::resolve_binary().map_err(|e| e.to_string())?;
+                    let mut client =
+                        SandboxClient::new(binary, model.path, &backend, "llama-ui");
+                    client.spawn().map_err(|e| e.to_string())?;
+                    client
+                        .wait_for_ready(Duration::from_secs(30))
+                        .await
+                        .map_err(|e| e.to_string())?;
+                    Ok::<u16, String>(client.port)
+                },
+                |result| match result {
+                    Ok(port) => Message::SandboxStarted(port),
+                    Err(e) => Message::Error(e),
+                },
+            )
         }
 
         // ─── M7: Sampler slider changes ──────────────────────
@@ -657,6 +705,21 @@ fn view_chat(state: &LlamaApp) -> Element<'_, Message> {
         }
     }
 
+    // Backend selector
+    children.push(
+        row![
+            text("Backend:").size(14),
+            pick_list(
+                vec!["auto", "cpu", "cuda"],
+                Some(state.backend.as_str()),
+                |s: &str| Message::BackendChanged(s.to_string()),
+            )
+            .width(150),
+        ]
+        .spacing(8)
+        .into(),
+    );
+
     // Messages
     for msg in &state.session.messages {
         let role = match msg.role {
@@ -866,6 +929,7 @@ impl LlamaApp {
                         cancelled: Arc::new(AtomicBool::new(false)),
                         total_tokens: 0,
                         context_limit: 4096,
+                        backend: "auto".to_string(),
                         temperature: 0.8,
                         top_k: 40.0,
                         top_p: 0.95,

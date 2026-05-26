@@ -90,22 +90,21 @@ Modified:
 > (`UiConfig`, TOML deps, new error variants). The plan's §12 file list and
 > §8 estimates have been adjusted accordingly.
 >
-> **Status update (Round 6 — 2026-05-26):** All M1–M5a implementation is
-> **substantially complete**:
-> - M1 scaffolding: ✅ Done (4 new crates, workspace deps, UiConfig, error variants)
-> - M2 codebase fixes: ✅ Done (SamplingConfig unification, sampler passthrough,
->   `generate_from_tokens`, O(n²) fix, `/samplers`, `repeat_penalty`)
-> - M3 model management: ✅ Done (download, manifest, GGUF metadata, tests)
-> - M4 session + templates: ✅ Done (ChatMessage/Session, export/import,
->   `chat_templates` with minijinja, tests)
-> - M5a sandbox-client: ✅ Done (spawn, health, ports, cgroup, graceful shutdown)
-> - **M5 GUI skeleton: ⚠️ Code exists but does NOT compile** — iced 0.13 API
->   breakage in `app.rs`. The `Application` trait, `Command` module, and
->   `Appearance` type all changed. This is the critical path blocker.
-> - Remaining work: M5 iced API fix (~0.5d), then M6–M14 (~9d).
-> - 11 of 16 known issues resolved. Remaining open issues: #3 (async model load),
->   #7 (CUDA build docs), #9 (context overflow), #10 (cgroup polkit), #12 (CUDA SDK CI),
->   #16 (workspace lints/profile regression).
+> **Status update (Round 7 — 2026-05-26):** M0–M8 are done (7 of 14 milestones).
+> `llama-ui` compiles with zero errors/warnings. All workspace tests pass.
+> - M1 scaffolding: ✅ Done
+> - M2 codebase fixes: ✅ Done
+> - M3 model management: ✅ Done
+> - M4 session + templates: ✅ Done
+> - M5a sandbox-client: ✅ Done
+> - M5 GUI skeleton: ✅ Done (iced 0.13 API fix)
+> - M6 Streaming + tokenizer: ✅ Done
+> - M7 Sampling sliders: ✅ Done
+> - **M8 Backend dropdown: ✅ Done** (`--backend` sole source of truth, pick_list in chat header)
+> - Remaining work: M9–M14 (~7d).
+> - Known issues resolved: 12 of 16 (#15 `use_cuda` redundancy fixed in M8).
+>   Remaining open: #3 (async model load), #7 (CUDA build docs), #9 (context overflow),
+>   #10 (cgroup polkit), #12 (CUDA SDK CI), #16 (workspace lints/profile regression).
 
 ### Dependencies to add
 
@@ -293,11 +292,8 @@ Managed by `crates/llama-ui-sandbox-client` (a dedicated crate extracted from th
 
 On change: restart `llama-server` with `--backend <name>`. If unavailable → warning toast, fall back to CPU.
 
-> **Redundancy note:** `llama-server`'s `Args` has both `common::CommonArgs::use_cuda` (bool)
-> and its own `backend` (string). These are two ways to express the same thing. The
-> `use_cuda` field in `CommonArgs` is never read by `llama-server` — the `--backend`
-> arg takes precedence. During M1/M2, consider deprecating `use_cuda` in `CommonArgs`
-> to avoid user confusion, or make `--backend` the sole source of truth.
+> **Resolved (M8):** `use_cuda` removed from `CommonArgs` and `ModelConfig`.
+> `--backend` is the sole source of truth for backend selection.
 
 ---
 
@@ -420,7 +416,7 @@ New variants to add to `crates/error::Error`:
 | **M5a – Sandbox-client crate** | Spawn, health check, port allocation, crash detection, graceful shutdown, cancel token | M1 | 1.5 days | ✅ **Done** — `llama-ui-sandbox-client` crate with `SandboxClient`. Spawn, health, port allocation, systemd-run cgroup, graceful shutdown (SIGTERM→SIGKILL), crash probe. Unit tests pass. |
 | **M6 – Streaming + tokenizer** | SSE subscription, `/tokenize` endpoint, token display, context‑overflow tracking, cancel‑in‑flight. | M5 | 1 day | ✅ **Done** — `/tokenize` endpoint on `llama-server`. SSE `iced::Subscription`. Non-streaming send/receive. Token display + context overflow warning (80%→banner, 95%→alert). Cancel via `Arc<AtomicBool>`. |
 | **M7 – Sampling sliders** | Bind to unified `SamplingConfig`, POST to `/samplers` | M5, M2 | 0.5 day | ✅ **Done** — Temperature/Top-K/Top-P/RepeatPenalty sliders in chat view. Each change POSTs to `/samplers`. Params included in `/completion` requests. |
-| M8 – Backend dropdown | Detection logic wired to sandbox restart | M5 | 0.5 day | ⏳ **Not started** |
+| M8 – Backend dropdown | Detection logic wired to sandbox restart | M5 | 0.5 day | ✅ **Done** — backend pick_list dropdown in chat header; stops sandbox, restarts with `--backend` |
 | M9 – Session export/import UI | Button wiring, format selection, file dialogs | M4, M5 | 1 day | ⏳ **Not started** — library code complete, needs UI wiring |
 | M10 – Dual‑model | Second pane, two sandbox instances, port mgmt, VRAM check, sync toggle | M5, M5a | 2.5 days | ⏳ **Not started** |
 | M11 – Sandbox resource UI | Memory/CPU sliders, cgroup (with fallback), UI overlay | M5 | 1 day | ⏳ **Not started** — sandbox-client crate has `ResourceLimits`, needs UI |
@@ -428,7 +424,7 @@ New variants to add to `crates/error::Error`:
 | M13 – Polish | Error dialogs, loading spinner, auto‑scroll, keyboard shortcuts, template wiring (from M4), edge cases | all above | 2 days | ⏳ **Not started** |
 | M14 – CI & docs | Tiny test model in `test-models/`, integration tests, CI pipeline, README | all above | 1.5 days | ⏳ **Not started** |
 
-**Remaining effort estimate:** ~7.5 person-days — M0–M7 are done (6 of 14 milestones). Remaining: M8–M14.
+**Remaining effort estimate:** ~7 person-days — M0–M8 are done (7 of 14 milestones). Remaining: M9–M14.
 
 ### Dependency graph
 
@@ -440,9 +436,11 @@ M0 ─→ M1 ─┬─→ M3 ─┐   ✅ Done
                     ↓
                  M5  ✅ Done
                     ↓
-              M6 → M7   ✅ Done
-                    ↓
-              M8 → M9 → M10 → M11 → M12 → M13 → M14
+               M6 → M7   ✅ Done
+                     ↓
+               M8       ✅ Done
+                     ↓
+               M9 → M10 → M11 → M12 → M13 → M14
 ```
 
 ---
@@ -493,7 +491,7 @@ can run in CI.
 | `systemd-run` requires root | Limits don't apply | Medium | Detect + skip. Document setup. |
 | GUI framework learning curve | M5 slips | Medium | Prototype in M0. |
 | Workspace lints & release profile removed (issue #16) | CI may fail, release build quality | Medium | Re‑evaluate and restore if CI fails. May be intentional from IMPRO merge — verify. |
-| `use_cuda` vs `--backend` redundancy in `CommonArgs` | User confusion, dead code | Low | Deprecate `use_cuda` in `CommonArgs` during M1, use `--backend` as sole source. |
+| `use_cuda` vs `--backend` redundancy in `CommonArgs` | User confusion, dead code | Low | ✅ **Resolved (M8)** — `use_cuda` removed from `CommonArgs` and `ModelConfig`. `--backend` is sole source of truth. |
 | Model conversion external | Poor UX | High | Pre‑converted `.gguf` as primary flow. |
 | Dual‑model VRAM exhaustion | OOM | Medium | Estimate + warn + hard block. |
 | Dual‑model complexity under‑estimated (2.5d) | M10 slips | Medium | Split into M10a (basic dual pane) + M10b (sync toggle, VRAM check). |
@@ -574,15 +572,9 @@ can run in CI.
 
 ## 13. Next Steps
 
-> **Current state:** M0–M7 are done and committed (6 of 14 milestones). `llama-ui` compiles with zero errors/warnings. All workspace tests pass. Next: M8 – Backend dropdown.
+> **Current state:** M0–M8 are done and committed (7 of 14 milestones). `llama-ui` compiles with zero errors/warnings. All workspace tests pass. `--backend` is sole source of truth (removed redundant `use_cuda`). Next: M9 – Session export/import UI.
 
-1. **M8 — Backend dropdown** (0.5d). Detection logic wired to sandbox restart on switch.
-   - Detect available backends (CPU always, CUDA if `nvidia-smi` available)
-   - Dropdown in chat header to switch backend
-   - On change: stop sandbox → restart with `--backend <name>`
-   - On failure: fall back to CPU with warning toast
-
-2. **M9 — Session export/import UI** (1d). Button wiring for JSON/MD/plain export.
+1. **M9 — Session export/import UI** (1d). Button wiring for JSON/MD/plain export.
    - Export buttons use `llama-ui-session` library (format, serialisation)
    - `rfd` (rust file dialog) for save/open dialogs
    - Import: parse file → restore session state
