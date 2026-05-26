@@ -15,7 +15,8 @@ half = { workspace = true }
 thiserror = { workspace = true }
 
 [features]
-default = ["cuda"]
+default = []
+cuda = ["dep:cudarc", "cudarc/cuda-version-from-build-system"]
 cuda = ["dep:cudarc", "cudarc/cuda-version-from-build-system"]
 
 [dev-dependencies]

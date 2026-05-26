@@ -1,5 +1,18 @@
 [workspace]
 resolver = "2"
+
+[features]
+# Feature flags for optional backends and SIMD support
+default = ["cuda"]
+cuda = ["ggml-cuda"]
+cpu = ["ggml-cpu"]
+simd = []
+ui = ["llama-ui"]
+
+[profile.release]
+# Enable link‑time optimization and abort on panic for smaller, faster binaries
+lto = true
+panic = "abort"
 members = [
     "crates/gguf",
     "crates/ggml",
