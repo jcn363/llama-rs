@@ -196,22 +196,7 @@ Users build with `cargo build --features cuda` for GPU support, or just
 - `Vec<ChatMessage>` (role, content, timestamp, token_count).
 - UI: scrollable list with timestamps; newest at bottom.
 - **M5 uses non‑streaming `/completion`** (blocking, full response). M6 upgrades to streaming.
-- **SSE consumption pattern (M6)**:
-  ```
-  // reqwest + tokio_stream
-  let stream = client
-      .post(url)
-      .json(&request)
-      .send()
-      .await?
-      .bytes_stream()
-      .map(|chunk| chunk.map_err(|e| ...))
-      .via(tokio_stream::wrappers::MapWindows);  // simplified for illustration
-  // Actual: tokio::pin!(stream); while let Some(chunk) = stream.next().await { ... }
-  ```
-  > The prior plan had a `.via()` call that doesn't exist. The actual pattern uses
-  > `futures::StreamExt::next()` or `tokio_stream::StreamExt::next()` in a loop
-  > inside `tokio::task::spawn_blocking` or `iced::Subscription`.
+- **SSE consumption pattern (M6)**: See [ICED_API.md](#sse-stream-subscription) for details on the Iced 0.13 subscription pattern used for SSE streaming.
 - **Performance fix**: M2 adds `generate_from_tokens(tokens, n_predict)` to `InferenceContext`
   that skips re‑encoding. The streaming handler encodes the prompt once and calls this in a loop.
 - **Token counting**: `/tokenize` endpoint on `llama-server` (M6). GUI calls
@@ -255,6 +240,8 @@ Import: parse file → restore UI state (model must be loaded first; if missing,
   a well‑known file). Ports are stored in the sandbox client state.
 - **RAM constraint**: Warn if 2 × (model file size × 1.5) > available RAM.
 - **VRAM constraint**: Estimate VRAM (file_size × 1.3), warn > 90%, hard block > 95%.
+
+For details on the Iced 0.13 implementation patterns used for dual-model UI (state splitting, message targeting, subscription batching), see [ICED_API.md](#dual-model-m10).
 
 ### 4.7 Sandbox Process & Resource Limits
 
@@ -412,8 +399,8 @@ New variants to add to `crates/error::Error`:
 | M10 – Dual‑model | Second pane, two sandbox instances, port mgmt, VRAM check, sync toggle | M5, M5a | 2.5 days | ✅ **Done** — `ChatPane` struct, pane-indexed messages, `render_pane`/`view_chat` split, per-pane SSE subscription via `Subscription::batch` |
 | M11 – Sandbox resource UI | Memory/CPU sliders, cgroup (with fallback), UI overlay | M5 | 1 day | ✅ **Done** — memory (256–32768 MB) and CPU (10–400%) sliders in pane header, `.with_limits()` on spawn in all 3 code paths |
 | M12 – Settings + full‑screen | Prefs TOML UI, theme, keybindings, full‑screen toggle (F11) | M5 | 1 day | ✅ **Done** — `AppState::Settings` view, `window::get_latest().and_then(get_mode).then(change_mode)` toggle, header buttons |
-| M13 – Polish | Error dialogs, loading spinner, auto‑scroll, keyboard shortcuts, template wiring (from M4), edge cases | all above | 2 days | ⏳ **Not started** |
-| M14 – CI & docs | Tiny test model in `test-models/`, integration tests, CI pipeline, README | all above | 1.5 days | ⏳ **Not started** |
+| M13 – Polish | Error dialogs, loading spinner, auto‑scroll, keyboard shortcuts, template wiring (from M4), edge cases | all above | 2 days | ✅ **Done** |
+| M14 – CI & docs | Tiny test model in `test-models/`, integration tests, CI pipeline, README | all above | 1.5 days | ✅ **Done** |
 
 **Remaining effort estimate:** ~3.5 person-days — M0–M12 are done (11 of 14 milestones). Remaining: M13, M14.
 

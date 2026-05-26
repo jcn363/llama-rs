@@ -26,6 +26,9 @@ pub enum ChatTemplateError {
 /// ```
 ///
 /// Returns the rendered string ready to send to `/completion`.
+///
+/// # Errors
+/// Returns `ChatTemplateError` if the template cannot be rendered or is invalid.
 pub fn render_chat_template(
     system: &str,
     prompt: &str,
@@ -54,6 +57,7 @@ pub fn render_chat_template(
 }
 
 /// Get a predefined chat template for well-known architectures.
+#[must_use]
 pub fn get_builtin_template(architecture: &str) -> &'static str {
     match architecture {
         "chatml" | "phi3" | "phi3.5" | "qwen2" => {
@@ -77,6 +81,9 @@ pub fn get_builtin_template(architecture: &str) -> &'static str {
 
 /// Render a chat prompt using the built-in template for the given architecture.
 /// If `template_override` is provided, it takes precedence.
+///
+/// # Errors
+/// Returns `ChatTemplateError` if the template cannot be rendered or is invalid.
 pub fn render_with_architecture(
     system: &str,
     prompt: &str,
@@ -108,12 +115,7 @@ mod tests {
 
     #[test]
     fn test_llama_template() {
-        let result = render_chat_template(
-            "",
-            "Hello!",
-            get_builtin_template("llama"),
-        )
-        .unwrap();
+        let result = render_chat_template("", "Hello!", get_builtin_template("llama")).unwrap();
         assert!(result.contains("[INST]"));
         assert!(result.contains("Hello!"));
         assert!(result.contains("[/INST]"));

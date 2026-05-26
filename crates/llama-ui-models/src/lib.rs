@@ -41,17 +41,17 @@ pub struct Manifest {
 impl Manifest {
     /// Load manifest from a JSON file path.
     pub fn load(path: &PathBuf) -> Result<Self> {
-        let content = std::fs::read_to_string(path).map_err(|e| error::Error::Io(e))?;
-        let manifest: Self = serde_json::from_str(&content)
-            .map_err(|e| error::Error::Parse(e.to_string()))?;
+        let content = std::fs::read_to_string(path).map_err(error::Error::Io)?;
+        let manifest: Self =
+            serde_json::from_str(&content).map_err(|e| error::Error::Parse(e.to_string()))?;
         Ok(manifest)
     }
 
     /// Save manifest to a JSON file path.
     pub fn save(&self, path: &PathBuf) -> Result<()> {
-        let content = serde_json::to_string_pretty(self)
-            .map_err(|e| error::Error::Parse(e.to_string()))?;
-        std::fs::write(path, content).map_err(|e| error::Error::Io(e))?;
+        let content =
+            serde_json::to_string_pretty(self).map_err(|e| error::Error::Parse(e.to_string()))?;
+        std::fs::write(path, content).map_err(error::Error::Io)?;
         Ok(())
     }
 
@@ -104,14 +104,12 @@ impl Manifest {
 
     /// Extract GGUF metadata from a model file and update the manifest entry in place.
     pub fn extract_metadata(path: &PathBuf, entry: &mut ModelEntry) -> Result<()> {
-        let reader = gguf::GgufReader::from_file(path)
-            .map_err(|e| error::Error::GgufMeta(e.to_string()))?;
+        let reader =
+            gguf::GgufReader::from_file(path).map_err(|e| error::Error::GgufMeta(e.to_string()))?;
 
         // Read architecture from GGUF metadata
-        if let Some(val) = reader.get_kv("general.architecture") {
-            if let gguf::GgufValue::Str(s) = val {
-                entry.architecture = s.clone();
-            }
+        if let Some(gguf::GgufValue::Str(s)) = reader.get_kv("general.architecture") {
+            entry.architecture = s.clone();
         }
 
         // Read context length (may be stored under various keys depending on architecture)
@@ -141,9 +139,8 @@ impl Manifest {
 /// Guess quantization from a GGUF filename.
 fn guess_quantization(filename: &str) -> String {
     let patterns = [
-        "Q8_0", "Q6_K", "Q5_K_M", "Q5_K_S", "Q5_0", "Q4_K_M", "Q4_K_S", "Q4_0",
-        "Q3_K_M", "Q3_K_S", "Q3_K_L", "Q2_K", "IQ4_NL", "IQ3_S", "IQ2_S", "F16",
-        "F32",
+        "Q8_0", "Q6_K", "Q5_K_M", "Q5_K_S", "Q5_0", "Q4_K_M", "Q4_K_S", "Q4_0", "Q3_K_M", "Q3_K_S",
+        "Q3_K_L", "Q2_K", "IQ4_NL", "IQ3_S", "IQ2_S", "F16", "F32",
     ];
     for pat in &patterns {
         if filename.contains(pat) {
@@ -155,11 +152,7 @@ fn guess_quantization(filename: &str) -> String {
 
 /// Download a GGUF model file from HuggingFace or other URL.
 /// Calls `progress(downloaded, total)` for progress reporting.
-pub async fn download_model(
-    url: &str,
-    dest: &PathBuf,
-    progress: impl Fn(u64, u64),
-) -> Result<()> {
+pub async fn download_model(url: &str, dest: &PathBuf, progress: impl Fn(u64, u64)) -> Result<()> {
     let client = reqwest::Client::builder()
         .user_agent("llama-ui/0.1")
         .build()

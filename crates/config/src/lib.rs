@@ -7,7 +7,6 @@
 
 use std::env;
 use std::path::PathBuf;
-use toml;
 
 /// Central configuration for the application (CLI/server).
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -35,21 +35,12 @@ pub enum SandboxError {
 }
 
 /// Resource limits for a sandboxed server.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ResourceLimits {
     /// Memory limit in MB (0 = no limit).
     pub memory_mb: u64,
     /// CPU quota percentage (0 = no limit).
     pub cpu_percent: u8,
-}
-
-impl Default for ResourceLimits {
-    fn default() -> Self {
-        Self {
-            memory_mb: 0,
-            cpu_percent: 0,
-        }
-    }
 }
 
 /// Runtime state of a sandboxed llama-server.
@@ -184,52 +175,50 @@ impl SandboxClient {
             .stderr(Stdio::piped());
 
         // Apply resource limits via systemd-run if available
-        if self.limits.memory_mb > 0 || self.limits.cpu_percent > 0 {
-            if cfg!(target_os = "linux") {
-                // Try to detect systemd-run availability
-                let has_systemd_run = Command::new("which")
-                    .arg("systemd-run")
-                    .stdout(Stdio::null())
-                    .stderr(Stdio::null())
-                    .status()
-                    .ok()
-                    .map(|s| s.success())
-                    .unwrap_or(false);
+        if (self.limits.memory_mb > 0 || self.limits.cpu_percent > 0) && cfg!(target_os = "linux") {
+            // Try to detect systemd-run availability
+            let has_systemd_run = Command::new("which")
+                .arg("systemd-run")
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .status()
+                .ok()
+                .map(|s| s.success())
+                .unwrap_or(false);
 
-                if has_systemd_run {
-                    let mut sd_cmd = Command::new("systemd-run");
-                    sd_cmd.arg("--scope");
-                    sd_cmd.arg("--user");
-                    sd_cmd.arg("-q");
-                    if self.limits.memory_mb > 0 {
-                        let mem_arg = format!("MemoryMax={}M", self.limits.memory_mb);
-                        sd_cmd.arg("-p");
-                        sd_cmd.arg(&mem_arg);
-                    }
-                    if self.limits.cpu_percent > 0 {
-                        let cpu_arg = format!("CPUQuota={}%", self.limits.cpu_percent);
-                        sd_cmd.arg("-p");
-                        sd_cmd.arg(&cpu_arg);
-                    }
-                    sd_cmd.arg(&self.binary_path);
-                    sd_cmd.arg("-m").arg(&self.model_path);
-                    sd_cmd.arg("--port").arg(self.port.to_string());
-                    sd_cmd.arg("--host").arg("127.0.0.1");
-                    sd_cmd.arg("--backend").arg(&self.backend);
-                    sd_cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
-                    cmd = sd_cmd;
-                } else {
-                    tracing::warn!(
-                        tag = %self.tag,
-                        "systemd-run not available, skipping resource limits"
-                    );
+            if has_systemd_run {
+                let mut sd_cmd = Command::new("systemd-run");
+                sd_cmd.arg("--scope");
+                sd_cmd.arg("--user");
+                sd_cmd.arg("-q");
+                if self.limits.memory_mb > 0 {
+                    let mem_arg = format!("MemoryMax={}M", self.limits.memory_mb);
+                    sd_cmd.arg("-p");
+                    sd_cmd.arg(&mem_arg);
                 }
+                if self.limits.cpu_percent > 0 {
+                    let cpu_arg = format!("CPUQuota={}%", self.limits.cpu_percent);
+                    sd_cmd.arg("-p");
+                    sd_cmd.arg(&cpu_arg);
+                }
+                sd_cmd.arg(&self.binary_path);
+                sd_cmd.arg("-m").arg(&self.model_path);
+                sd_cmd.arg("--port").arg(self.port.to_string());
+                sd_cmd.arg("--host").arg("127.0.0.1");
+                sd_cmd.arg("--backend").arg(&self.backend);
+                sd_cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
+                cmd = sd_cmd;
+            } else {
+                tracing::warn!(
+                    tag = %self.tag,
+                    "systemd-run not available, skipping resource limits"
+                );
             }
         }
 
-        let child = cmd.spawn().map_err(|e| {
-            SandboxError::Spawn(format!("Failed to start llama-server: {e}"))
-        })?;
+        let child = cmd
+            .spawn()
+            .map_err(|e| SandboxError::Spawn(format!("Failed to start llama-server: {e}")))?;
 
         self.child = Some(child);
         self.status = SandboxStatus::Starting;
@@ -371,7 +360,10 @@ mod tests {
         let model = PathBuf::from("/tmp/model.gguf");
         let client = SandboxClient::new(binary.clone(), model.clone(), "cpu", "tag1");
         assert!(matches!(client.status, SandboxStatus::Stopped));
-        let limits = ResourceLimits { memory_mb: 512, cpu_percent: 50 };
+        let limits = ResourceLimits {
+            memory_mb: 512,
+            cpu_percent: 50,
+        };
         let client2 = client.with_limits(limits.clone());
         assert_eq!(client2.limits.memory_mb, 512);
         assert_eq!(client2.limits.cpu_percent, 50);

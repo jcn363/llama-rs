@@ -5,7 +5,6 @@
 mod app;
 
 use app::LlamaApp;
-use tracing_subscriber;
 
 fn main() {
     tracing_subscriber::fmt()

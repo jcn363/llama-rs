@@ -123,6 +123,9 @@ mod tests {
     #[test]
     fn error_gguf_meta_should_format_correctly() {
         let err = Error::GgufMeta("unknown architecture".into());
-        assert_eq!(format!("{err}"), "GGUF metadata error: unknown architecture");
+        assert_eq!(
+            format!("{err}"),
+            "GGUF metadata error: unknown architecture"
+        );
     }
 }

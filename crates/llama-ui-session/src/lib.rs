@@ -122,14 +122,20 @@ impl Session {
     /// Export session as human-readable Markdown.
     pub fn export_markdown(&self, path: &PathBuf) -> Result<(), ExportError> {
         let mut md = String::new();
-        md.push_str(&format!("# Chat Session\n\n**Model:** {}\n\n", self.model_id));
+        md.push_str(&format!(
+            "# Chat Session\n\n**Model:** {}\n\n",
+            self.model_id
+        ));
         for msg in &self.messages {
             let role = match msg.role {
                 Role::User => "## User",
                 Role::Assistant => "## Assistant",
                 Role::System => "## System",
             };
-            md.push_str(&format!("\n{} ({})\n\n{}\n", role, msg.timestamp, msg.content));
+            md.push_str(&format!(
+                "\n{} ({})\n\n{}\n",
+                role, msg.timestamp, msg.content
+            ));
         }
         std::fs::write(path, md)?;
         Ok(())

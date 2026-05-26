@@ -12,10 +12,10 @@ use axum::{
     routing::{get, post},
 };
 use clap::Parser;
+use common::sampling::SamplingConfig;
 use futures::StreamExt;
 use futures::stream::Stream;
 use llama::{BackendType, CacheStrategy, InferenceContext, Model, ModelConfig};
-use common::sampling::SamplingConfig;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::time::Instant;

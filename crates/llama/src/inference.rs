@@ -331,11 +331,7 @@ pub use common::sampling::SamplingConfig;
 ///
 /// `prev_tokens` is the sequence of token IDs generated so far (including prompt),
 /// used for repeat penalty. Pass `&[]` to disable.
-pub fn sample_logits(
-    logits: &[f32],
-    config: &SamplingConfig,
-    prev_tokens: &[usize],
-) -> usize {
+pub fn sample_logits(logits: &[f32], config: &SamplingConfig, prev_tokens: &[usize]) -> usize {
     // Greedy sampling when temperature is 0
     if config.temperature <= 0.0 {
         return sample_argmax(logits);

@@ -3,8 +3,8 @@
 //! Manages sandbox lifecycle (spawn, health, stop), chat sessions,
 //! and context tracking. M5+ with M6 non-streaming /completion.
 
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use futures::sink::SinkExt;
@@ -12,10 +12,9 @@ use iced::keyboard;
 use iced::keyboard::key::Named as NamedKey;
 use iced::stream;
 use iced::widget::{
-    button, column, container, pick_list, row, scrollable, slider, text, text_input,
-    vertical_rule,
+    button, column, container, pick_list, row, scrollable, slider, text, text_input, vertical_rule,
 };
-use iced::{window, Element, Fill, Subscription, Task, Theme};
+use iced::{Element, Fill, Subscription, Task, Theme, window};
 use llama_ui_models::Manifest;
 use llama_ui_sandbox_client::{ResourceLimits, SandboxClient};
 use llama_ui_session::{ChatMessage, Role, Session};
@@ -83,7 +82,7 @@ impl ChatPane {
 }
 
 /// Application state.
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct LlamaApp {
     /// Current view state.
     state: AppState,
@@ -108,9 +107,10 @@ pub struct ModelInfo {
 }
 
 /// Application state machine states.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub enum AppState {
     /// Model picker view.
+    #[default]
     ModelPicker,
     /// Chat view.
     Chat,
@@ -120,12 +120,6 @@ pub enum AppState {
     Error(String),
     /// Settings screen.
     Settings,
-}
-
-impl Default for AppState {
-    fn default() -> Self {
-        AppState::ModelPicker
-    }
 }
 
 impl Default for LlamaApp {
@@ -151,7 +145,7 @@ pub enum Message {
     /// Add a second chat pane (M10 dual-model).
     AddPane(usize),
     /// Send message on a pane.
-    SendMessage(usize),
+    Send(usize),
     /// Input text changed on a pane.
     InputChanged(usize, String),
     /// Sandbox status message.
@@ -298,8 +292,7 @@ pub fn update(state: &mut LlamaApp, message: Message) -> Task<Message> {
             let model = state.models[p.selected_model].clone();
             match SandboxClient::resolve_binary() {
                 Ok(binary) => {
-                    let mut client =
-                        SandboxClient::new(binary, model.path, &p.backend, "llama-ui");
+                    let mut client = SandboxClient::new(binary, model.path, &p.backend, "llama-ui");
                     client.port = port;
                     p.sandbox = Some(client);
                 }
@@ -311,7 +304,7 @@ pub fn update(state: &mut LlamaApp, message: Message) -> Task<Message> {
         }
 
         // ─── Send message (non-streaming) on a pane ──────────
-        Message::SendMessage(pane) => {
+        Message::Send(pane) => {
             if pane >= state.panes.len() {
                 return Task::none();
             }
@@ -370,8 +363,7 @@ pub fn update(state: &mut LlamaApp, message: Message) -> Task<Message> {
                         .send()
                         .await
                         .map_err(|e| e.to_string())?;
-                    let body: serde_json::Value =
-                        resp.json().await.map_err(|e| e.to_string())?;
+                    let body: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
                     let content = body["content"].as_str().unwrap_or("").to_string();
                     Ok::<String, String>(content)
                 },
@@ -414,8 +406,7 @@ pub fn update(state: &mut LlamaApp, message: Message) -> Task<Message> {
                         .send()
                         .await
                         .map_err(|e| e.to_string())?;
-                    let body: serde_json::Value =
-                        resp.json().await.map_err(|e| e.to_string())?;
+                    let body: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
                     let count = body["count"].as_u64().unwrap_or(0) as usize;
                     Ok::<usize, String>(count)
                 },
@@ -508,8 +499,7 @@ pub fn update(state: &mut LlamaApp, message: Message) -> Task<Message> {
                         .send()
                         .await
                         .map_err(|e| e.to_string())?;
-                    let body: serde_json::Value =
-                        resp.json().await.map_err(|e| e.to_string())?;
+                    let body: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
                     let count = body["count"].as_u64().unwrap_or(0) as usize;
                     Ok::<usize, String>(count)
                 },
@@ -569,8 +559,7 @@ pub fn update(state: &mut LlamaApp, message: Message) -> Task<Message> {
 
             Task::perform(
                 async move {
-                    let binary =
-                        SandboxClient::resolve_binary().map_err(|e| e.to_string())?;
+                    let binary = SandboxClient::resolve_binary().map_err(|e| e.to_string())?;
                     let mut client = SandboxClient::new(binary, model.path, &backend, "llama-ui")
                         .with_limits(limits);
                     client.spawn().map_err(|e| e.to_string())?;
@@ -636,9 +625,7 @@ pub fn update(state: &mut LlamaApp, message: Message) -> Task<Message> {
             }
             Task::none()
         }
-        Message::ExportError(_) => {
-            Task::none()
-        }
+        Message::ExportError(_) => Task::none(),
 
         // ─── M7: Sampler slider changes on a pane ────────────
         Message::TemperatureChanged(pane, val) => {
@@ -691,20 +678,14 @@ pub fn update(state: &mut LlamaApp, message: Message) -> Task<Message> {
         }
 
         // ─── M12: Settings + full-screen ──────────────────────
-        Message::ToggleFullscreen => {
-            window::get_latest().and_then(move |id| {
-                window::get_mode(id).map(move |mode| (id, mode))
-            }).then(|(id, current_mode)| {
-                match current_mode {
-                    window::Mode::Fullscreen => {
-                        window::change_mode::<Message>(id, window::Mode::Windowed)
-                    }
-                    _ => {
-                        window::change_mode::<Message>(id, window::Mode::Fullscreen)
-                    }
+        Message::ToggleFullscreen => window::get_latest()
+            .and_then(move |id| window::get_mode(id).map(move |mode| (id, mode)))
+            .then(|(id, current_mode)| match current_mode {
+                window::Mode::Fullscreen => {
+                    window::change_mode::<Message>(id, window::Mode::Windowed)
                 }
-            })
-        }
+                _ => window::change_mode::<Message>(id, window::Mode::Fullscreen),
+            }),
         Message::OpenSettings => {
             state.state = AppState::Settings;
             Task::none()
@@ -742,8 +723,7 @@ fn fire_update_sampler(state: &LlamaApp, pane: usize) -> Task<Message> {
                 .send()
                 .await
                 .map_err(|e| e.to_string())?;
-            let body: serde_json::Value =
-                resp.json().await.map_err(|e| e.to_string())?;
+            let body: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
             Ok::<String, String>(body.to_string())
         },
         |result| match result {
@@ -859,20 +839,15 @@ fn pane_subscription(pane: usize, p: &ChatPane) -> Subscription<Message> {
                                     for line in text.lines() {
                                         if let Some(data) = line.strip_prefix("data: ") {
                                             if let Ok(val) =
-                                                serde_json::from_str::<serde_json::Value>(
-                                                    data,
-                                                )
+                                                serde_json::from_str::<serde_json::Value>(data)
                                             {
-                                                if val["stop"].as_bool().unwrap_or(false)
-                                                {
+                                                if val["stop"].as_bool().unwrap_or(false) {
                                                     let _ = output
                                                         .send(Message::StreamEnded(pane))
                                                         .await;
                                                     return;
                                                 }
-                                                if let Some(content) =
-                                                    val["content"].as_str()
-                                                {
+                                                if let Some(content) = val["content"].as_str() {
                                                     let _ = output
                                                         .send(Message::StreamChunk(
                                                             pane,
@@ -890,9 +865,7 @@ fn pane_subscription(pane: usize, p: &ChatPane) -> Subscription<Message> {
                         let _ = output.send(Message::StreamEnded(pane)).await;
                     }
                     Err(e) => {
-                        let _ = output
-                            .send(Message::Error(e.to_string()))
-                            .await;
+                        let _ = output.send(Message::Error(e.to_string())).await;
                     }
                 }
             }
@@ -974,7 +947,9 @@ fn render_pane(state: &LlamaApp, pane: usize) -> Element<'_, Message> {
             } else {
                 format!(
                     "⚠️ Context at {}/{} tokens ({:.0}%) — approaching limit",
-                    p.total_tokens, p.context_limit, pct * 100.0
+                    p.total_tokens,
+                    p.context_limit,
+                    pct * 100.0
                 )
             };
             children.push(text(warning).size(13).into());
@@ -1072,9 +1047,11 @@ fn render_pane(state: &LlamaApp, pane: usize) -> Element<'_, Message> {
     children.push(
         row![
             text(format!("T: {:.2}", p.temperature)).size(12),
-            slider(0.0..=2.0, p.temperature, move |v| Message::TemperatureChanged(pane, v))
-                .step(0.05)
-                .width(Fill),
+            slider(0.0..=2.0, p.temperature, move |v| {
+                Message::TemperatureChanged(pane, v)
+            })
+            .step(0.05)
+            .width(Fill),
         ]
         .spacing(4)
         .into(),
@@ -1102,9 +1079,11 @@ fn render_pane(state: &LlamaApp, pane: usize) -> Element<'_, Message> {
     children.push(
         row![
             text(format!("RP: {:.2}", p.repeat_penalty)).size(12),
-            slider(1.00..=2.00, p.repeat_penalty, move |v| Message::RepeatPenaltyChanged(pane, v))
-                .step(0.05)
-                .width(Fill),
+            slider(1.00..=2.00, p.repeat_penalty, move |v| {
+                Message::RepeatPenaltyChanged(pane, v)
+            })
+            .step(0.05)
+            .width(Fill),
         ]
         .spacing(4)
         .into(),
@@ -1134,7 +1113,7 @@ fn render_pane(state: &LlamaApp, pane: usize) -> Element<'_, Message> {
     children.push(
         text_input("Type your message...", &p.input_text)
             .on_input(move |s| Message::InputChanged(pane, s))
-            .on_submit(Message::SendMessage(pane))
+            .on_submit(Message::Send(pane))
             .padding(10)
             .size(16)
             .into(),
@@ -1151,7 +1130,7 @@ fn render_pane(state: &LlamaApp, pane: usize) -> Element<'_, Message> {
     } else {
         children.push(
             button(text("Send").size(16))
-                .on_press(Message::SendMessage(pane))
+                .on_press(Message::Send(pane))
                 .padding(10)
                 .into(),
         );
@@ -1191,12 +1170,10 @@ fn view_chat(state: &LlamaApp) -> Element<'_, Message> {
 
 /// Loading view.
 fn view_loading(state: &LlamaApp) -> Element<'_, Message> {
-    container(
-        column(vec![
-            text("Loading...").size(24).into(),
-            text(&state.status).size(16).into(),
-        ]),
-    )
+    container(column(vec![
+        text("Loading...").size(24).into(),
+        text(&state.status).size(16).into(),
+    ]))
     .center_x(Fill)
     .center_y(Fill)
     .into()
@@ -1204,16 +1181,14 @@ fn view_loading(state: &LlamaApp) -> Element<'_, Message> {
 
 /// Error view.
 fn view_error(err: &str) -> Element<'_, Message> {
-    container(
-        column(vec![
-            text("Error").size(24).into(),
-            text(err).size(16).into(),
-            button(text("Back").size(16))
-                .on_press(Message::ModelSelected(0))
-                .padding(10)
-                .into(),
-        ]),
-    )
+    container(column(vec![
+        text("Error").size(24).into(),
+        text(err).size(16).into(),
+        button(text("Back").size(16))
+            .on_press(Message::ModelSelected(0))
+            .padding(10)
+            .into(),
+    ]))
     .center_x(Fill)
     .center_y(Fill)
     .into()
@@ -1224,8 +1199,16 @@ fn view_settings(state: &LlamaApp) -> Element<'_, Message> {
     let mut children: Vec<Element<'_, Message>> = Vec::new();
 
     children.push(text("Settings").size(24).into());
-    children.push(text(format!("Panes: {}", state.panes.len())).size(14).into());
-    children.push(text(format!("Models: {}", state.models.len())).size(14).into());
+    children.push(
+        text(format!("Panes: {}", state.panes.len()))
+            .size(14)
+            .into(),
+    );
+    children.push(
+        text(format!("Models: {}", state.models.len()))
+            .size(14)
+            .into(),
+    );
 
     children.push(text("").size(8).into());
     children.push(text("Keyboard Shortcuts").size(18).into());
@@ -1235,8 +1218,16 @@ fn view_settings(state: &LlamaApp) -> Element<'_, Message> {
 
     children.push(text("").size(8).into());
     children.push(text("General").size(18).into());
-    children.push(text("Full-screen: toggle with F11 or the button in the chat view.").size(14).into());
-    children.push(text("Resource limits (memory/CPU) are set per-pane in the chat view.").size(14).into());
+    children.push(
+        text("Full-screen: toggle with F11 or the button in the chat view.")
+            .size(14)
+            .into(),
+    );
+    children.push(
+        text("Resource limits (memory/CPU) are set per-pane in the chat view.")
+            .size(14)
+            .into(),
+    );
 
     // Back to chat
     children.push(
