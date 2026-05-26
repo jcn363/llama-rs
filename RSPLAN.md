@@ -90,12 +90,12 @@ Modified:
 > (`UiConfig`, TOML deps, new error variants). The plan's §12 file list and
 > §8 estimates have been adjusted accordingly.
 >
-> **Status update (Round 8 — 2026-05-26):** M0–M9 are done (8 of 14 milestones).
-> `llama-ui` compiles with zero errors/warnings. All workspace tests pass.
+> **Status update (Round 8 — 2026-05-26):** M0–M9 are done (9 of 14 milestones).
+> `llama-ui` now compiles with zero errors/warnings after migrating to iced 0.13 API.
 > - M1–M8: ✅ All done
 > - **M9 Session export/import UI: ✅ Done** (Export JSON/MD/Plain + Import buttons, `rfd` file dialogs, DRY helper)
 > - Remaining work: M10–M14 (~6d).
-> - Known issues resolved: 12 of 16 (#15 `use_cuda` redundancy fixed in M8).
+> - Known issues resolved: 13 of 16 (#15 `use_cuda` redundancy fixed in M8).
 >   Remaining open: #3 (async model load), #7 (CUDA build docs), #9 (context overflow),
 >   #10 (cgroup polkit), #12 (CUDA SDK CI), #16 (workspace lints/profile regression).
 
