@@ -15,7 +15,7 @@ use iced::widget::{
 };
 use iced::{Element, Fill, Subscription, Task, Theme};
 use llama_ui_models::Manifest;
-use llama_ui_sandbox_client::SandboxClient;
+use llama_ui_sandbox_client::{ResourceLimits, SandboxClient};
 use llama_ui_session::{ChatMessage, Role, Session};
 use std::path::PathBuf;
 
@@ -51,6 +51,8 @@ pub struct ChatPane {
     pub top_p: f32,
     /// Repeat penalty.
     pub repeat_penalty: f32,
+    /// Resource limits for the sandbox.
+    pub resource_limits: ResourceLimits,
 }
 
 impl ChatPane {
@@ -70,6 +72,10 @@ impl ChatPane {
             top_k: 40.0,
             top_p: 0.95,
             repeat_penalty: 1.1,
+            resource_limits: ResourceLimits {
+                memory_mb: 4096,
+                cpu_percent: 100,
+            },
         }
     }
 }
@@ -184,6 +190,11 @@ pub enum Message {
     TopPChanged(usize, f32),
     /// Repeat penalty slider changed on a pane.
     RepeatPenaltyChanged(usize, f32),
+    // ─── M11: Resource limit sliders ───────────────────────────
+    /// Memory limit changed on a pane (MB).
+    MemoryChanged(usize, u64),
+    /// CPU quota changed on a pane (%).
+    CpuChanged(usize, u8),
 }
 
 /// Update the application state.
@@ -211,12 +222,13 @@ pub fn update(state: &mut LlamaApp, message: Message) -> Task<Message> {
             state.panes.push(ChatPane::new(0, &model.name));
             let pane = state.panes.len() - 1;
             let backend = state.panes[pane].backend.clone();
+            let limits = state.panes[pane].resource_limits.clone();
 
             Task::perform(
                 async move {
                     let binary = SandboxClient::resolve_binary().map_err(|e| e.to_string())?;
-                    let mut client =
-                        SandboxClient::new(binary, model.path, &backend, "llama-ui");
+                    let mut client = SandboxClient::new(binary, model.path, &backend, "llama-ui")
+                        .with_limits(limits);
                     client.spawn().map_err(|e| e.to_string())?;
                     client
                         .wait_for_ready(Duration::from_secs(30))
@@ -240,12 +252,13 @@ pub fn update(state: &mut LlamaApp, message: Message) -> Task<Message> {
             state.panes.push(ChatPane::new(model_idx, &model.name));
             let pane = state.panes.len() - 1;
             let backend = state.panes[pane].backend.clone();
+            let limits = state.panes[pane].resource_limits.clone();
 
             Task::perform(
                 async move {
                     let binary = SandboxClient::resolve_binary().map_err(|e| e.to_string())?;
-                    let mut client =
-                        SandboxClient::new(binary, model.path, &backend, "llama-ui");
+                    let mut client = SandboxClient::new(binary, model.path, &backend, "llama-ui")
+                        .with_limits(limits);
                     client.spawn().map_err(|e| e.to_string())?;
                     client
                         .wait_for_ready(Duration::from_secs(30))
@@ -541,13 +554,14 @@ pub fn update(state: &mut LlamaApp, message: Message) -> Task<Message> {
 
             let model = state.models[state.panes[pane].selected_model].clone();
             let backend = state.panes[pane].backend.clone();
+            let limits = state.panes[pane].resource_limits.clone();
 
             Task::perform(
                 async move {
                     let binary =
                         SandboxClient::resolve_binary().map_err(|e| e.to_string())?;
-                    let mut client =
-                        SandboxClient::new(binary, model.path, &backend, "llama-ui");
+                    let mut client = SandboxClient::new(binary, model.path, &backend, "llama-ui")
+                        .with_limits(limits);
                     client.spawn().map_err(|e| e.to_string())?;
                     client
                         .wait_for_ready(Duration::from_secs(30))
@@ -647,6 +661,22 @@ pub fn update(state: &mut LlamaApp, message: Message) -> Task<Message> {
             } else {
                 Task::none()
             }
+        }
+
+        // ─── M11: Resource limit changes ──────────────────────
+        Message::MemoryChanged(pane, memory_mb) => {
+            if pane < state.panes.len() {
+                state.panes[pane].resource_limits.memory_mb = memory_mb;
+                state.status = format!("Pane {} memory: {} MB", pane, memory_mb);
+            }
+            Task::none()
+        }
+        Message::CpuChanged(pane, cpu_percent) => {
+            if pane < state.panes.len() {
+                state.panes[pane].resource_limits.cpu_percent = cpu_percent;
+                state.status = format!("Pane {} CPU: {}%", pane, cpu_percent);
+            }
+            Task::none()
         }
     }
 }
@@ -914,6 +944,36 @@ fn render_pane(state: &LlamaApp, pane: usize) -> Element<'_, Message> {
             .width(150),
         ]
         .spacing(8)
+        .into(),
+    );
+
+    // ─── M11: Resource limit sliders ──────────────────────────
+    children.push(
+        row![
+            text(format!("Mem: {} MB", p.resource_limits.memory_mb)).size(12),
+            slider(
+                256.0..=32768.0,
+                p.resource_limits.memory_mb as f32,
+                move |v| Message::MemoryChanged(pane, v as u64),
+            )
+            .step(256.0)
+            .width(Fill),
+        ]
+        .spacing(4)
+        .into(),
+    );
+    children.push(
+        row![
+            text(format!("CPU: {}%", p.resource_limits.cpu_percent)).size(12),
+            slider(
+                10.0..=400.0,
+                f32::from(p.resource_limits.cpu_percent),
+                move |v| Message::CpuChanged(pane, v as u8),
+            )
+            .step(10.0)
+            .width(Fill),
+        ]
+        .spacing(4)
         .into(),
     );
 
