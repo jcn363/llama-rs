@@ -129,6 +129,8 @@ cargo build -p llama-ui --release
 
 ### Architecture
 
+See [Architecture & Major Crates](docs/architecture_and_crates.md) for a detailed component list.
+
 The UI is built on:
 - **`llama-ui`** — Main application (iced 0.13.1 function-based API)
 - **`llama-ui-models`** — Model discovery and metadata

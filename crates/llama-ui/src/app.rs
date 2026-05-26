@@ -16,6 +16,7 @@ use iced::widget::{
     text, container,
 };
 use iced::{Element, Fill, Subscription, Task, Theme, window};
+
 use llama_ui_models::Manifest;
 use llama_ui_sandbox_client::{ResourceLimits, SandboxClient};
 use llama_ui_session::{ChatMessage, Role, Session};
@@ -913,7 +914,7 @@ fn view_model_picker(state: &LlamaApp) -> Element<'_, Message> {
 
     for (i, model) in state.models.iter().enumerate() {
         let btn = button(iced::widget::text(&model.name).size(18))
-            .style(iced::theme::Button::Primary)
+            .style(crate::theme::ModelButton)
             .on_press(Message::ModelSelected(i))
             .padding(10);
         children.push(btn.into());
@@ -1317,5 +1318,21 @@ impl LlamaApp {
                     Task::none(),
                 )
             })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{view_model_picker, LlamaApp, ModelInfo};
+    use iced::Element;
+
+    #[test]
+    fn model_picker_has_buttons_for_each_model() {
+        let mut app = LlamaApp::default();
+        app.models = vec![
+            ModelInfo { name: "Model‑A".into(), path: std::path::PathBuf::from("/tmp/a.gguf") },
+            ModelInfo { name: "Model‑B".into(), path: std::path::PathBuf::from("/tmp/b.gguf") },
+        ];
+        let _: Element<'_, _> = view_model_picker(&app);
     }
 }

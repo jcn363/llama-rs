@@ -1,5 +1,7 @@
 # llama-rs Architecture
 
+See also the detailed component list in [Architecture & Major Crates](architecture_and_crates.md).
+
 ## Overview
 
 A Rust port of [llama.cpp](https://github.com/ggml-org/llama.cpp) — inference engine for LLaMA-family large language models. Targets **AMD Opteron 3280** (bdver1, 8 cores, no FMA) and **NVIDIA GTX 1050** (2GB VRAM, Compute 6.1). Uses GGUF v3 as the model format.
