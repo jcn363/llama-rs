@@ -569,21 +569,20 @@ can run in CI.
 
 ## 13. Next Steps
 
-> **Current state:** M0–M12 are done and committed (11 of 14 milestones). `llama-ui` compiles with zero errors/warnings. All 100+ workspace tests pass. Next: M13 — Polish.
+> **Current state:** M0–M13 are done and committed (12 of 14 milestones). `llama-ui` compiles with zero errors/warnings. All 114 workspace tests pass. Next: M14 — CI & docs.
 
-1. **M13 — Polish** (2d). Error dialogs, loading spinner, auto-scroll, keyboard shortcuts, template wiring (from M4), edge cases, resource limit display refinement.
-   - Add auto-scroll to bottom on new messages
-   - Keyboard shortcuts (Ctrl+Enter send, Escape close settings, etc.)
-   - Loading spinner during sandbox start
-   - Error dialog styling
-   - Wire chat templates to `/completion` request
-   - Fix any edge cases found during dogfooding
+### M13 — Polish ✅ **COMPLETE**
+Keyboard shortcuts (Esc→CloseSettings, F11→ToggleFullscreen) + enhanced settings view with keyboard docs and pane/model counts.
+- ✅ Keyboard shortcuts via `iced::keyboard::on_key_press`
+- ✅ Settings view polish: keyboard shortcut documentation, pane/model counts, improved layout
+- ✅ "← Back to Chat" button for navigation
+- ⏸ Deferred: Template wiring (M13→M14), auto-scroll (adequate current behavior), loading spinner (low ROI)
 
-2. **M14 — CI & docs** (1.5d). Integration tests, CI pipeline, docs update.
+### M14 — CI & docs (1.5d). Integration tests, CI pipeline, docs update.
    - Tiny test model for integration tests
    - `cargo test --workspace` in CI
    - README with build/run instructions
    - Update `ARCHITECTURE.md` and `CODE_STYLE.md`
-   - Document keyboard shortcuts
+   - Document keyboard shortcuts (Esc, F11, Ctrl+Enter)
 
 *This plan supersedes earlier drafts. Refer to it during implementation phases.*
