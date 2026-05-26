@@ -41,8 +41,23 @@ mod tests {
     use crate::quant_dot::QuantDot;
 
     /// Build a Q8_0 block from a scale and 32 signed values.
+    #[cfg(feature = "simd")]
+    fn build_block(scale: f32, values: &[i8]) -> [u8; 34] {
+        // Buffer reuse with fixed-size array; SIMD could be applied here in the future.
+        debug_assert_eq!(values.len(), 32);
+        let scale_bytes = f16::from_f32(scale).to_le_bytes();
+        let mut block = [0u8; 34];
+        block[0] = scale_bytes[0];
+        block[1] = scale_bytes[1];
+        for (i, v) in values.iter().enumerate() {
+            block[2 + i] = *v as u8;
+        }
+        block
+    }
+
+    #[cfg(not(feature = "simd"))]
     fn build_block(scale: f32, values: &[i8]) -> Vec<u8> {
-        assert_eq!(values.len(), 32);
+        debug_assert_eq!(values.len(), 32);
         let scale_bytes = f16::from_f32(scale).to_le_bytes();
         let mut block = Vec::with_capacity(34);
         block.extend_from_slice(&scale_bytes);

@@ -27,7 +27,7 @@ server.log
 .cargo/
 .cursor/
 .git/
-.github/
+# .github/  # unignore CI workflow directory
 .specs/
 .vscode/
 *.lock
