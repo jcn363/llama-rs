@@ -144,6 +144,19 @@ pub enum Message {
     // ─── M8: Backend changed ────────────────────────────────
     /// Backend selection changed.
     BackendChanged(String),
+    // ─── M9: Session export/import ───────────────────────────
+    /// Export session as JSON.
+    ExportJson,
+    /// Export session as Markdown.
+    ExportMarkdown,
+    /// Export session as plain text.
+    ExportPlain,
+    /// Import session from file.
+    ImportSession,
+    /// Session imported from file.
+    SessionImported(PathBuf),
+    /// Session export/import error.
+    ExportError(String),
     // ─── M7: Sampler slider messages ────────────────────────
     /// Temperature slider changed.
     TemperatureChanged(f32),
@@ -466,6 +479,45 @@ pub fn update(state: &mut LlamaApp, message: Message) -> Task<Message> {
             )
         }
 
+        // ─── M9: Session export/import ───────────────────────
+        Message::ExportJson => {
+            session_export(state, "session.json", "JSON", &["json"], |s, p| {
+                s.export_json(p)
+            })
+        }
+        Message::ExportMarkdown => {
+            session_export(state, "session.md", "Markdown", &["md"], |s, p| {
+                s.export_markdown(p)
+            })
+        }
+        Message::ExportPlain => {
+            session_export(state, "session.txt", "Text", &["txt"], |s, p| {
+                s.export_plain(p)
+            })
+        }
+        Message::ImportSession => {
+            if let Some(path) = rfd::FileDialog::new()
+                .add_filter("JSON", &["json"])
+                .pick_file()
+            {
+                match llama_ui_session::Session::import_json(&path) {
+                    Ok(imported) => {
+                        state.session = imported;
+                        state.total_tokens = 0;
+                        state.status = format!("Session imported: {}", path.display());
+                    }
+                    Err(e) => {
+                        state.status = format!("Import error: {e}");
+                    }
+                }
+            }
+            Task::none()
+        }
+        Message::SessionImported(_) | Message::ExportError(_) => {
+            // Unused — handled synchronously above
+            Task::none()
+        }
+
         // ─── M7: Sampler slider changes ──────────────────────
         Message::TemperatureChanged(val) => {
             state.temperature = val;
@@ -520,6 +572,26 @@ fn fire_update_sampler(state: &LlamaApp) -> Task<Message> {
             Err(e) => Message::Error(e),
         },
     )
+}
+
+/// Open a save-dialog and call the given export function.
+fn session_export(
+    state: &mut LlamaApp,
+    filename: &str,
+    label: &str,
+    exts: &[&str],
+    f: fn(&Session, &PathBuf) -> Result<(), llama_ui_session::ExportError>,
+) -> Task<Message> {
+    let dialog = rfd::FileDialog::new()
+        .set_file_name(filename)
+        .add_filter(label, exts);
+    if let Some(path) = dialog.save_file() {
+        match f(&state.session, &path) {
+            Ok(()) => state.status = format!("Session exported: {}", path.display()),
+            Err(e) => state.status = format!("Export error: {e}"),
+        }
+    }
+    Task::none()
 }
 
 /// View the application UI.
@@ -787,6 +859,26 @@ fn view_chat(state: &LlamaApp) -> Element<'_, Message> {
                 .width(Fill),
         ]
         .spacing(4)
+        .into(),
+    );
+
+    // ─── M9: Export/Import buttons ──────────────────────────
+    children.push(
+        row![
+            button(text("Export JSON").size(12))
+                .on_press(Message::ExportJson)
+                .padding(6),
+            button(text("Export MD").size(12))
+                .on_press(Message::ExportMarkdown)
+                .padding(6),
+            button(text("Export TXT").size(12))
+                .on_press(Message::ExportPlain)
+                .padding(6),
+            button(text("Import").size(12))
+                .on_press(Message::ImportSession)
+                .padding(6),
+        ]
+        .spacing(6)
         .into(),
     );
 

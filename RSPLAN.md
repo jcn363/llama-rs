@@ -90,18 +90,11 @@ Modified:
 > (`UiConfig`, TOML deps, new error variants). The plan's §12 file list and
 > §8 estimates have been adjusted accordingly.
 >
-> **Status update (Round 7 — 2026-05-26):** M0–M8 are done (7 of 14 milestones).
+> **Status update (Round 8 — 2026-05-26):** M0–M9 are done (8 of 14 milestones).
 > `llama-ui` compiles with zero errors/warnings. All workspace tests pass.
-> - M1 scaffolding: ✅ Done
-> - M2 codebase fixes: ✅ Done
-> - M3 model management: ✅ Done
-> - M4 session + templates: ✅ Done
-> - M5a sandbox-client: ✅ Done
-> - M5 GUI skeleton: ✅ Done (iced 0.13 API fix)
-> - M6 Streaming + tokenizer: ✅ Done
-> - M7 Sampling sliders: ✅ Done
-> - **M8 Backend dropdown: ✅ Done** (`--backend` sole source of truth, pick_list in chat header)
-> - Remaining work: M9–M14 (~7d).
+> - M1–M8: ✅ All done
+> - **M9 Session export/import UI: ✅ Done** (Export JSON/MD/Plain + Import buttons, `rfd` file dialogs, DRY helper)
+> - Remaining work: M10–M14 (~6d).
 > - Known issues resolved: 12 of 16 (#15 `use_cuda` redundancy fixed in M8).
 >   Remaining open: #3 (async model load), #7 (CUDA build docs), #9 (context overflow),
 >   #10 (cgroup polkit), #12 (CUDA SDK CI), #16 (workspace lints/profile regression).
@@ -417,14 +410,14 @@ New variants to add to `crates/error::Error`:
 | **M6 – Streaming + tokenizer** | SSE subscription, `/tokenize` endpoint, token display, context‑overflow tracking, cancel‑in‑flight. | M5 | 1 day | ✅ **Done** — `/tokenize` endpoint on `llama-server`. SSE `iced::Subscription`. Non-streaming send/receive. Token display + context overflow warning (80%→banner, 95%→alert). Cancel via `Arc<AtomicBool>`. |
 | **M7 – Sampling sliders** | Bind to unified `SamplingConfig`, POST to `/samplers` | M5, M2 | 0.5 day | ✅ **Done** — Temperature/Top-K/Top-P/RepeatPenalty sliders in chat view. Each change POSTs to `/samplers`. Params included in `/completion` requests. |
 | M8 – Backend dropdown | Detection logic wired to sandbox restart | M5 | 0.5 day | ✅ **Done** — backend pick_list dropdown in chat header; stops sandbox, restarts with `--backend` |
-| M9 – Session export/import UI | Button wiring, format selection, file dialogs | M4, M5 | 1 day | ⏳ **Not started** — library code complete, needs UI wiring |
+| M9 – Session export/import UI | Button wiring, format selection, file dialogs | M4, M5 | 1 day | ✅ **Done** — Export JSON/MD/Plain + Import buttons in chat view, `rfd` file dialogs, `session_export` helper for DRY |
 | M10 – Dual‑model | Second pane, two sandbox instances, port mgmt, VRAM check, sync toggle | M5, M5a | 2.5 days | ⏳ **Not started** |
 | M11 – Sandbox resource UI | Memory/CPU sliders, cgroup (with fallback), UI overlay | M5 | 1 day | ⏳ **Not started** — sandbox-client crate has `ResourceLimits`, needs UI |
 | M12 – Settings + full‑screen | Prefs TOML UI, theme, keybindings, full‑screen toggle (F11) | M5 | 1 day | ⏳ **Not started** — `UiConfig` struct complete, needs settings UI |
 | M13 – Polish | Error dialogs, loading spinner, auto‑scroll, keyboard shortcuts, template wiring (from M4), edge cases | all above | 2 days | ⏳ **Not started** |
 | M14 – CI & docs | Tiny test model in `test-models/`, integration tests, CI pipeline, README | all above | 1.5 days | ⏳ **Not started** |
 
-**Remaining effort estimate:** ~7 person-days — M0–M8 are done (7 of 14 milestones). Remaining: M9–M14.
+**Remaining effort estimate:** ~6 person-days — M0–M9 are done (8 of 14 milestones). Remaining: M10–M14.
 
 ### Dependency graph
 
@@ -438,9 +431,9 @@ M0 ─→ M1 ─┬─→ M3 ─┐   ✅ Done
                     ↓
                M6 → M7   ✅ Done
                      ↓
-               M8       ✅ Done
+               M8 → M9   ✅ Done
                      ↓
-               M9 → M10 → M11 → M12 → M13 → M14
+               M10 → M11 → M12 → M13 → M14
 ```
 
 ---
@@ -572,36 +565,22 @@ can run in CI.
 
 ## 13. Next Steps
 
-> **Current state:** M0–M8 are done and committed (7 of 14 milestones). `llama-ui` compiles with zero errors/warnings. All workspace tests pass. `--backend` is sole source of truth (removed redundant `use_cuda`). Next: M9 – Session export/import UI.
+> **Current state:** M0–M9 are done and committed (8 of 14 milestones). `llama-ui` compiles with zero errors/warnings. All workspace tests pass. Next: M10 – Dual-model.
 
-1. **M9 — Session export/import UI** (1d). Button wiring for JSON/MD/plain export.
-   - Export buttons use `llama-ui-session` library (format, serialisation)
-   - `rfd` (rust file dialog) for save/open dialogs
-   - Import: parse file → restore session state
-
-3. **M10 — Dual-model** (2.5d). Second chat pane + two sandbox instances.
+1. **M10 — Dual-model** (2.5d). Second chat pane + two sandbox instances.
    - Vertical split layout
    - Two `SandboxClient` instances, independent ports
    - Shared chat history (optional sync toggle)
    - VRAM/RAM constraint checks
 
-4. **M11 — Sandbox resource UI** (1d). Memory + CPU sliders.
+2. **M11 — Sandbox resource UI** (1d). Memory + CPU sliders.
    - Bind to `ResourceLimits` in `llama-ui-sandbox-client`
    - On change: restart sandbox with new limits
    - systemd-run cgroup (with graceful skip if unavailable)
 
-5. **M12 — Settings + full-screen** (1d). Prefs TOML UI, theme, keybindings.
-   - Wire `config::UiConfig` to settings panel
-   - Theme selector, font size, startup behavior
-   - F11 full-screen toggle, Ctrl+, for settings
-
-6. **M13 — Polish** (2d). Error dialogs, spinner, auto-scroll, shortcuts.
-   - Wire `common::chat_templates` for proper Jinja rendering
-   - Auto-scroll to bottom on new message
-   - Keyboard shortcuts (Ctrl+Enter send, Shift+Enter newline, Ctrl+L clear)
-   - Loading spinner during model start
-
-7. **M14 — CI & docs** (1.5d). Integration tests, CI pipeline, README.
+3. **M12 — Settings + full-screen** (1d). Prefs TOML UI, theme, keybindings.
+4. **M13 — Polish** (2d). Error dialogs, spinner, auto-scroll, shortcuts.
+5. **M14 — CI & docs** (1.5d). Integration tests, CI pipeline, README.
    - Tiny test model for integration tests
    - `cargo test --workspace` in CI
    - README with build/run instructions
