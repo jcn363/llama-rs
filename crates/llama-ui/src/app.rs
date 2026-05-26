@@ -8,6 +8,8 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use futures::sink::SinkExt;
+use iced::keyboard;
+use iced::keyboard::key::Named as NamedKey;
 use iced::stream;
 use iced::widget::{
     button, column, container, pick_list, row, scrollable, slider, text, text_input,
@@ -116,6 +118,8 @@ pub enum AppState {
     Loading,
     /// Error state.
     Error(String),
+    /// Settings screen.
+    Settings,
 }
 
 impl Default for AppState {
@@ -195,6 +199,13 @@ pub enum Message {
     MemoryChanged(usize, u64),
     /// CPU quota changed on a pane (%).
     CpuChanged(usize, u8),
+    // ─── M12: Settings + full-screen ───────────────────────────
+    /// Toggle full-screen mode.
+    ToggleFullscreen,
+    /// Open settings screen.
+    OpenSettings,
+    /// Close settings screen.
+    CloseSettings,
 }
 
 /// Update the application state.
@@ -678,6 +689,30 @@ pub fn update(state: &mut LlamaApp, message: Message) -> Task<Message> {
             }
             Task::none()
         }
+
+        // ─── M12: Settings + full-screen ──────────────────────
+        Message::ToggleFullscreen => {
+            window::get_latest().and_then(move |id| {
+                window::get_mode(id).map(move |mode| (id, mode))
+            }).then(|(id, current_mode)| {
+                match current_mode {
+                    window::Mode::Fullscreen => {
+                        window::change_mode::<Message>(id, window::Mode::Windowed)
+                    }
+                    _ => {
+                        window::change_mode::<Message>(id, window::Mode::Fullscreen)
+                    }
+                }
+            })
+        }
+        Message::OpenSettings => {
+            state.state = AppState::Settings;
+            Task::none()
+        }
+        Message::CloseSettings => {
+            state.state = AppState::Chat;
+            Task::none()
+        }
     }
 }
 
@@ -748,6 +783,7 @@ pub fn view(state: &LlamaApp) -> Element<'_, Message> {
         AppState::Chat => view_chat(state),
         AppState::Loading => view_loading(state),
         AppState::Error(err) => view_error(err),
+        AppState::Settings => view_settings(state),
     }
 }
 
@@ -864,14 +900,27 @@ fn pane_subscription(pane: usize, p: &ChatPane) -> Subscription<Message> {
     )
 }
 
-/// Subscription for SSE streaming across all panes.
+/// Map keyboard shortcuts to messages.
+fn handle_key_press(key: keyboard::Key, _: keyboard::Modifiers) -> Option<Message> {
+    match key {
+        keyboard::Key::Named(NamedKey::Escape) => Some(Message::CloseSettings),
+        keyboard::Key::Named(NamedKey::F11) => Some(Message::ToggleFullscreen),
+        _ => None,
+    }
+}
+
+/// Subscription for SSE streaming across all panes + keyboard shortcuts.
 pub fn subscription(state: &LlamaApp) -> Subscription<Message> {
-    let mut subs = Vec::new();
+    let mut subs: Vec<Subscription<Message>> = Vec::new();
+
+    // Global keyboard shortcuts
+    subs.push(iced::keyboard::on_key_press(handle_key_press));
+
+    // Per-pane SSE subscriptions
     for (i, p) in state.panes.iter().enumerate() {
         subs.push(pane_subscription(i, p));
     }
     match subs.len() {
-        0 => Subscription::none(),
         1 => subs.into_iter().next().unwrap(),
         _ => Subscription::batch(subs),
     }
@@ -942,6 +991,20 @@ fn render_pane(state: &LlamaApp, pane: usize) -> Element<'_, Message> {
                 move |s: &str| Message::BackendChanged(pane, s.to_string()),
             )
             .width(150),
+        ]
+        .spacing(8)
+        .into(),
+    );
+
+    // ─── M12: Settings + Full-screen buttons ──────────────────
+    children.push(
+        row![
+            button(text("⚙ Settings").size(12))
+                .on_press(Message::OpenSettings)
+                .padding(4),
+            button(text("⛶ Fullscreen").size(12))
+                .on_press(Message::ToggleFullscreen)
+                .padding(4),
         ]
         .spacing(8)
         .into(),
@@ -1154,6 +1217,40 @@ fn view_error(err: &str) -> Element<'_, Message> {
     .center_x(Fill)
     .center_y(Fill)
     .into()
+}
+
+/// Settings view.
+fn view_settings(state: &LlamaApp) -> Element<'_, Message> {
+    let mut children: Vec<Element<'_, Message>> = Vec::new();
+
+    children.push(text("Settings").size(24).into());
+    children.push(text(format!("Panes: {}", state.panes.len())).size(14).into());
+    children.push(text(format!("Models: {}", state.models.len())).size(14).into());
+
+    children.push(text("").size(8).into());
+    children.push(text("Keyboard Shortcuts").size(18).into());
+    children.push(text("Esc — Close Settings").size(14).into());
+    children.push(text("F11 — Toggle Full-screen").size(14).into());
+    children.push(text("Enter (in text input) — Send message").size(14).into());
+
+    children.push(text("").size(8).into());
+    children.push(text("General").size(18).into());
+    children.push(text("Full-screen: toggle with F11 or the button in the chat view.").size(14).into());
+    children.push(text("Resource limits (memory/CPU) are set per-pane in the chat view.").size(14).into());
+
+    // Back to chat
+    children.push(
+        button(text("← Back to Chat").size(16))
+            .on_press(Message::CloseSettings)
+            .padding(10)
+            .into(),
+    );
+
+    container(scrollable(column(children)).width(Fill).height(Fill))
+        .width(Fill)
+        .height(Fill)
+        .padding(20)
+        .into()
 }
 
 // ─── Drop: stop sandbox on exit ─────────────────────────────────────────
