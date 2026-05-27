@@ -63,6 +63,37 @@ impl Default for ModelConfig {
     }
 }
 
+impl ModelConfig {
+    /// Build a [`ModelConfig`] from shared CLI arguments.
+    ///
+    /// Parses the `backend` and `cache_strategy` strings from
+    /// [`common::args::CommonArgs`] into their enum equivalents.
+    /// Threads default to 0 (auto-detect) and are resolved by
+    /// [`CpuBackend`](crate::CpuBackend) at construction time.
+    pub fn from_common_args(common: &common::args::CommonArgs) -> Self {
+        let backend_type = match common.backend.as_str() {
+            "cpu" => BackendType::Cpu,
+            "cuda" => BackendType::Cuda,
+            _ => BackendType::Auto,
+        };
+        let cache_strategy = match common.cache_strategy.as_str() {
+            "prefix" => CacheStrategy::Prefix,
+            "prefix_only" | "prefix-only" => CacheStrategy::PrefixOnly,
+            _ => CacheStrategy::Full,
+        };
+        Self {
+            n_threads: common.threads,
+            backend_type,
+            n_ctx: common.ctx_size,
+            n_batch: common.batch_size,
+            cache_strategy,
+            offload_ffn: common.offload_ffn,
+            memory_pool_size: common.memory_pool_size,
+            ..Default::default()
+        }
+    }
+}
+
 /// Inference context holding state for a model.
 pub struct InferenceContext {
     /// Shared reference to the loaded model.

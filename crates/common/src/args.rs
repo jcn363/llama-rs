@@ -50,4 +50,18 @@ pub struct CommonArgs {
     /// Random seed for reproducibility (default: random).
     #[arg(long)]
     pub seed: Option<u64>,
+
+    // ── Backend & model-loading parameters ──
+
+    /// Backend to use: auto, cpu, cuda (default: auto).
+    #[arg(long, default_value_t = String::from("auto"))]
+    pub backend: String,
+
+    /// Offload FFN weights to RAM (load on demand) to save VRAM.
+    #[arg(long, default_value_t = false)]
+    pub offload_ffn: bool,
+
+    /// Size of thread-local memory pool for small temporary allocations (in bytes, 0 = disabled).
+    #[arg(long, default_value_t = 0)]
+    pub memory_pool_size: usize,
 }

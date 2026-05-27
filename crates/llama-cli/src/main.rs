@@ -6,7 +6,7 @@
 
 use clap::Parser;
 use llama::SamplingConfig;
-use llama::{BackendType, CacheStrategy, InferenceContext, Model, ModelConfig};
+use llama::{InferenceContext, Model, ModelConfig};
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -25,18 +25,6 @@ struct Args {
     /// Maximum tokens to generate.
     #[arg(short = 'n', long, default_value_t = 128)]
     n_predict: usize,
-
-    /// Backend to use: auto, cpu, cuda (default: auto).
-    #[arg(long, default_value_t = String::from("auto"))]
-    backend: String,
-
-    /// Offload FFN weights to RAM (load on demand) to save VRAM.
-    #[arg(long, default_value_t = false)]
-    offload_ffn: bool,
-
-    /// Size of thread-local memory pool for small temporary allocations (in bytes, 0 = disabled).
-    #[arg(long, default_value_t = 0)]
-    memory_pool_size: usize,
 
     /// Enable verbose logging.
     #[arg(long, default_value_t = false)]
@@ -64,39 +52,12 @@ fn main() -> anyhow::Result<()> {
     tracing::info!("Loading model from: {}", common.model);
     let load_start = Instant::now();
 
-    let model = Arc::new(Model::load_from_gguf(&common.model, args.offload_ffn)?);
+    let model = Arc::new(Model::load_from_gguf(&common.model, common.offload_ffn)?);
     let load_time = load_start.elapsed();
     tracing::info!("Model loaded in {:.2}s", load_time.as_secs_f32());
     tracing::info!("{}", model.summary());
 
-    let backend_type = match args.backend.as_str() {
-        "cpu" => BackendType::Cpu,
-        "cuda" => BackendType::Cuda,
-        _ => BackendType::Auto,
-    };
-
-    // Load configuration: CLI args take precedence over environment variables.
-    let cfg = config::Config::from_env();
-    let n_threads = if common.threads > 0 {
-        common.threads
-    } else {
-        cfg.num_threads
-    };
-    let cache_strategy = match common.cache_strategy.as_str() {
-        "prefix" => CacheStrategy::Prefix,
-        "prefix_only" | "prefix-only" => CacheStrategy::PrefixOnly,
-        _ => CacheStrategy::Full,
-    };
-    let config = ModelConfig {
-        n_threads,
-        backend_type,
-        n_ctx: common.ctx_size,
-        n_batch: common.batch_size,
-        cache_strategy,
-        offload_ffn: args.offload_ffn,
-        memory_pool_size: args.memory_pool_size,
-        ..Default::default()
-    };
+    let config = ModelConfig::from_common_args(common);
 
     let sampling = SamplingConfig {
         temperature: common.temperature,

@@ -15,7 +15,7 @@ use clap::Parser;
 use common::sampling::SamplingConfig;
 use futures::StreamExt;
 use futures::stream::Stream;
-use llama::{BackendType, CacheStrategy, InferenceContext, Model, ModelConfig};
+use llama::{InferenceContext, Model, ModelConfig};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::time::Instant;
@@ -36,10 +36,6 @@ struct Args {
     /// Port to listen on.
     #[arg(short, long, default_value_t = 8080)]
     port: u16,
-
-    /// Backend to use: auto, cpu, cuda (default: auto).
-    #[arg(long, default_value_t = String::from("auto"))]
-    backend: String,
 }
 
 /// Shared server state.
@@ -149,37 +145,10 @@ async fn main() -> anyhow::Result<()> {
 
     let common = &args.common;
     tracing::info!("Loading model from: {}", common.model);
-    let model = Model::load_from_gguf(&common.model, false)?;
+    let model = Model::load_from_gguf(&common.model, common.offload_ffn)?;
     tracing::info!("{}", model.summary());
 
-    let backend_type = match args.backend.as_str() {
-        "cpu" => BackendType::Cpu,
-        "cuda" => BackendType::Cuda,
-        _ => BackendType::Auto,
-    };
-
-    // Load configuration: CLI args take precedence over environment variables.
-    let cfg = config::Config::from_env();
-    let n_threads = if common.threads > 0 {
-        common.threads
-    } else {
-        cfg.num_threads
-    };
-    // Supported strategies: "full" (default), "prefix", "prefix_only"/"prefix-only".
-    // "sliding_window" is available programmatically but requires a window size parameter.
-    let cache_strategy = match common.cache_strategy.as_str() {
-        "prefix" => CacheStrategy::Prefix,
-        "prefix_only" | "prefix-only" => CacheStrategy::PrefixOnly,
-        _ => CacheStrategy::Full,
-    };
-    let config = ModelConfig {
-        n_threads,
-        backend_type,
-        n_ctx: common.ctx_size,
-        n_batch: common.batch_size,
-        cache_strategy,
-        ..Default::default()
-    };
+    let config = ModelConfig::from_common_args(common);
 
     let state = ServerState {
         model: Arc::new(model),
