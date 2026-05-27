@@ -19,21 +19,17 @@ fn matmul_benchmark(c: &mut Criterion) {
     let sizes = [(64, 64), (128, 128), (256, 256), (512, 512)];
     for &(m, k) in &sizes {
         let n = m;
-        let mut group = c.benchmark_group(&format!("matmul_{m}x{k}"));
+        let mut group = c.benchmark_group(format!("matmul_{m}x{k}"));
 
         let mut a = Tensor::new(DType::F32, &[m, k]);
-        let mut b = Tensor::new(DType::F32, &[n, k]);
+        let mut b_tensor = Tensor::new(DType::F32, &[n, k]);
         fill_tensor(&mut a, 42);
-        fill_tensor(&mut b, 137);
+        fill_tensor(&mut b_tensor, 137);
 
-        group.bench_function("single_thread", |bencher| {
-            bencher.iter(|| backend.matmul(&a, &b))
-        });
+        group.bench_function("single_thread", |b| b.iter(|| backend.matmul(&a, &b_tensor)));
 
         let parallel = CpuBackend::new(0, 0);
-        group.bench_function("parallel", |bencher| {
-            bencher.iter(|| parallel.matmul(&a, &b))
-        });
+        group.bench_function("parallel", |b| b.iter(|| parallel.matmul(&a, &b_tensor)));
 
         group.finish();
     }
@@ -44,7 +40,7 @@ fn parallel_threshold_benchmark(c: &mut Criterion) {
     let sizes = [(8, 64), (16, 64), (32, 64), (64, 64), (128, 64), (256, 64)];
     for &(m, k) in &sizes {
         let n = m;
-        let mut group = c.benchmark_group(&format!("parallel_threshold_{m}x{k}"));
+        let mut group = c.benchmark_group(format!("parallel_threshold_{m}x{k}"));
         let mut a = Tensor::new(DType::F32, &[m, k]);
         let mut b_tensor = Tensor::new(DType::F32, &[n, k]);
         fill_tensor(&mut a, 42);
@@ -53,19 +49,19 @@ fn parallel_threshold_benchmark(c: &mut Criterion) {
         // Single-thread (threshold always blocks)
         let single = CpuBackend::new_with_min_rows(0, usize::MAX, 0);
         group.bench_function("single", |bencher| {
-            bencher.iter(|| single.matmul(&a, &b_tensor))
+            b.iter(|| single.matmul(&a, &b_tensor))
         });
 
         // Auto-parallel with default threshold (128)
         let parallel = CpuBackend::new_with_min_rows(0, 128, 0);
         group.bench_function("thresh128", |bencher| {
-            bencher.iter(|| parallel.matmul(&a, &b_tensor))
+            b.iter(|| parallel.matmul(&a, &b_tensor))
         });
 
         // Low threshold (16) — parallel on small matrices
         let low_thresh = CpuBackend::new_with_min_rows(0, 16, 0);
         group.bench_function("thresh16", |bencher| {
-            bencher.iter(|| low_thresh.matmul(&a, &b_tensor))
+            b.iter(|| low_thresh.matmul(&a, &b_tensor))
         });
 
         group.finish();
@@ -75,7 +71,7 @@ fn parallel_threshold_benchmark(c: &mut Criterion) {
 fn dot_product_benchmark(c: &mut Criterion) {
     let sizes = [64, 256, 1024, 4096];
     for &n in &sizes {
-        let mut group = c.benchmark_group(&format!("dot_{n}"));
+        let mut group = c.benchmark_group(format!("dot_{n}"));
 
         let x: Vec<f32> = (0..n).map(|i| i as f32 * 0.001).collect();
         let y: Vec<f32> = (0..n).map(|i| (i as f32 + 0.5) * 0.001).collect();
@@ -138,7 +134,7 @@ fn quantized_matvec_benchmark(c: &mut Criterion) {
 
     let sizes = [(256, 256), (512, 512), (1024, 4096)];
     for &(rows, cols) in &sizes {
-        let mut group = c.benchmark_group(&format!("quant_matvec_{rows}x{cols}"));
+        let mut group = c.benchmark_group(format!("quant_matvec_{rows}x{cols}"));
 
         // Generate f32 weight data
         let weight: Vec<f32> = (0..rows * cols)
@@ -148,21 +144,13 @@ fn quantized_matvec_benchmark(c: &mut Criterion) {
         let quantized = build_q4_0_weights(&weight);
 
         // F32 baseline
-        group.bench_function("f32_baseline", |b| {
-            b.iter(|| backend.mat_vec(&weight, rows, cols, &input))
-        });
+        group.bench_function("f32_baseline", |b| b.iter(|| backend.mat_vec(&weight, rows, cols, &input)));
 
         // Q4_0 quantized (single thread)
-        group.bench_function("q4_0_quant", |b| {
-            b.iter(|| backend.mat_vec_quant(&quantized, QuantType::Q4_0, rows, cols, &input))
-        });
+        group.bench_function("q4_0_quant", |b| b.iter(|| backend.mat_vec_quant(&quantized, QuantType::Q4_0, rows, cols, &input)));
 
         // Q4_0 quantized (parallel)
-        group.bench_function("q4_0_parallel", |b| {
-            b.iter(|| {
-                parallel_backend.mat_vec_quant(&quantized, QuantType::Q4_0, rows, cols, &input)
-            })
-        });
+        group.bench_function("q4_0_parallel", |b| b.iter(|| parallel_backend.mat_vec_quant(&quantized, QuantType::Q4_0, rows, cols, &input)));
 
         group.finish();
     }

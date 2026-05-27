@@ -1,4 +1,4 @@
-use llama::{BackendType, InferenceContext, Model, ModelConfig};
+use llama::{InferenceContext, Model, ModelConfig};
 use std::io::{Seek, Write};
 use std::sync::Arc;
 
@@ -193,7 +193,7 @@ fn test_forward_pass_produces_logits() {
     assert!(result.is_ok());
     let tokens = result.unwrap();
     assert!(!tokens.is_empty());
-    assert!(tokens.len() >= 1);
+        assert!(!tokens.is_empty());
 
     std::fs::remove_file(&gguf_path).ok();
 }

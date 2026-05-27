@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "fix-errors": {
+      "source": "microsoft/vscode",
+      "sourceType": "github",
+      "skillPath": ".github/skills/fix-errors/SKILL.md",
+      "computedHash": "df886938145bd39f233e01a3ba33cceaf2a1b951b5e11f59b0954d3fab9f5282"
+    }
+  }
+}

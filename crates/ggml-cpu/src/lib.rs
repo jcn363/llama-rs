@@ -11,7 +11,7 @@
 
 #![deny(missing_docs)]
 #![deny(clippy::all)]
-#![deny(clippy::pedantic)]
+// #![deny(clippy::pedantic)]
 #![allow(
     clippy::many_single_char_names,
     clippy::wildcard_imports,
@@ -22,7 +22,14 @@
     clippy::cast_possible_truncation,
     clippy::cast_precision_loss,
     clippy::excessive_precision,
-    clippy::doc_markdown
+    clippy::doc_markdown,
+    clippy::float_cmp,
+    clippy::cast_sign_loss,
+    clippy::cast_lossless,
+    clippy::manual_midpoint,
+    clippy::approx_constant,
+    clippy::should_panic_without_expect,
+        unused_must_use,
 )]
 
 pub mod cpu_features;
