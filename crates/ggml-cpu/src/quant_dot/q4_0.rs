@@ -4,7 +4,7 @@
 //! Each nibble encodes a signed 4-bit value: 0 → -8, 1 → -7, ..., 15 → 7.
 //! Byte `i` stores nibble for `value[2*i]` in low 4 bits, `value[2*i+1]` in high 4 bits.
 
-use crate::quant_dot::QuantDot;
+use crate::quant_dot::{unpack_nibbles, QuantDot};
 use half::f16;
 
 /// `Q4_0` quantized dot product kernel.
@@ -26,19 +26,11 @@ impl QuantDot for Q4_0Dot {
         let scale = f16::from_le_bytes([quantized[0], quantized[1]]).to_f32();
         let mut sum = 0.0f32;
         for i in 0..16 {
-            let byte = quantized[2 + i];
-            // Nibble values are 0..15, always safe for i8
-            #[expect(clippy::cast_possible_wrap)]
-            let lo = (byte & 0x0F) as i8;
-            #[expect(clippy::cast_possible_wrap)]
-            let hi = (byte >> 4) as i8;
-            // Q4_0: signed 4-bit, values are -8..7, but stored as unsigned 0..15
-            // So we subtract 8 to get the actual value: 0→-8, 1→-7, ..., 15→7
-            // Safety: nibble values 0..15 fit in i8
-            let lo_val = f32::from(lo.wrapping_sub(8));
-            let hi_val = f32::from(hi.wrapping_sub(8));
-            sum += lo_val * input[i * 2];
-            sum += hi_val * input[i * 2 + 1];
+            let (lo, hi) = unpack_nibbles(quantized[2 + i]);
+            // Q4_0: signed 4-bit, values stored as unsigned 0..15, meaning -8..7
+            // Subtract 8 to get the actual value: 0→-8, 1→-7, ..., 15→7
+            sum += f32::from(lo.wrapping_sub(8)) * input[i * 2];
+            sum += f32::from(hi.wrapping_sub(8)) * input[i * 2 + 1];
         }
         sum * scale
     }
@@ -47,48 +39,36 @@ impl QuantDot for Q4_0Dot {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::quant_dot::test_utils::*;
     use crate::quant_dot::QuantDot;
 
     /// Build a Q4_0 block from a scale and 32 signed values.
-    /// Values are clamped to [-8, 7].
     #[cfg(feature = "simd")]
     fn build_block(scale: f32, values: &[i8]) -> [u8; 18] {
         debug_assert_eq!(values.len(), 32);
-        let scale_bytes = f16::from_f32(scale).to_le_bytes();
         let mut block = [0u8; 18];
-        block[0] = scale_bytes[0];
-        block[1] = scale_bytes[1];
-        for i in 0..16 {
-            let lo = (values[i * 2].wrapping_add(8) & 0x0F) as u8;
-            let hi = ((values[i * 2 + 1].wrapping_add(8) & 0x0F) as u8) << 4;
-            block[2 + i] = lo | hi;
-        }
+        write_f16_scale(&mut block[..2], scale);
+        fill_nibble_block(&mut block, 2, values, true);
         block
     }
 
     #[cfg(not(feature = "simd"))]
     fn build_block(scale: f32, values: &[i8]) -> Vec<u8> {
         debug_assert_eq!(values.len(), 32);
-        let scale_bytes = f16::from_f32(scale).to_le_bytes();
-        let mut block = Vec::with_capacity(18);
-        block.extend_from_slice(&scale_bytes);
-        for i in 0..16 {
-            let lo = (values[i * 2].wrapping_add(8) & 0x0F) as u8;
-            let hi = ((values[i * 2 + 1].wrapping_add(8) & 0x0F) as u8) << 4;
-            block.push(lo | hi);
-        }
+        let mut block = vec![0u8; 18];
+        write_f16_scale(&mut block[..2], scale);
+        fill_nibble_block(&mut block, 2, values, true);
         block
     }
 
     #[test]
     fn test_q4_0_dot_block_positive_values() {
         let kernel = Q4_0Dot;
-        // scale=2.0, all values = 7 (max positive for 4-bit signed)
         let block = build_block(2.0, &[7i8; 32]);
         let input = [1.0f32; 32];
         let result = kernel.dot_block(&block, &input);
         // sum = 32 * (7 * 2.0 * 1.0) = 448
-        assert!((result - 448.0).abs() < 1e-3, "expected 448, got {result}");
+        assert_close(result, 448.0, 1e-3);
     }
 
     #[test]
@@ -97,7 +77,7 @@ mod tests {
         let block = build_block(1.0, &[1i8; 32]);
         let input = [0.0f32; 32];
         let result = kernel.dot_block(&block, &input);
-        assert!((result - 0.0).abs() < 1e-6, "expected 0, got {result}");
+        assert_close(result, 0.0, 1e-6);
     }
 
     #[test]
@@ -107,16 +87,12 @@ mod tests {
         let block = build_block(1.5, &values);
         let input: [f32; 32] = std::array::from_fn(|i| i as f32 * 0.5);
 
-        // Reference: sum(values[i] * scale * input[i])
         let expected: f32 = values
             .iter()
             .zip(input.iter())
             .map(|(v, inp)| (*v as f32) * 1.5 * inp)
             .sum();
         let result = kernel.dot_block(&block, &input);
-        assert!(
-            (result - expected).abs() < 1e-3,
-            "expected {expected}, got {result}"
-        );
+        assert_close(result, expected, 1e-3);
     }
 }

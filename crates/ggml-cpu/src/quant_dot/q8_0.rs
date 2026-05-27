@@ -26,7 +26,6 @@ impl QuantDot for Q8_0Dot {
         let scale = f16::from_le_bytes([quantized[0], quantized[1]]).to_f32();
         let mut sum = 0.0f32;
         for i in 0..32 {
-            // Nibble values are -128..127, always safe for i8
             #[expect(clippy::cast_possible_wrap)]
             let w = quantized[2 + i] as i8;
             sum += f32::from(w) * input[i];
@@ -38,17 +37,15 @@ impl QuantDot for Q8_0Dot {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::quant_dot::test_utils::*;
     use crate::quant_dot::QuantDot;
 
     /// Build a Q8_0 block from a scale and 32 signed values.
     #[cfg(feature = "simd")]
     fn build_block(scale: f32, values: &[i8]) -> [u8; 34] {
-        // Buffer reuse with fixed-size array; SIMD could be applied here in the future.
         debug_assert_eq!(values.len(), 32);
-        let scale_bytes = f16::from_f32(scale).to_le_bytes();
         let mut block = [0u8; 34];
-        block[0] = scale_bytes[0];
-        block[1] = scale_bytes[1];
+        write_f16_scale(&mut block[..2], scale);
         for (i, v) in values.iter().enumerate() {
             block[2 + i] = *v as u8;
         }
@@ -58,9 +55,10 @@ mod tests {
     #[cfg(not(feature = "simd"))]
     fn build_block(scale: f32, values: &[i8]) -> Vec<u8> {
         debug_assert_eq!(values.len(), 32);
-        let scale_bytes = f16::from_f32(scale).to_le_bytes();
         let mut block = Vec::with_capacity(34);
-        block.extend_from_slice(&scale_bytes);
+        let mut header = [0u8; 2];
+        write_f16_scale(&mut header, scale);
+        block.extend_from_slice(&header);
         for v in values {
             block.push(*v as u8);
         }
@@ -74,7 +72,7 @@ mod tests {
         let input = [1.0f32; 32];
         let result = kernel.dot_block(&block, &input);
         // sum = 32 * (3 * 1.0) = 96
-        assert!((result - 96.0).abs() < 1e-3, "expected 96, got {result}");
+        assert_close(result, 96.0, 1e-3);
     }
 
     #[test]
@@ -84,10 +82,7 @@ mod tests {
         let input = [1.0f32; 32];
         let result = kernel.dot_block(&block, &input);
         // sum = 32 * (-5 * 2.0) = -320
-        assert!(
-            (result - (-320.0)).abs() < 1e-3,
-            "expected -320, got {result}"
-        );
+        assert_close(result, -320.0, 1e-3);
     }
 
     #[test]
@@ -96,7 +91,7 @@ mod tests {
         let block = build_block(1.0, &[7i8; 32]);
         let input = [0.0f32; 32];
         let result = kernel.dot_block(&block, &input);
-        assert!((result - 0.0).abs() < 1e-6, "expected 0, got {result}");
+        assert_close(result, 0.0, 1e-6);
     }
 
     #[test]
@@ -112,9 +107,6 @@ mod tests {
             .map(|(v, inp)| f32::from(*v) * 1.5 * inp)
             .sum();
         let result = kernel.dot_block(&block, &input);
-        assert!(
-            (result - expected).abs() < 1e-3,
-            "expected {expected}, got {result}"
-        );
+        assert_close(result, expected, 1e-3);
     }
 }

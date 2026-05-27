@@ -6,6 +6,72 @@
 //!
 //! This gives 2-4x throughput improvement vs dequantize-then-compute.
 
+// ---------------------------------------------------------------------------
+// Shared utilities for nibble-based quantized formats (Q4_0, Q4_1)
+// ---------------------------------------------------------------------------
+
+/// Unpack lo and hi 4-bit nibbles from a byte as signed `i8` values
+/// (range 0..15, always fits in `i8`).
+#[inline]
+#[expect(clippy::cast_possible_wrap)]
+pub(crate) fn unpack_nibbles(byte: u8) -> (i8, i8) {
+    let lo = (byte & 0x0F) as i8;
+    let hi = (byte >> 4) as i8;
+    (lo, hi)
+}
+
+#[cfg(test)]
+pub(crate) mod test_utils {
+    use half::f16;
+
+    /// Write an f16 scale into the first two bytes of a buffer.
+    #[inline]
+    pub(crate) fn write_f16_scale(buf: &mut [u8], scale: f32) {
+        let bytes = f16::from_f32(scale).to_le_bytes();
+        buf[0] = bytes[0];
+        buf[1] = bytes[1];
+    }
+
+    /// Pack two signed 4-bit values (range -8..7) into a byte.
+    /// Values are biased by +8 for unsigned storage.
+    #[inline]
+    pub(crate) fn pack_signed_nibbles(lo: i8, hi: i8) -> u8 {
+        let lo = (lo.wrapping_add(8) & 0x0F) as u8;
+        let hi = ((hi.wrapping_add(8) & 0x0F) as u8) << 4;
+        lo | hi
+    }
+
+    /// Pack two unsigned 4-bit values (range 0..15) into a byte.
+    #[inline]
+    pub(crate) fn pack_unsigned_nibbles(lo: u8, hi: u8) -> u8 {
+        (lo & 0x0F) | ((hi & 0x0F) << 4)
+    }
+
+    /// Assemble a Q4_0 / Q4_1 nibble block from 32 signed values.
+    /// `offset` is the byte position where nibble data starts (2 for Q4_0, 4 for Q4_1).
+    /// `signed` controls whether values are biased by +8 (Q4_0 signed storage) or not (Q4_1 unsigned storage).
+    pub(crate) fn fill_nibble_block(buf: &mut [u8], offset: usize, values: &[i8], signed: bool) {
+        for i in 0..16 {
+            let lo_val = values[i * 2];
+            let hi_val = values[i * 2 + 1];
+            buf[offset + i] = if signed {
+                pack_signed_nibbles(lo_val, hi_val)
+            } else {
+                pack_unsigned_nibbles(lo_val as u8, hi_val as u8)
+            };
+        }
+    }
+
+    /// Assert that two f32 values are within a small epsilon.
+    #[inline]
+    pub(crate) fn assert_close(actual: f32, expected: f32, eps: f32) {
+        assert!(
+            (actual - expected).abs() < eps,
+            "expected {expected}, got {actual}"
+        );
+    }
+}
+
 /// Trait for quantized dot product implementations.
 /// `block_size` is the number of f32 values per quantized block.
 /// E.g., `Q4_0` has `block_size=32` (each block stores 32 4-bit weights + scale).
@@ -58,17 +124,12 @@ mod tests {
     use super::*;
     use crate::quant_dot::q4_0::Q4_0Dot;
     use crate::simd;
-    use half::f16;
-
     fn build_q4_0_block(scale: f32, values: &[i8]) -> Vec<u8> {
         assert_eq!(values.len(), 32);
-        let scale_bytes = f16::from_f32(scale).to_le_bytes();
-        let mut block = Vec::with_capacity(18);
-        block.extend_from_slice(&scale_bytes);
+        let mut block = vec![0u8; 18];
+        test_utils::write_f16_scale(&mut block[..2], scale);
         for i in 0..16 {
-            let lo = (values[i * 2].wrapping_add(8) & 0x0F) as u8;
-            let hi = ((values[i * 2 + 1].wrapping_add(8) & 0x0F) as u8) << 4;
-            block.push(lo | hi);
+            block[2 + i] = test_utils::pack_signed_nibbles(values[i * 2], values[i * 2 + 1]);
         }
         block
     }
