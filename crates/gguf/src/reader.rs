@@ -285,8 +285,18 @@ impl GgufReader {
         self.alignment
     }
 
-    /// Get a metadata value by key, trying multiple keys in order.
-    /// Returns the first key that exists.
+    /// Retrieve the first metadata value that matches any of the provided keys.
+    ///
+    /// Returns `Some(&GgufValue)` for the first key found, or `None` if none of the
+    /// keys exist in the file.
+    ///
+    /// # Example
+    /// ```ignore
+    /// // Suppose the GGUF file may contain either "general.name" or "model.name"
+    /// let keys = ["general.name", "model.name"];
+    /// // In real code, obtain a `GgufReader` instance and call:
+    /// // let value = reader.get_kv_any(&keys);
+    /// ```
     #[must_use]
     pub fn get_kv_any<'a>(&'a self, keys: &[&str]) -> Option<&'a GgufValue> {
         for &key in keys {

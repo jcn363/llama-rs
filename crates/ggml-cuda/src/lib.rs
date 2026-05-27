@@ -602,11 +602,24 @@ mod tests {
     }
 
     #[test]
-    fn cuda_backend_should_start_unavailable_without_feature() {
-        let backend = CudaBackend::new().unwrap_or_default();
-        let _ = backend.is_available();
+    fn cuda_backend_thread_safety() {
+        // Verify that the backend can be safely accessed from multiple threads.
+        // Use an Arc to share ownership without requiring Clone on CudaBackend.
+        let backend = std::sync::Arc::new(CudaBackend::new().unwrap_or_default());
+        let handles: Vec<_> = (0..8)
+            .map(|_| {
+                let b = std::sync::Arc::clone(&backend);
+                std::thread::spawn(move || {
+                    let _ = b.is_available();
+                    let _ = b.total_vram();
+                    let _ = b.cuda_cores();
+                })
+            })
+            .collect();
+        for h in handles {
+            h.join().expect("thread panicked");
+        }
     }
-
     #[test]
     fn copy_to_device_should_fail_for_large_tensor() {
         let backend = CudaBackend::new().unwrap_or_default();

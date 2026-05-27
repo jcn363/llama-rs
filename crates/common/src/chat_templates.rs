@@ -84,6 +84,18 @@ pub fn get_builtin_template(architecture: &str) -> &'static str {
 ///
 /// # Errors
 /// Returns `ChatTemplateError` if the template cannot be rendered or is invalid.
+///
+/// # Examples
+/// ```
+/// // Use the built‑in "llama" template
+/// let out = render_with_architecture("sys", "hi", "llama", None).unwrap();
+/// assert!(out.contains("[INST] hi [/INST]"));
+///
+/// // Override with a custom template
+/// let custom = "CUSTOM {{ prompt }}";
+/// let out2 = render_with_architecture("", "test", "llama", Some(custom)).unwrap();
+/// assert_eq!(out2, "CUSTOM test");
+/// ```
 pub fn render_with_architecture(
     system: &str,
     prompt: &str,
