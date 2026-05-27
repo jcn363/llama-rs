@@ -6,6 +6,7 @@
 
 use std::path::PathBuf;
 
+use common::sampling::SamplingConfig;
 use serde::{Deserialize, Serialize};
 
 /// Role of a chat message participant.
@@ -40,40 +41,13 @@ pub struct Session {
     /// Model identifier used for this session.
     pub model_id: String,
     /// Snapshot of sampling parameters.
-    pub sampler_config: SamplerConfigSnapshot,
+    pub sampler_config: SamplingConfig,
     /// Optional chat template name.
     pub template_name: Option<String>,
     /// ISO-8601 or epoch creation timestamp.
     pub created_at: String,
     /// ISO-8601 or epoch last-updated timestamp.
     pub updated_at: String,
-}
-
-/// Snapshot of sampler configuration for session persistence.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SamplerConfigSnapshot {
-    /// Temperature for sampling (0.0 = greedy).
-    pub temperature: f32,
-    /// Top-k sampling (0 = disabled).
-    pub top_k: usize,
-    /// Top-p nucleus sampling (1.0 = disabled).
-    pub top_p: f32,
-    /// Repeat penalty (1.0 = no penalty).
-    pub repeat_penalty: f32,
-    /// Optional random seed for reproducibility.
-    pub seed: Option<u64>,
-}
-
-impl Default for SamplerConfigSnapshot {
-    fn default() -> Self {
-        Self {
-            temperature: 0.8,
-            top_k: 40,
-            top_p: 0.95,
-            repeat_penalty: 1.1,
-            seed: None,
-        }
-    }
 }
 
 impl Session {
@@ -88,7 +62,7 @@ impl Session {
         Self {
             messages: Vec::new(),
             model_id: model_id.into(),
-            sampler_config: SamplerConfigSnapshot::default(),
+            sampler_config: SamplingConfig::default(),
             template_name: None,
             created_at: now.clone(),
             updated_at: now,
