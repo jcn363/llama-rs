@@ -8,16 +8,19 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
+llama-core = { workspace = true }
 ggml = { workspace = true }
-cudarc = { workspace = true, optional = true }
+cudarc = { workspace = true, optional = true, features = ["cuda-version-from-build-system"] }
 tracing = { workspace = true }
 half = { workspace = true }
 thiserror = { workspace = true }
+error = { workspace = true }
 
 [features]
 default = []
-cuda = ["dep:cudarc", "cudarc/cuda-version-from-build-system"]
-cuda = ["dep:cudarc", "cudarc/cuda-version-from-build-system"]
+cuda = ["cudarc"]
+
+
 
 [dev-dependencies]
 criterion = { workspace = true }

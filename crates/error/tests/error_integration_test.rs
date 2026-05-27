@@ -2,7 +2,7 @@
 ///
 /// These tests verify that the `Error` type works correctly in cross-crate scenarios
 /// and that the `Result<T>` alias is usable from external code.
-use common::error::{Error, Result};
+use error::{Error, Result};
 
 #[test]
 fn integration_error_can_be_created_from_io_error() {

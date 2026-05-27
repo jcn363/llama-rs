@@ -56,6 +56,17 @@ pub enum CudaError {
 /// Result type alias for CUDA operations.
 pub type CudaResult<T> = Result<T, CudaError>;
 
+impl From<CudaError> for error::Error {
+    fn from(err: CudaError) -> Self {
+        match err {
+            CudaError::NotAvailable(s) => error::Error::Network(s),
+            CudaError::OutOfMemory { needed, available } => error::Error::Other(format!(
+                "insufficient VRAM: needed {needed} bytes, available {available} bytes")),
+            CudaError::RuntimeError(s) => error::Error::Other(s),
+        }
+    }
+}
+
 // ─── CUDA Backend ────────────────────────────────────────────────────────────
 
 /// CUDA backend for GPU-accelerated tensor operations.

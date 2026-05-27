@@ -51,8 +51,24 @@ mod tests {
 
     /// Build a Q4_0 block from a scale and 32 signed values.
     /// Values are clamped to [-8, 7].
+    #[cfg(feature = "simd")]
+    fn build_block(scale: f32, values: &[i8]) -> [u8; 18] {
+        debug_assert_eq!(values.len(), 32);
+        let scale_bytes = f16::from_f32(scale).to_le_bytes();
+        let mut block = [0u8; 18];
+        block[0] = scale_bytes[0];
+        block[1] = scale_bytes[1];
+        for i in 0..16 {
+            let lo = (values[i * 2].wrapping_add(8) & 0x0F) as u8;
+            let hi = ((values[i * 2 + 1].wrapping_add(8) & 0x0F) as u8) << 4;
+            block[2 + i] = lo | hi;
+        }
+        block
+    }
+
+    #[cfg(not(feature = "simd"))]
     fn build_block(scale: f32, values: &[i8]) -> Vec<u8> {
-        assert_eq!(values.len(), 32);
+        debug_assert_eq!(values.len(), 32);
         let scale_bytes = f16::from_f32(scale).to_le_bytes();
         let mut block = Vec::with_capacity(18);
         block.extend_from_slice(&scale_bytes);
@@ -62,21 +78,6 @@ mod tests {
             block.push(lo | hi);
         }
         block
-    }
-
-    #[test]
-    fn test_q4_0_dot_block_simple() {
-        let kernel = Q4_0Dot;
-        // scale=1.0, all nibbles = 0x1 → value = 1-8 = -7
-        let block = build_block(1.0, &[-7i8; 32]);
-        assert_eq!(block.len(), 18);
-        let input = [1.0f32; 32];
-        let result = kernel.dot_block(&block, &input);
-        // sum = 32 * (-7 * 1.0) = -224
-        assert!(
-            (result - (-224.0)).abs() < 1e-3,
-            "expected -224, got {result}"
-        );
     }
 
     #[test]

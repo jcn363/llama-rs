@@ -1,49 +1,32 @@
 //! Tensor info and memory-mapped tensor reference.
 //!
-//! Contains [`TensorInfo`] (metadata about a tensor in a GGUF file) and
-//! [`MmapTensor`] (a lazy memory-mapped reference to tensor data).
-//! Both were previously defined in `lib.rs`.
+//! This module re‑exports [`TensorInfo`] and [`MmapTensor`] from `llama_core`
+//! and provides GGUF‑specific de‑quantization functionality via an extension
+//! trait and free functions.
 
-use std::sync::Arc;
+pub use llama_core::{MmapTensor, TensorInfo};
 
 use crate::dequant::*;
 use crate::{GgmlType, GgufError};
 
-// ─── Tensor Info ─────────────────────────────────────────────────────────────
-
-/// Information about a single tensor in a GGUF file.
-#[derive(Debug, Clone)]
-pub struct TensorInfo {
-    /// Tensor name.
-    pub name: String,
-    /// Number of dimensions.
-    pub n_dims: u32,
-    /// Shape (dimensions in reverse order from file, matching ggml convention).
-    pub shape: Vec<i64>,
-    /// Data type.
-    pub dtype: GgmlType,
-    /// Offset into the tensor data blob.
-    pub offset: u64,
-}
-
-impl TensorInfo {
-    /// De‑quantize the raw tensor bytes into a `Vec<f32>`.
-    /// Supports F32, F16, and common quantization types (``Q4_0``, ``Q4_1``,
-    /// ``Q5_0``, ``Q5_1``, ``Q8_0``, ``Q2_K``-``Q6_K``).
+/// Extension trait adding GGUF-specific dequantization methods to [`TensorInfo`].
+///
+/// Defined here instead of on `TensorInfo` directly to avoid Rust's orphan rule
+/// (`TensorInfo` is defined in `llama_core` while our error types are in `gguf`).
+pub trait TensorDequantExt {
+    /// De-quantize the raw tensor bytes into a `Vec<f32>`.
     ///
-    /// # Panics
-    ///
-    /// This function will panic if the underlying byte slices cannot be
-    /// converted to the expected array sizes via `try_into`. The panic is
-    /// considered acceptable because the size checks are performed just
-    /// before the conversion, and a mismatch would indicate a corrupted
-    /// GGUF file.
+    /// Supports F32, F16, and common quantization types (Q4_0 through IQ4_XS).
     ///
     /// # Errors
     ///
-    /// Returns a `GgufError::DecodeError` if the tensor size is not a multiple
-    /// of the element size, or if the dtype is unsupported.
-    pub fn dequantize(&self, raw: &[u8]) -> Result<Vec<f32>, GgufError> {
+    /// Returns a [`GgufError::DecodeError`] if the data is malformed or the
+    /// dtype is unsupported.
+    fn dequantize(&self, raw: &[u8]) -> Result<Vec<f32>, GgufError>;
+}
+
+impl TensorDequantExt for TensorInfo {
+    fn dequantize(&self, raw: &[u8]) -> Result<Vec<f32>, GgufError> {
         match self.dtype {
             GgmlType::F32 => {
                 if raw.len() % 4 != 0 {
@@ -62,7 +45,6 @@ impl TensorInfo {
                             let start = chunk_idx * 1024 * 4;
                             for (i, out_val) in chunk.iter_mut().enumerate() {
                                 let byte_idx = start + i * 4;
-                                // SAFETY: chunks_exact(4) guarantees 4 bytes available
                                 *out_val = f32::from_le_bytes(
                                     raw[byte_idx..byte_idx + 4]
                                         .try_into()
@@ -74,7 +56,6 @@ impl TensorInfo {
                 } else {
                     let mut out = Vec::with_capacity(num_elements);
                     for chunk in raw.chunks_exact(4) {
-                        // SAFETY: chunks_exact(4) guarantees chunk.len() == 4
                         let v =
                             f32::from_le_bytes(chunk.try_into().expect("chunks_exact(4) verified"));
                         out.push(v);
@@ -99,7 +80,6 @@ impl TensorInfo {
                             let start = chunk_idx * 1024 * 2;
                             for (i, out_val) in chunk.iter_mut().enumerate() {
                                 let byte_idx = start + i * 2;
-                                // SAFETY: chunks_exact(2) guarantees 2 bytes available
                                 let bits = u16::from_le_bytes(
                                     raw[byte_idx..byte_idx + 2]
                                         .try_into()
@@ -112,7 +92,6 @@ impl TensorInfo {
                 } else {
                     let mut out = Vec::with_capacity(num_elements);
                     for chunk in raw.chunks_exact(2) {
-                        // SAFETY: chunks_exact(2) guarantees chunk.len() == 2
                         let bits =
                             u16::from_le_bytes(chunk.try_into().expect("chunks_exact(2) verified"));
                         let f: f32 = half::f16::from_bits(bits).to_f32();
@@ -157,42 +136,20 @@ impl TensorInfo {
     }
 }
 
-// ─── Mmap Tensor ─────────────────────────────────────────────────────────────
-
-/// Memory-mapped tensor reference — holds a shared mmap plus offset/size.
-/// Enables lazy loading: tensor data is only accessed from the mmap on demand,
-/// letting the OS page in only the needed regions.
-#[derive(Debug, Clone)]
-pub struct MmapTensor {
-    /// Shared reference to the memory-mapped file.
-    pub mmap: Arc<memmap2::Mmap>,
-    /// Byte offset within the mmap where this tensor's data starts.
-    pub offset: usize,
-    /// Size of the tensor data in bytes.
-    pub size: usize,
-}
-
-impl MmapTensor {
-    /// Create a new memory-mapped tensor reference.
-    #[must_use]
-    pub fn new(mmap: Arc<memmap2::Mmap>, offset: usize, size: usize) -> Self {
-        Self { mmap, offset, size }
-    }
-
-    /// Get a slice of the raw tensor data from the mmap.
-    pub fn as_slice(&self) -> Result<&[u8], GgufError> {
-        let end = self.offset + self.size;
-        if end > self.mmap.len() {
-            return Err(GgufError::DecodeError(format!(
-                "tensor data extends beyond mmap (need {end}, have {})",
-                self.mmap.len()
-            )));
-        }
-        Ok(&self.mmap[self.offset..end])
-    }
-
-    /// Dequantize the tensor data directly from the mmap.
-    pub fn dequantize(&self, info: &TensorInfo) -> Result<Vec<f32>, GgufError> {
-        info.dequantize(self.as_slice()?)
-    }
+/// De-quantize a memory-mapped tensor using its `TensorInfo`.
+///
+/// This is a convenience function that calls `TensorDequantExt::dequantize` on
+/// the mmap tensor's raw data slice.
+///
+/// # Errors
+///
+/// Returns [`GgufError`] if the tensor data cannot be read or de-quantized.
+pub fn mmap_tensor_dequantize(
+    mmap: &MmapTensor,
+    info: &TensorInfo,
+) -> Result<Vec<f32>, GgufError> {
+    use TensorDequantExt as _;
+    info.dequantize(mmap.as_slice().map_err(|e| {
+        GgufError::DecodeError(format!("mmap bounds exceeded: {e}"))
+    })?)
 }

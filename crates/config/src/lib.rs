@@ -8,6 +8,8 @@
 use std::env;
 use std::path::PathBuf;
 
+use common::sampling::SamplingConfig;
+
 /// Central configuration for the application (CLI/server).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Config {
@@ -66,6 +68,10 @@ impl Config {
 /// UI preferences for the llama-ui desktop application.
 ///
 /// Stored as TOML at `$XDG_CONFIG_HOME/llama-ui/prefs.toml`.
+///
+/// Sampling defaults (`temperature`, `top_k`, `top_p`) are inherited from
+/// [`common::sampling::SamplingConfig`] via `#[serde(flatten)]` for
+/// backward-compatible TOML serialization.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct UiConfig {
     /// Theme name ("dark", "light", "system").
@@ -80,15 +86,9 @@ pub struct UiConfig {
     /// Whether to start maximized.
     #[serde(default)]
     pub start_maximized: bool,
-    /// Default temperature.
-    #[serde(default = "default_temperature")]
-    pub temperature: f32,
-    /// Default top-k.
-    #[serde(default = "default_top_k")]
-    pub top_k: usize,
-    /// Default top-p.
-    #[serde(default = "default_top_p")]
-    pub top_p: f32,
+    /// Sampling configuration (flattened for TOML compat).
+    #[serde(flatten)]
+    pub sampling: SamplingConfig,
 }
 
 fn default_theme() -> String {
@@ -100,15 +100,6 @@ fn default_font_size() -> u16 {
 fn default_max_tokens() -> usize {
     512
 }
-fn default_temperature() -> f32 {
-    0.8
-}
-fn default_top_k() -> usize {
-    40
-}
-fn default_top_p() -> f32 {
-    0.95
-}
 
 impl Default for UiConfig {
     fn default() -> Self {
@@ -117,9 +108,7 @@ impl Default for UiConfig {
             font_size: default_font_size(),
             max_tokens: default_max_tokens(),
             start_maximized: false,
-            temperature: default_temperature(),
-            top_k: default_top_k(),
-            top_p: default_top_p(),
+            sampling: SamplingConfig::default(),
         }
     }
 }
@@ -217,6 +206,9 @@ mod tests {
         assert_eq!(cfg.theme, "dark");
         assert_eq!(cfg.font_size, 14);
         assert_eq!(cfg.max_tokens, 512);
+        assert_eq!(cfg.sampling.temperature, 0.8);
+        assert_eq!(cfg.sampling.top_k, 40);
+        assert_eq!(cfg.sampling.top_p, 0.95);
     }
 
     #[test]
@@ -226,9 +218,12 @@ mod tests {
             font_size: 16,
             max_tokens: 1024,
             start_maximized: true,
-            temperature: 0.7,
-            top_k: 50,
-            top_p: 0.9,
+            sampling: SamplingConfig {
+                temperature: 0.7,
+                top_k: 50,
+                top_p: 0.9,
+                ..SamplingConfig::default()
+            },
         };
         let toml_str = toml::to_string_pretty(&cfg).unwrap();
         let parsed: UiConfig = toml::from_str(&toml_str).unwrap();
@@ -236,5 +231,8 @@ mod tests {
         assert_eq!(parsed.font_size, 16);
         assert_eq!(parsed.max_tokens, 1024);
         assert!(parsed.start_maximized);
+        assert_eq!(parsed.sampling.temperature, 0.7);
+        assert_eq!(parsed.sampling.top_k, 50);
+        assert_eq!(parsed.sampling.top_p, 0.9);
     }
 }

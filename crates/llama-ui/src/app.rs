@@ -13,7 +13,6 @@ use iced::keyboard::key::Named as NamedKey;
 use iced::stream;
 use iced::widget::{
     button, column, pick_list, row, scrollable, slider, text_input, vertical_rule,
-    text, container,
 };
 use iced::{Element, Fill, Subscription, Task, Theme, window};
 
@@ -914,7 +913,7 @@ fn view_model_picker(state: &LlamaApp) -> Element<'_, Message> {
 
     for (i, model) in state.models.iter().enumerate() {
         let btn = button(iced::widget::text(&model.name).size(18))
-            .style(crate::theme::ModelButton)
+            .style(llama_ui_core::theme::primary_button_style)
             .on_press(Message::ModelSelected(i))
             .padding(10);
         children.push(btn.into());

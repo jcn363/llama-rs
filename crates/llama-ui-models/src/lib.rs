@@ -4,7 +4,7 @@
 
 #![deny(missing_docs)]
 
-use common::error::{Result, Error};
+use common::{Error, Result};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 

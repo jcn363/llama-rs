@@ -19,17 +19,28 @@
     clippy::items_after_statements,
     clippy::too_many_arguments,
     clippy::cast_ptr_alignment,
-    clippy::cast_possible_truncation
+    clippy::cast_possible_truncation,
+    clippy::cast_precision_loss,
+    clippy::excessive_precision,
+    clippy::doc_markdown
 )]
 
 pub mod cpu_features;
 pub use cpu_features::{has_aes, has_avx, has_popcnt, has_sse4_2};
 
+pub mod reduce;
+
+pub mod activations;
+
 mod simd;
 pub use simd::dot_f32;
 
+pub mod elementwise;
+
 mod matmul;
 pub use matmul::matmul_f32;
+
+pub mod other;
 
 mod backend;
 pub use backend::{CpuBackend, reset_bump_allocator};

@@ -1,53 +1,7 @@
 # rust-mcp-filesystem Installation & Configuration
 
-## ✅ Installation Complete
+<!-- include: docs/common/rust_mcp_filesystem.md -->
 
-**Status:** Successfully installed and configured in OpenCode
-
-### What Was Installed
-
-- **Binary:** `rust-mcp-filesystem v0.4.2`
-- **Location:** `~/.rust-mcp-stack/bin/rust-mcp-filesystem`
-- **Type:** Standalone Rust binary (no dependencies required)
-- **Size:** Lightweight, single executable
-
-### Configuration in OpenCode
-
-The MCP server has been added to your OpenCode configuration at:
-```
-~/.config/opencode/opencode.json
-```
-
-**Configuration Details:**
-```json
-"rust-mcp-filesystem": {
-  "type": "stdio",
-  "command": "/home/user/.rust-mcp-stack/bin/rust-mcp-filesystem",
-  "args": [
-    "/home/user/Desktop/llama-rs",
-    "/home/user"
-  ],
-  "env": {
-    "ALLOW_WRITE": "false",
-    "ENABLE_ROOTS": "false"
-  },
-  "enabled": true
-}
-```
-
----
-
-## 🎯 Features
-
-### ⚡ Performance
-- **Blazingly Fast:** Built in Rust with asynchronous I/O
-- **Lightweight:** Single binary, no external dependencies
-- **Efficient:** Minimal resource footprint
-
-### 🔒 Security
-- **Read-Only by Default:** No write access unless explicitly enabled
-- **Controlled Access:** Specify allowed directories
-- **Safe Operations:** Type-safe Rust implementation
 
 ### 🔍 Capabilities
 

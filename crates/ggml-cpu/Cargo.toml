@@ -12,6 +12,7 @@ repository.workspace = true
 simd = []
 
 [dependencies]
+llama-core = { workspace = true }
 ggml = { workspace = true }
 rayon = { workspace = true }
 tracing = { workspace = true }
@@ -19,8 +20,6 @@ bytemuck = { workspace = true }
 half = { workspace = true }
 bumpalo = { workspace = true }
 thread_local = "1.1.4"
-# Optional SIMD dependency
-stdarch = { version = "0.2", optional = true }
 
 
 [dev-dependencies]

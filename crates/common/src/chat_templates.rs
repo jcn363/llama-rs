@@ -94,6 +94,15 @@ pub fn render_with_architecture(
     render_chat_template(system, prompt, template)
 }
 
+impl From<ChatTemplateError> for error::Error {
+    fn from(err: ChatTemplateError) -> Self {
+        match err {
+            ChatTemplateError::RenderFailed(s) => error::Error::Template(s),
+            ChatTemplateError::TemplateNotFound(s) => error::Error::Template(s),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -1,3 +1,4 @@
+//! Desktop GUI for llama-rs LLM inference.
 #![deny(missing_docs)]
 
 mod app;

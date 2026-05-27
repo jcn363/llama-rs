@@ -28,7 +28,8 @@ futures = { workspace = true }
 tokio-stream = { workspace = true }
 anyhow = { workspace = true }
 tracing-subscriber = { workspace = true }
-iced = "0.13"
+llama-ui-core = { path = "../llama-ui-core" }
+iced = { workspace = true }
 chrono = "0.4"
 dirs = "5.0"
 rfd = "0.15"

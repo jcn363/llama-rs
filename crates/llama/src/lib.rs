@@ -104,7 +104,7 @@ impl RoPEConfig {
 #[derive(Debug)]
 pub struct TensorData {
     /// Memory-mapped reference to the tensor's raw (quantized) data.
-    pub mmap_tensor: gguf::MmapTensor,
+    pub mmap_tensor: llama_core::MmapTensor,
     /// Tensor metadata needed for de‑quantization.
     pub info: gguf::TensorInfo,
     /// De‑quantized float values – filled on first access.
@@ -121,7 +121,7 @@ impl TensorData {
         if let Some(ref d) = *self.data.read().expect("lock poisoned") {
             return Ok(d.clone());
         }
-        let deq = self.mmap_tensor.dequantize(&self.info)?;
+        let deq = gguf::mmap_tensor_dequantize(&self.mmap_tensor, &self.info)?;
         let arc: Arc<[f32]> = Arc::from(deq.into_boxed_slice());
         if self.cache {
             let mut write = self.data.write().expect("lock poisoned");
@@ -135,7 +135,9 @@ impl TensorData {
     /// This avoids dequantization entirely — the caller can pass the bytes
     /// directly to [`Backend::mat_vec_quant`] for faster inference.
     pub fn get_quantized_raw(&self) -> Result<(&[u8], gguf::GgmlType), gguf::GgufError> {
-        let raw = self.mmap_tensor.as_slice()?;
+        let raw = self.mmap_tensor.as_slice().map_err(|e| {
+            gguf::GgufError::DecodeError(format!("mmap bounds exceeded: {e}"))
+        })?;
         Ok((raw, self.info.dtype))
     }
 }

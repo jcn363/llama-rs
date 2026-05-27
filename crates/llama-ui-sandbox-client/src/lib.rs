@@ -332,6 +332,19 @@ impl Drop for SandboxClient {
     }
 }
 
+impl From<SandboxError> for error::Error {
+    fn from(err: SandboxError) -> Self {
+        match err {
+            SandboxError::Spawn(s) => error::Error::Other(s),
+            SandboxError::Health(s) => error::Error::Network(s),
+            SandboxError::Timeout(s) => error::Error::Other(s),
+            SandboxError::BinaryNotFound(s) => error::Error::Other(s),
+            SandboxError::Io(e) => error::Error::Io(e),
+            SandboxError::Http(e) => error::Error::Other(e.to_string()),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

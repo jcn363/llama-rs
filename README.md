@@ -10,6 +10,8 @@ A Rust port of [llama.cpp](https://github.com/ggml-org/llama.cpp), optimized for
 
 ## Project Structure & Module Organization
 
+**Note:** This README serves as the single source of truth for project documentation. All other documentation files should reference or mirror information from here to avoid inconsistencies.
+
 The workspace splits concerns across 12 domain crates, each handling a specific subsystem:
 
 ```

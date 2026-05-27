@@ -1,4 +1,5 @@
 #![deny(missing_docs)]
+#![allow(clippy::too_many_arguments)]
 
 //! Core tensor library and computation graph for the `ggml` crate.
 //!

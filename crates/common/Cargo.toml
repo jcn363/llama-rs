@@ -17,3 +17,4 @@ rand = "0.9"
 minijinja = { version = "2.7", features = ["loader"] }
 unicode-segmentation = "1.12"
 regex = "1.11"
+error = { workspace = true }

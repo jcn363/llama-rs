@@ -1,23 +1,11 @@
 [workspace]
 resolver = "2"
-
-[features]
-# Feature flags for optional backends and SIMD support
-default = ["cuda"]
-cuda = ["ggml-cuda"]
-cpu = ["ggml-cpu"]
-simd = []
-ui = ["llama-ui"]
-
-[profile.release]
-# Enable link‑time optimization and abort on panic for smaller, faster binaries
-lto = true
-panic = "abort"
 members = [
     "crates/gguf",
     "crates/ggml",
     "crates/ggml-cpu",
     "crates/ggml-cuda",
+    "crates/llama-core",
     "crates/llama",
     "crates/common",
     "crates/config",
@@ -28,7 +16,13 @@ members = [
     "crates/llama-ui-session",
     "crates/llama-ui-sandbox-client",
     "crates/llama-ui",
+    "crates/llama-ui-core",
 ]
+
+[profile.release]
+# Enable link‑time optimization and abort on panic for smaller, faster binaries
+lto = true
+panic = "abort"
 
 [workspace.package]
 version = "0.1.0"
@@ -39,6 +33,7 @@ repository = "https://github.com/jcn363/llama-rs"
 
 [workspace.dependencies]
 # Internal workspace crates
+llama-core = { path = "crates/llama-core" }
 ggml = { path = "crates/ggml" }
 ggml-cpu = { path = "crates/ggml-cpu" }
 ggml-cuda = { path = "crates/ggml-cuda" }
@@ -51,6 +46,7 @@ llama-ui-models = { path = "crates/llama-ui-models" }
 llama-ui-session = { path = "crates/llama-ui-session" }
 llama-ui-sandbox-client = { path = "crates/llama-ui-sandbox-client" }
 llama-ui = { path = "crates/llama-ui" }
+    llama-ui-core = { path = "crates/llama-ui-core" }
 
 # External dependencies
 thiserror = "2"
@@ -58,6 +54,7 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tracing = "0.1"
 clap = { version = "4", features = ["derive"] }
+iced = "0.13"
 rayon = "1.5"
 bytemuck = "1"
 half = { version = "2.3", features = ["bytemuck"] }

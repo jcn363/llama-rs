@@ -1,6 +1,6 @@
 [package]
 name = "gguf"
-description = "GGUF (GGML Universal File) format reader and writer"
+description = "GGUF (GGML Universal File) format reader and writer."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -8,20 +8,11 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
-half = { workspace = true }
-rayon = { workspace = true }
-
-byteorder = { workspace = true }
+llama-core = { workspace = true }
 memmap2 = { workspace = true }
-serde = { workspace = true }
-serde_json = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
 thiserror = { workspace = true }
-
-bytemuck = { workspace = true }
-
-[dev-dependencies]
-criterion = { workspace = true }
-
-[[bench]]
-name = "gguf_bench"
-harness = false
+ggml = { workspace = true }
+error = { workspace = true }
+rayon = { workspace = true }
+half = { workspace = true }

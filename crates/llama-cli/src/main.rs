@@ -41,22 +41,6 @@ struct Args {
     /// Enable verbose logging.
     #[arg(long, default_value_t = false)]
     verbose: bool,
-
-    /// Sampling temperature (0.0 = greedy, default: 0.8).
-    #[arg(long, default_value_t = 0.8)]
-    temperature: f32,
-
-    /// Top-k sampling (0 = disabled, default: 40).
-    #[arg(long, default_value_t = 40)]
-    top_k: usize,
-
-    /// Top-p nucleus sampling (1.0 = disabled, default: 0.95).
-    #[arg(long, default_value_t = 0.95)]
-    top_p: f32,
-
-    /// Random seed for reproducibility (default: random).
-    #[arg(long)]
-    seed: Option<u64>,
 }
 
 fn main() -> anyhow::Result<()> {
@@ -115,11 +99,11 @@ fn main() -> anyhow::Result<()> {
     };
 
     let sampling = SamplingConfig {
-        temperature: args.temperature,
-        top_k: args.top_k,
-        top_p: args.top_p,
-        repeat_penalty: 1.1,
-        seed: args.seed,
+        temperature: common.temperature,
+        top_k: common.top_k,
+        top_p: common.top_p,
+        repeat_penalty: common.repeat_penalty,
+        seed: common.seed,
     };
 
     let mut ctx = InferenceContext::new(model, config).with_sampling(sampling);

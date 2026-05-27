@@ -40,22 +40,6 @@ struct Args {
     /// Backend to use: auto, cpu, cuda (default: auto).
     #[arg(long, default_value_t = String::from("auto"))]
     backend: String,
-
-    /// Sampling temperature (0.0 = greedy, default: 0.8).
-    #[arg(long, default_value_t = 0.8)]
-    temperature: f32,
-
-    /// Top-k sampling (0 = disabled, default: 40).
-    #[arg(long, default_value_t = 40)]
-    top_k: usize,
-
-    /// Top-p nucleus sampling (1.0 = disabled, default: 0.95).
-    #[arg(long, default_value_t = 0.95)]
-    top_p: f32,
-
-    /// Random seed for reproducibility.
-    #[arg(long)]
-    seed: Option<u64>,
 }
 
 /// Shared server state.
@@ -95,19 +79,19 @@ fn default_max_tokens() -> usize {
 }
 
 fn default_temperature() -> f32 {
-    0.8
+    SamplingConfig::default().temperature
 }
 
 fn default_top_k() -> usize {
-    40
+    SamplingConfig::default().top_k
 }
 
 fn default_top_p() -> f32 {
-    0.95
+    SamplingConfig::default().top_p
 }
 
 fn default_repeat_penalty() -> f32 {
-    1.1
+    SamplingConfig::default().repeat_penalty
 }
 
 /// Completion response body.
@@ -247,13 +231,7 @@ async fn handle_v1_models(State(state): State<ServerState>) -> Json<serde_json::
 /// Get current sampler configuration.
 async fn handle_get_samplers() -> Json<SamplingConfig> {
     // Return default sampler config (in a real app, this would be per-session)
-    Json(SamplingConfig {
-        temperature: default_temperature(),
-        top_k: default_top_k(),
-        top_p: default_top_p(),
-        repeat_penalty: default_repeat_penalty(),
-        seed: None,
-    })
+    Json(SamplingConfig::default())
 }
 
 /// Handle completion (both streaming and non-streaming).
