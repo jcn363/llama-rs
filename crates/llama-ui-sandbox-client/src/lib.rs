@@ -12,27 +12,7 @@ use std::time::Duration;
 use serde::{Deserialize, Serialize};
 
 /// Errors from sandbox client operations.
-#[derive(Debug, thiserror::Error)]
-pub enum SandboxError {
-    /// Failed to spawn the llama-server process.
-    #[error("Failed to spawn llama-server: {0}")]
-    Spawn(String),
-    /// Health check request failed.
-    #[error("Health check failed: {0}")]
-    Health(String),
-    /// Server did not become ready within the timeout.
-    #[error("Timeout waiting for server: {0}")]
-    Timeout(String),
-    /// The llama-server binary could not be found.
-    #[error("llama-server binary not found: {0}")]
-    BinaryNotFound(String),
-    /// Wraps [`std::io::Error`] via `From` conversion.
-    #[error("I/O error: {0}")]
-    Io(#[from] std::io::Error),
-    /// Wraps [`reqwest::Error`] via `From` conversion.
-    #[error("HTTP error: {0}")]
-    Http(#[from] reqwest::Error),
-}
+pub type SandboxError = llama_ui_core::error::Error;
 
 /// Resource limits for a sandboxed server.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -143,7 +123,7 @@ impl SandboxClient {
             }
         }
 
-        Err(SandboxError::BinaryNotFound(
+        Err(SandboxError::Sandbox(
             "llama-server not found next to binary or in PATH".into(),
         ))
     }
@@ -151,7 +131,7 @@ impl SandboxClient {
     /// Spawn the llama-server process.
     pub fn spawn(&mut self) -> Result<(), SandboxError> {
         if !self.binary_path.exists() {
-            return Err(SandboxError::BinaryNotFound(format!(
+            return Err(SandboxError::Sandbox(format!(
                 "Binary not found: {}",
                 self.binary_path.display()
             )));
@@ -218,7 +198,7 @@ impl SandboxClient {
 
         let child = cmd
             .spawn()
-            .map_err(|e| SandboxError::Spawn(format!("Failed to start llama-server: {e}")))?;
+            .map_err(|e| SandboxError::Sandbox(format!("Failed to start llama-server: {e}")))?;
 
         self.child = Some(child);
         self.status = SandboxStatus::Starting;
@@ -232,7 +212,7 @@ impl SandboxClient {
         let start = std::time::Instant::now();
         loop {
             if start.elapsed() > timeout {
-                return Err(SandboxError::Timeout(format!(
+                return Err(SandboxError::Sandbox(format!(
                     "Server not ready after {}ms",
                     timeout.as_millis()
                 )));
@@ -332,18 +312,8 @@ impl Drop for SandboxClient {
     }
 }
 
-impl From<SandboxError> for error::Error {
-    fn from(err: SandboxError) -> Self {
-        match err {
-            SandboxError::Spawn(s) => error::Error::Other(s),
-            SandboxError::Health(s) => error::Error::Network(s),
-            SandboxError::Timeout(s) => error::Error::Other(s),
-            SandboxError::BinaryNotFound(s) => error::Error::Other(s),
-            SandboxError::Io(e) => error::Error::Io(e),
-            SandboxError::Http(e) => error::Error::Other(e.to_string()),
-        }
-    }
-}
+// SandboxError is now a type alias for llama_ui_core::error::Error
+// No From impl needed since they are the same type
 
 #[cfg(test)]
 mod tests {
@@ -353,10 +323,10 @@ mod tests {
     fn test_resolve_binary_not_found() {
         // In test environment, llama-server won't be in PATH
         let result = SandboxClient::resolve_binary();
-        // Either succeeds (if found) or fails with BinaryNotFound
+        // Either succeeds (if found) or fails with Sandbox error
         match result {
             Ok(path) => assert!(path.exists()),
-            Err(e) => assert!(matches!(e, SandboxError::BinaryNotFound(_))),
+            Err(e) => assert!(matches!(e, SandboxError::Sandbox(_))),
         }
     }
 

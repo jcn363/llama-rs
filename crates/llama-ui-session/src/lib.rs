@@ -132,15 +132,7 @@ impl Session {
 }
 
 /// Errors that can occur during session export/import.
-#[derive(Debug, thiserror::Error)]
-pub enum ExportError {
-    /// Wraps [`std::io::Error`] via `From` conversion.
-    #[error("I/O error: {0}")]
-    Io(#[from] std::io::Error),
-    /// Wraps [`serde_json::Error`] via `From` conversion.
-    #[error("Serialization error: {0}")]
-    Serde(#[from] serde_json::Error),
-}
+pub type ExportError = llama_ui_core::error::Error;
 
 #[cfg(test)]
 mod tests {

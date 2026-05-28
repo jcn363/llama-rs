@@ -16,6 +16,7 @@ tracing = { workspace = true }
 tokio = { workspace = true }
 nix = { workspace = true }
 error = { workspace = true }
+llama-ui-core = { workspace = true }
 
 [dev-dependencies]
 tempfile = "3.8"
