@@ -6,6 +6,7 @@
 | Homebrew    |         | ✅   | ✅   |
 | MacPorts    |         | ✅   |      |
 | Nix         |         | ✅   | ✅   |
+| Debian/Ubuntu |       |      | ✅   |
 
 ## Winget (Windows)
 
@@ -48,3 +49,27 @@ nix-env --file '<nixpkgs>' --install --attr llama-cpp
 For non-flake enabled installs.
 
 This expression is automatically updated within the [nixpkgs repo](https://github.com/NixOS/nixpkgs/blob/nixos-24.05/pkgs/by-name/ll/llama-cpp/package.nix#L164).
+
+## Debian/Ubuntu (.deb package)
+
+```sh
+sudo dpkg -i llama-rs_0.1.0_amd64.deb
+```
+
+Or build from source:
+
+```sh
+cargo build --release --workspace
+sudo cp target/release/llama-cli target/release/llama-server target/release/llama-ui /usr/local/bin/
+```
+
+The .deb package includes:
+- `llama-cli` — Command-line interface for interactive text generation
+- `llama-server` — HTTP server with `/completion` and `/health` endpoints
+- `llama-ui` — Desktop GUI for interactive LLM inference
+
+To uninstall:
+
+```sh
+sudo dpkg -r llama-rs
+```

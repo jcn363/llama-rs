@@ -77,7 +77,20 @@ The design features:
 | Forward pass (13M params) | 1 token | ~18µs | - | - |
 | Token generation (13M params) | 5 tokens | ~84µs | - | - |
 
-## Quick Start
+## Installation
+
+### Debian/Ubuntu (.deb package)
+
+```bash
+# Install from .deb package
+sudo dpkg -i llama-rs_0.1.0_amd64.deb
+
+# Or build from source
+cargo build --release --workspace
+sudo cp target/release/llama-cli target/release/llama-server target/release/llama-ui /usr/local/bin/
+```
+
+### Build from Source
 
 ```bash
 # Build (debug)
@@ -333,6 +346,28 @@ if !model_path.exists() {
 | 13 | ✅ | Parallel matmul threshold, configuration-driven design |
 
 **95+ tests pass** across all crates (unit, integration, and doctests).
+
+## Debian Package
+
+A `.deb` package is provided for easy installation on Debian-based systems:
+
+```bash
+# Install the package
+sudo dpkg -i llama-rs_0.1.0_amd64.deb
+
+# Verify installation
+llama-cli --version
+llama-server --version
+llama-ui --version
+
+# Uninstall if needed
+sudo dpkg -r llama-rs
+```
+
+The package includes:
+- `llama-cli` — Command-line interface for interactive text generation
+- `llama-server` — HTTP server with `/completion` and `/health` endpoints
+- `llama-ui` — Desktop GUI for interactive LLM inference
 
 ## License
 

@@ -1,0 +1,3 @@
+target/release/llama-cli usr/bin
+target/release/llama-server usr/bin
+target/release/llama-ui usr/bin

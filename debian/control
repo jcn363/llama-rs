@@ -1,0 +1,20 @@
+Source: llama-rs
+Section: science
+Priority: optional
+Maintainer: llama-rs developers <llama-rs-devs@example.com>
+Build-Depends: debhelper-compat (= 13), cargo, rustc, pkg-config, libssl-dev
+Standards-Version: 4.6.2
+Homepage: https://github.com/jcn363/llama-rs
+Vcs-Browser: https://github.com/jcn363/llama-rs
+Vcs-Git: https://github.com/jcn363/llama-rs.git
+Rules-Requires-Root: no
+
+Package: llama-rs
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: LLM inference engine in Rust
+ llama-rs is a Rust implementation of llama.cpp providing high-performance
+ inference for large language models. It includes CLI, HTTP server, and
+ GUI frontends.
+ .
+ This package contains the llama-cli, llama-server, and llama-ui binaries.
