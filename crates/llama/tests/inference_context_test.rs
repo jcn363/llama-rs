@@ -193,7 +193,7 @@ fn test_forward_pass_produces_logits() {
     assert!(result.is_ok());
     let tokens = result.unwrap();
     assert!(!tokens.is_empty());
-        assert!(!tokens.is_empty());
+    assert!(!tokens.is_empty());
 
     std::fs::remove_file(&gguf_path).ok();
 }

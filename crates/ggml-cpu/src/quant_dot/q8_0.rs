@@ -37,8 +37,8 @@ impl QuantDot for Q8_0Dot {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::quant_dot::test_utils::*;
     use crate::quant_dot::QuantDot;
+    use crate::quant_dot::test_utils::*;
 
     /// Build a Q8_0 block from a scale and 32 signed values.
     #[cfg(feature = "simd")]

@@ -4,7 +4,7 @@
 //! Each nibble encodes a signed 4-bit value: 0 → -8, 1 → -7, ..., 15 → 7.
 //! Byte `i` stores nibble for `value[2*i]` in low 4 bits, `value[2*i+1]` in high 4 bits.
 
-use crate::quant_dot::{unpack_nibbles, QuantDot};
+use crate::quant_dot::{QuantDot, unpack_nibbles};
 use half::f16;
 
 /// `Q4_0` quantized dot product kernel.
@@ -39,8 +39,8 @@ impl QuantDot for Q4_0Dot {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::quant_dot::test_utils::*;
     use crate::quant_dot::QuantDot;
+    use crate::quant_dot::test_utils::*;
 
     /// Build a Q4_0 block from a scale and 32 signed values.
     #[cfg(feature = "simd")]

@@ -11,9 +11,7 @@ use futures::sink::SinkExt;
 use iced::keyboard;
 use iced::keyboard::key::Named as NamedKey;
 use iced::stream;
-use iced::widget::{
-    button, column, pick_list, row, scrollable, slider, text_input, vertical_rule,
-};
+use iced::widget::{button, column, pick_list, row, scrollable, slider, text_input, vertical_rule};
 use iced::{Element, Fill, Subscription, Task, Theme, window};
 
 use llama_ui_models::Manifest;
@@ -134,8 +132,6 @@ pub enum AppState {
     /// Settings screen.
     Settings,
 }
-
-
 
 /// Messages that update the application state.
 #[derive(Debug, Clone)]
@@ -1026,7 +1022,11 @@ fn render_pane(state: &LlamaApp, pane: usize) -> Element<'_, Message> {
             Role::Assistant => "AI",
             Role::System => "System",
         };
-        children.push(iced::widget::text(format!("{}: {}", role, msg.content)).size(14).into());
+        children.push(
+            iced::widget::text(format!("{}: {}", role, msg.content))
+                .size(14)
+                .into(),
+        );
     }
 
     // Token counter
@@ -1217,8 +1217,16 @@ fn view_settings(state: &LlamaApp) -> Element<'_, Message> {
     children.push(iced::widget::text("").size(8).into());
     children.push(iced::widget::text("Keyboard Shortcuts").size(18).into());
     children.push(iced::widget::text("Esc — Close Settings").size(14).into());
-    children.push(iced::widget::text("F11 — Toggle Full-screen").size(14).into());
-    children.push(iced::widget::text("Enter (in text input) — Send message").size(14).into());
+    children.push(
+        iced::widget::text("F11 — Toggle Full-screen")
+            .size(14)
+            .into(),
+    );
+    children.push(
+        iced::widget::text("Enter (in text input) — Send message")
+            .size(14)
+            .into(),
+    );
 
     children.push(iced::widget::text("").size(8).into());
     children.push(iced::widget::text("General").size(18).into());
@@ -1322,15 +1330,21 @@ impl LlamaApp {
 
 #[cfg(test)]
 mod tests {
-    use super::{view_model_picker, LlamaApp, ModelInfo};
+    use super::{LlamaApp, ModelInfo, view_model_picker};
     use iced::Element;
 
     #[test]
     fn model_picker_has_buttons_for_each_model() {
         let mut app = LlamaApp::default();
         app.models = vec![
-            ModelInfo { name: "Model‑A".into(), path: std::path::PathBuf::from("/tmp/a.gguf") },
-            ModelInfo { name: "Model‑B".into(), path: std::path::PathBuf::from("/tmp/b.gguf") },
+            ModelInfo {
+                name: "Model‑A".into(),
+                path: std::path::PathBuf::from("/tmp/a.gguf"),
+            },
+            ModelInfo {
+                name: "Model‑B".into(),
+                path: std::path::PathBuf::from("/tmp/b.gguf"),
+            },
         ];
         let _: Element<'_, _> = view_model_picker(&app);
     }

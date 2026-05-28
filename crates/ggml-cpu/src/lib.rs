@@ -29,7 +29,7 @@
     clippy::manual_midpoint,
     clippy::approx_constant,
     clippy::should_panic_without_expect,
-        unused_must_use,
+    unused_must_use
 )]
 
 pub mod cpu_features;

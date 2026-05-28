@@ -61,7 +61,8 @@ impl From<CudaError> for error::Error {
         match err {
             CudaError::NotAvailable(s) => error::Error::Network(s),
             CudaError::OutOfMemory { needed, available } => error::Error::Other(format!(
-                "insufficient VRAM: needed {needed} bytes, available {available} bytes")),
+                "insufficient VRAM: needed {needed} bytes, available {available} bytes"
+            )),
             CudaError::RuntimeError(s) => error::Error::Other(s),
         }
     }

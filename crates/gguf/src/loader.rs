@@ -86,8 +86,7 @@ impl GgufReader {
                 shape.push(reader.read_i64()?);
             }
             let dtype_raw = reader.read_i32()?;
-let dtype = GgmlType::from_i32(dtype_raw)
-    .map_err(GgufError::DecodeError)?;
+            let dtype = GgmlType::from_i32(dtype_raw).map_err(GgufError::DecodeError)?;
             let offset = reader.read_u64()?;
             tensors.push(TensorInfo {
                 name,

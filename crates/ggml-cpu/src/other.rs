@@ -29,7 +29,11 @@ pub fn concat(a: &[f32], b: &[f32]) -> Vec<f32> {
 #[must_use]
 pub fn repeat(x: &[f32], n_repeats: usize, block_size: usize) -> Vec<f32> {
     assert!(block_size > 0, "block_size must be > 0");
-    assert_eq!(x.len() % block_size, 0, "x.len() must be divisible by block_size");
+    assert_eq!(
+        x.len() % block_size,
+        0,
+        "x.len() must be divisible by block_size"
+    );
     let n_blocks = x.len() / block_size;
     let mut out = Vec::with_capacity(x.len() * n_repeats);
     for b in 0..n_blocks {
@@ -51,8 +55,11 @@ pub fn repeat(x: &[f32], n_repeats: usize, block_size: usize) -> Vec<f32> {
 #[must_use]
 pub fn repeat_back(x: &[f32], n_repeats: usize, block_size: usize) -> Vec<f32> {
     assert!(block_size > 0, "block_size must be > 0");
-    assert_eq!(x.len() % (block_size * n_repeats), 0,
-        "x.len() must be divisible by block_size * n_repeats");
+    assert_eq!(
+        x.len() % (block_size * n_repeats),
+        0,
+        "x.len() must be divisible by block_size * n_repeats"
+    );
     let n_blocks = x.len() / (block_size * n_repeats);
     let mut out = vec![0.0f32; n_blocks * block_size];
     for b in 0..n_blocks {
@@ -182,7 +189,10 @@ pub fn get_rows(x: &[f32], indices: &[i32], n_cols: usize) -> Vec<f32> {
     let mut out = Vec::with_capacity(indices.len() * n_cols);
     for &idx in indices {
         let uidx: usize = idx.try_into().expect("negative index in get_rows");
-        assert!(uidx < n_rows_src, "row index {uidx} out of bounds ({n_rows_src} rows)");
+        assert!(
+            uidx < n_rows_src,
+            "row index {uidx} out of bounds ({n_rows_src} rows)"
+        );
         let start = uidx * n_cols;
         out.extend_from_slice(&x[start..start + n_cols]);
     }
@@ -200,7 +210,10 @@ pub fn get_rows_back(grad: &[f32], indices: &[i32], n_cols: usize, n_src_rows: u
     let mut out = vec![0.0f32; n_src_rows * n_cols];
     for (k, &idx) in indices.iter().enumerate() {
         let uidx: usize = idx.try_into().expect("negative index in get_rows_back");
-        assert!(uidx < n_src_rows, "row index {uidx} out of bounds ({n_src_rows} rows)");
+        assert!(
+            uidx < n_src_rows,
+            "row index {uidx} out of bounds ({n_src_rows} rows)"
+        );
         let dst_start = uidx * n_cols;
         let src_start = k * n_cols;
         for j in 0..n_cols {
@@ -223,7 +236,10 @@ pub fn set_rows(dst: &[f32], src: &[f32], indices: &[i32], n_cols: usize) -> Vec
     let mut out = dst.to_vec();
     for (k, &idx) in indices.iter().enumerate() {
         let uidx: usize = idx.try_into().expect("negative index in set_rows");
-        assert!(uidx < n_dst_rows, "row index {uidx} out of bounds ({n_dst_rows} rows)");
+        assert!(
+            uidx < n_dst_rows,
+            "row index {uidx} out of bounds ({n_dst_rows} rows)"
+        );
         let dst_start = uidx * n_cols;
         let src_start = k * n_cols;
         out[dst_start..dst_start + n_cols].copy_from_slice(&src[src_start..src_start + n_cols]);
@@ -278,10 +294,8 @@ pub fn conv_2d(
                                 let ih = (oh * s0 + kh_idx).wrapping_sub(p0);
                                 let iw = (ow * s1 + kw_idx).wrapping_sub(p1);
                                 if ih < h && iw < w {
-                                    let x_idx = batch * (c * h * w)
-                                        + kc_idx * (h * w)
-                                        + ih * w
-                                        + iw;
+                                    let x_idx =
+                                        batch * (c * h * w) + kc_idx * (h * w) + ih * w + iw;
                                     let k_idx = f * (c * kh * kw)
                                         + kc_idx * (kh * kw)
                                         + kh_idx * kw
@@ -291,10 +305,8 @@ pub fn conv_2d(
                             }
                         }
                     }
-                    let out_idx = batch * (filters * out_h * out_w)
-                        + f * (out_h * out_w)
-                        + oh * out_w
-                        + ow;
+                    let out_idx =
+                        batch * (filters * out_h * out_w) + f * (out_h * out_w) + oh * out_w + ow;
                     out[out_idx] = sum;
                 }
             }
@@ -337,21 +349,14 @@ pub fn conv_2d_dw(
                             let ih = (oh * s0 + kh_idx).wrapping_sub(p0);
                             let iw = (ow * s1 + kw_idx).wrapping_sub(p1);
                             if ih < h && iw < w {
-                                let x_idx = batch * (c * h * w)
-                                    + ch * (h * w)
-                                    + ih * w
-                                    + iw;
-                                let k_idx = ch * (kh * kw)
-                                    + kh_idx * kw
-                                    + kw_idx;
+                                let x_idx = batch * (c * h * w) + ch * (h * w) + ih * w + iw;
+                                let k_idx = ch * (kh * kw) + kh_idx * kw + kw_idx;
                                 sum += x[x_idx] * kernel[k_idx];
                             }
                         }
                     }
-                    let out_idx = batch * (c * out_h * out_w)
-                        + ch * (out_h * out_w)
-                        + oh * out_w
-                        + ow;
+                    let out_idx =
+                        batch * (c * out_h * out_w) + ch * (out_h * out_w) + oh * out_w + ow;
                     out[out_idx] = sum;
                 }
             }
@@ -396,15 +401,9 @@ pub fn conv_transpose_1d(
                     for il in 0..l {
                         let ol = il * s + kw_idx - p;
                         if ol < out_l {
-                            let x_idx = batch * (c * l)
-                                + kc_idx * l
-                                + il;
-                            let k_idx = f * (kc * kw)
-                                + kc_idx * kw
-                                + kw_idx;
-                            let out_idx = batch * (filters * out_l)
-                                + f * out_l
-                                + ol;
+                            let x_idx = batch * (c * l) + kc_idx * l + il;
+                            let k_idx = f * (kc * kw) + kc_idx * kw + kw_idx;
+                            let out_idx = batch * (filters * out_l) + f * out_l + ol;
                             out[out_idx] += x[x_idx] * kernel[k_idx];
                         }
                     }
@@ -449,15 +448,11 @@ pub fn conv_transpose_2d(
                             for iw in 0..w {
                                 let oh = ih * s0 + kh_idx;
                                 let ow = iw * s1 + kw_idx;
-                                if oh >= p0 && oh < out_h + p0
-                                    && ow >= p1 && ow < out_w + p1
-                                {
+                                if oh >= p0 && oh < out_h + p0 && ow >= p1 && ow < out_w + p1 {
                                     let oh_adj = oh - p0;
                                     let ow_adjusted = ow - p1;
-                                    let x_idx = batch * (c * h * w)
-                                        + kc_idx * (h * w)
-                                        + ih * w
-                                        + iw;
+                                    let x_idx =
+                                        batch * (c * h * w) + kc_idx * (h * w) + ih * w + iw;
                                     let k_idx = f * (kc * kh * kw)
                                         + kc_idx * (kh * kw)
                                         + kh_idx * kw
@@ -510,10 +505,7 @@ pub fn im2col(
                             let ih = (oh * s0 + kh_idx).wrapping_sub(p0);
                             let iw = (ow * s1 + kw_idx).wrapping_sub(p1);
                             let val = if ih < h && iw < w {
-                                let x_idx = batch * (c * h * w)
-                                    + ch * (h * w)
-                                    + ih * w
-                                    + iw;
+                                let x_idx = batch * (c * h * w) + ch * (h * w) + ih * w + iw;
                                 x[x_idx]
                             } else {
                                 0.0
@@ -628,10 +620,7 @@ pub fn pool_2d(
                             let ih = (oh * s0 + kh_idx).wrapping_sub(p0);
                             let iw = (ow * s1 + kw_idx).wrapping_sub(p1);
                             if ih < h && iw < w {
-                                let x_idx = batch * (c * h * w)
-                                    + ch * (h * w)
-                                    + ih * w
-                                    + iw;
+                                let x_idx = batch * (c * h * w) + ch * (h * w) + ih * w + iw;
                                 let v = x[x_idx];
                                 if pool_type == "max" {
                                     if v > acc {
@@ -644,10 +633,8 @@ pub fn pool_2d(
                             }
                         }
                     }
-                    let out_idx = batch * (c * out_h * out_w)
-                        + ch * (out_h * out_w)
-                        + oh * out_w
-                        + ow;
+                    let out_idx =
+                        batch * (c * out_h * out_w) + ch * (out_h * out_w) + oh * out_w + ow;
                     out[out_idx] = if pool_type == "avg" && count > 0 {
                         acc / count as f32
                     } else if pool_type == "max" && count == 0 {
@@ -734,9 +721,15 @@ pub fn mul_mat_hadamard(a: &[f32], b: &[f32]) -> Vec<f32> {
 /// # Panics
 /// Panics if `n_dims > x.len() / seq_len` or `n_dims` is not even.
 #[must_use]
-pub fn rope(x: &[f32], seq_len: usize, head_dim: usize, n_dims: usize, pos: usize,
-    theta: f32, mode: bool) -> Vec<f32>
-{
+pub fn rope(
+    x: &[f32],
+    seq_len: usize,
+    head_dim: usize,
+    n_dims: usize,
+    pos: usize,
+    theta: f32,
+    mode: bool,
+) -> Vec<f32> {
     assert!(n_dims <= head_dim, "n_dims {n_dims} > head_dim {head_dim}");
     assert_eq!(n_dims % 2, 0, "n_dims must be even");
     assert_eq!(x.len(), seq_len * head_dim, "input length mismatch");
@@ -773,9 +766,15 @@ pub fn rope(x: &[f32], seq_len: usize, head_dim: usize, n_dims: usize, pos: usiz
 ///
 /// Applies the inverse rotation to the gradient.
 #[must_use]
-pub fn rope_back(x: &[f32], seq_len: usize, head_dim: usize, n_dims: usize, pos: usize,
-    theta: f32, mode: bool) -> Vec<f32>
-{
+pub fn rope_back(
+    x: &[f32],
+    seq_len: usize,
+    head_dim: usize,
+    n_dims: usize,
+    pos: usize,
+    theta: f32,
+    mode: bool,
+) -> Vec<f32> {
     // The same rotation applied to the gradient (RoPE is an orthogonal transform).
     rope(x, seq_len, head_dim, n_dims, pos, theta, mode)
 }
@@ -927,7 +926,7 @@ pub fn ssm_scan(
             let x_val = x[t * dim + d];
             let dt = delta[t * dim + d];
             for s in 0..d_state {
-                let a_val = a[s * dim + d];    // A[d, s] stored col-major
+                let a_val = a[s * dim + d]; // A[d, s] stored col-major
                 let b_val = b[t * d_state + s]; // B[t, s]
                 state[s] = state[s] + dt * (a_val * state[s] + b_val * x_val);
             }
@@ -1101,8 +1100,8 @@ pub fn gated_linear_attn(
     for t in 0..seq_len {
         let t_off = t * head_dim;
         // `k` acts as a decay/gate in linear attention
-        let g = 1.0 / (1.0 + (-gate[t_off..t_off + head_dim].iter().sum::<f32>()
-            / head_dim as f32).exp());
+        let g = 1.0
+            / (1.0 + (-gate[t_off..t_off + head_dim].iter().sum::<f32>() / head_dim as f32).exp());
 
         for i in 0..head_dim {
             s[i] = s[i] * g + v[t_off + i];
@@ -1144,9 +1143,14 @@ pub fn timestep_embedding(timestep: usize, dim: usize, max_period: f32) -> Vec<f
 ///
 /// Upscales a `[C, H, W]` tensor by factors `scale_h × scale_w`.
 #[must_use]
-pub fn upscale(x: &[f32], c: usize, h: usize, w: usize,
-    scale_h: usize, scale_w: usize) -> Vec<f32>
-{
+pub fn upscale(
+    x: &[f32],
+    c: usize,
+    h: usize,
+    w: usize,
+    scale_h: usize,
+    scale_w: usize,
+) -> Vec<f32> {
     let out_h = h * scale_h;
     let out_w = w * scale_w;
     let mut out = vec![0.0f32; c * out_h * out_w];
@@ -1178,9 +1182,7 @@ pub fn upscale(x: &[f32], c: usize, h: usize, w: usize,
 /// Panics if `a` or `b` have incorrect length, or if a zero diagonal is
 /// encountered (when not `unit_diagonal`).
 #[must_use]
-pub fn solve_tri(a: &[f32], b: &[f32], n: usize, lower: bool,
-    unit_diagonal: bool) -> Vec<f32>
-{
+pub fn solve_tri(a: &[f32], b: &[f32], n: usize, lower: bool, unit_diagonal: bool) -> Vec<f32> {
     assert_eq!(a.len(), n * n, "A must have shape [{n}, {n}]");
     assert_eq!(b.len(), n, "B must have length {n}");
     let mut x = b.to_vec();
@@ -1192,7 +1194,9 @@ pub fn solve_tri(a: &[f32], b: &[f32], n: usize, lower: bool,
             for j in 0..i {
                 sum += a[i * n + j] * x[j];
             }
-            let diag = if unit_diagonal { 1.0 } else {
+            let diag = if unit_diagonal {
+                1.0
+            } else {
                 let d = a[i * n + i];
                 assert!(d.abs() > 1e-30, "zero diagonal at index {i}");
                 d
@@ -1206,7 +1210,9 @@ pub fn solve_tri(a: &[f32], b: &[f32], n: usize, lower: bool,
             for j in (i + 1)..n {
                 sum += a[i * n + j] * x[j];
             }
-            let diag = if unit_diagonal { 1.0 } else {
+            let diag = if unit_diagonal {
+                1.0
+            } else {
                 let d = a[i * n + i];
                 assert!(d.abs() > 1e-30, "zero diagonal at index {i}");
                 d
@@ -1553,7 +1559,10 @@ mod tests {
     fn test_repeat_basic() {
         let x = vec![1.0, 2.0, 3.0, 4.0];
         let r = repeat(&x, 3, 2); // blocks of 2, repeated 3x
-        assert_eq!(r, vec![1.0, 2.0, 1.0, 2.0, 1.0, 2.0, 3.0, 4.0, 3.0, 4.0, 3.0, 4.0]);
+        assert_eq!(
+            r,
+            vec![1.0, 2.0, 1.0, 2.0, 1.0, 2.0, 3.0, 4.0, 3.0, 4.0, 3.0, 4.0]
+        );
     }
 
     #[test]
@@ -1643,11 +1652,7 @@ mod tests {
     fn test_diag_basic() {
         let x = vec![1.0, 2.0, 3.0];
         let d = diag(&x);
-        assert_eq!(d, vec![
-            1.0, 0.0, 0.0,
-            0.0, 2.0, 0.0,
-            0.0, 0.0, 3.0,
-        ]);
+        assert_eq!(d, vec![1.0, 0.0, 0.0, 0.0, 2.0, 0.0, 0.0, 0.0, 3.0,]);
     }
 
     #[test]
@@ -1689,11 +1694,7 @@ mod tests {
     #[test]
     fn test_get_rows_basic() {
         // x = [[1,2],[3,4],[5,6]] (3 rows, 2 cols)
-        let x = vec![
-            1.0, 2.0,
-            3.0, 4.0,
-            5.0, 6.0,
-        ];
+        let x = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0];
         let idx = vec![0, 2];
         let r = get_rows(&x, &idx, 2);
         assert_eq!(r, vec![1.0, 2.0, 5.0, 6.0]);
@@ -1710,11 +1711,7 @@ mod tests {
 
     #[test]
     fn test_set_rows_basic() {
-        let dst = vec![
-            1.0, 2.0,
-            3.0, 4.0,
-            5.0, 6.0,
-        ];
+        let dst = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0];
         let src = vec![10.0, 20.0, 30.0, 40.0];
         let idx = vec![0, 2];
         let r = set_rows(&dst, &src, &idx, 2);
@@ -1864,11 +1861,7 @@ mod tests {
     #[test]
     fn test_tri_basic() {
         let t = tri(3, 0);
-        assert_eq!(t, vec![
-            1.0, 0.0, 0.0,
-            1.0, 1.0, 0.0,
-            1.0, 1.0, 1.0,
-        ]);
+        assert_eq!(t, vec![1.0, 0.0, 0.0, 1.0, 1.0, 0.0, 1.0, 1.0, 1.0,]);
     }
 
     // ─── solve_tri ───────────────────────────────────────────────────────

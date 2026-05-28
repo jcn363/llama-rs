@@ -584,7 +584,6 @@ mod tests {
         assert_eq!(sgn(&x), vec![-1.0, 0.0, 1.0]);
     }
 
-
     #[test]
     fn hard_sigmoid_basic() {
         let x = [-10.0, 0.0, 10.0];

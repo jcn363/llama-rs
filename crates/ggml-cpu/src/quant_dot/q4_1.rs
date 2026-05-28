@@ -5,7 +5,7 @@
 //! Dequant: value * d + m  (where d = scale, m = min).
 //! Dot product: `d * Σ(nibble[i] * input[i]) + m * Σ(input[i])`
 
-use crate::quant_dot::{unpack_nibbles, QuantDot};
+use crate::quant_dot::{QuantDot, unpack_nibbles};
 use half::f16;
 
 /// `Q4_1` quantized dot product kernel.
@@ -41,8 +41,8 @@ impl QuantDot for Q4_1Dot {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::quant_dot::test_utils::*;
     use crate::quant_dot::QuantDot;
+    use crate::quant_dot::test_utils::*;
 
     /// Build a Q4_1 block from scale d, min m, and 32 unsigned nibble values (0..15).
     fn build_block(d: f32, m: f32, values: &[i8]) -> Vec<u8> {

@@ -144,12 +144,10 @@ impl TensorDequantExt for TensorInfo {
 /// # Errors
 ///
 /// Returns [`GgufError`] if the tensor data cannot be read or de-quantized.
-pub fn mmap_tensor_dequantize(
-    mmap: &MmapTensor,
-    info: &TensorInfo,
-) -> Result<Vec<f32>, GgufError> {
+pub fn mmap_tensor_dequantize(mmap: &MmapTensor, info: &TensorInfo) -> Result<Vec<f32>, GgufError> {
     use TensorDequantExt as _;
-    info.dequantize(mmap.as_slice().map_err(|e| {
-        GgufError::DecodeError(format!("mmap bounds exceeded: {e}"))
-    })?)
+    info.dequantize(
+        mmap.as_slice()
+            .map_err(|e| GgufError::DecodeError(format!("mmap bounds exceeded: {e}")))?,
+    )
 }

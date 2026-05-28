@@ -26,7 +26,9 @@ fn matmul_benchmark(c: &mut Criterion) {
         fill_tensor(&mut a, 42);
         fill_tensor(&mut b_tensor, 137);
 
-        group.bench_function("single_thread", |b| b.iter(|| backend.matmul(&a, &b_tensor)));
+        group.bench_function("single_thread", |b| {
+            b.iter(|| backend.matmul(&a, &b_tensor))
+        });
 
         let parallel = CpuBackend::new(0, 0);
         group.bench_function("parallel", |b| b.iter(|| parallel.matmul(&a, &b_tensor)));
@@ -48,9 +50,7 @@ fn parallel_threshold_benchmark(c: &mut Criterion) {
 
         // Single-thread (threshold always blocks)
         let single = CpuBackend::new_with_min_rows(0, usize::MAX, 0);
-        group.bench_function("single", |bencher| {
-            b.iter(|| single.matmul(&a, &b_tensor))
-        });
+        group.bench_function("single", |bencher| b.iter(|| single.matmul(&a, &b_tensor)));
 
         // Auto-parallel with default threshold (128)
         let parallel = CpuBackend::new_with_min_rows(0, 128, 0);
@@ -144,13 +144,21 @@ fn quantized_matvec_benchmark(c: &mut Criterion) {
         let quantized = build_q4_0_weights(&weight);
 
         // F32 baseline
-        group.bench_function("f32_baseline", |b| b.iter(|| backend.mat_vec(&weight, rows, cols, &input)));
+        group.bench_function("f32_baseline", |b| {
+            b.iter(|| backend.mat_vec(&weight, rows, cols, &input))
+        });
 
         // Q4_0 quantized (single thread)
-        group.bench_function("q4_0_quant", |b| b.iter(|| backend.mat_vec_quant(&quantized, QuantType::Q4_0, rows, cols, &input)));
+        group.bench_function("q4_0_quant", |b| {
+            b.iter(|| backend.mat_vec_quant(&quantized, QuantType::Q4_0, rows, cols, &input))
+        });
 
         // Q4_0 quantized (parallel)
-        group.bench_function("q4_0_parallel", |b| b.iter(|| parallel_backend.mat_vec_quant(&quantized, QuantType::Q4_0, rows, cols, &input)));
+        group.bench_function("q4_0_parallel", |b| {
+            b.iter(|| {
+                parallel_backend.mat_vec_quant(&quantized, QuantType::Q4_0, rows, cols, &input)
+            })
+        });
 
         group.finish();
     }
