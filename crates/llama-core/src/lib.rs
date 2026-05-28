@@ -4,8 +4,8 @@
 //! crates in the workspace, extracted to avoid duplication and circular
 //! dependencies.
 
-use std::sync::Arc;
 use memmap2::Mmap;
+use std::sync::Arc;
 use thiserror::Error;
 
 /// Error types for core operations.
@@ -16,8 +16,6 @@ pub enum CoreError {
 }
 
 // ... rest of file ...
-
-
 
 /// Information about a single tensor in a GGUF file.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -72,5 +70,3 @@ pub mod ggml_type;
 pub use backend::{BackendInfo, QuantType};
 pub use dtype::DType;
 pub use ggml_type::GgmlType;
-
-

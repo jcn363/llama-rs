@@ -19,9 +19,10 @@
 //! The sub‑modules are declared here and can be expanded as needed.
 
 pub mod backend;
+pub mod op_type;
 pub mod dtype;
 pub mod graph;
-pub mod improvements;
+pub mod defaults;
 pub mod tensor;
 
 // Re‑export the most important items for a convenient top‑level API.

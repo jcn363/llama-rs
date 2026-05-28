@@ -1,6 +1,6 @@
 #![allow(dead_code, unused_imports, unused_variables)]
-use std::sync::Arc;
 use memmap2::Mmap;
+use std::sync::Arc;
 
 /// Align `value` up to the next multiple of `align` (must be a power of two).
 #[inline]
@@ -22,18 +22,18 @@ pub struct GgufReader {
 }
 
 mod constants;
+mod cursor;
+mod dequant;
 mod errors;
+mod imatrix;
+mod loader;
+mod reader;
+mod tensor;
 mod types;
 mod value;
-mod tensor;
-mod reader;
-mod loader;
-mod imatrix;
-mod dequant;
-mod cursor;
 
 pub use constants::*;
 pub use errors::{GgufError, GgufResult};
-pub use types::{GgufType, GgmlType};
+pub use tensor::{MmapTensor, TensorInfo, mmap_tensor_dequantize};
+pub use types::{GgmlType, GgufType};
 pub use value::GgufValue;
-pub use tensor::{TensorInfo, MmapTensor, mmap_tensor_dequantize};

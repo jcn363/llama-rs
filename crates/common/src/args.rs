@@ -30,7 +30,6 @@ pub struct CommonArgs {
     pub batch_size: usize,
 
     // ── Sampling parameters (defaults match common::sampling::SamplingConfig) ──
-
     /// Sampling temperature (0.0 = greedy, default: 0.8).
     #[arg(long, default_value_t = 0.8)]
     pub temperature: f32,
@@ -52,7 +51,6 @@ pub struct CommonArgs {
     pub seed: Option<u64>,
 
     // ── Backend & model-loading parameters ──
-
     /// Backend to use: auto, cpu, cuda (default: auto).
     #[arg(long, default_value_t = String::from("auto"))]
     pub backend: String,

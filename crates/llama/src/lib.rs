@@ -135,9 +135,10 @@ impl TensorData {
     /// This avoids dequantization entirely — the caller can pass the bytes
     /// directly to [`Backend::mat_vec_quant`] for faster inference.
     pub fn get_quantized_raw(&self) -> Result<(&[u8], gguf::GgmlType), gguf::GgufError> {
-        let raw = self.mmap_tensor.as_slice().map_err(|e| {
-            gguf::GgufError::DecodeError(format!("mmap bounds exceeded: {e}"))
-        })?;
+        let raw = self
+            .mmap_tensor
+            .as_slice()
+            .map_err(|e| gguf::GgufError::DecodeError(format!("mmap bounds exceeded: {e}")))?;
         Ok((raw, self.info.dtype))
     }
 }
