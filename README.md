@@ -129,7 +129,8 @@ cargo build -p llama-ui --release
 - **Sandbox isolation** — Optional cgroup resource limits (memory, CPU)
 - **Chat templates** — Support for ChatML, Llama, Gemma, StableLM formats
 
-### Architecture
+*Full platform support*: The `llama-ui` application runs on Linux with both X11 and Wayland display servers (via iced's cross‑platform backend), as well as macOS and Windows.
+
 
 See [Architecture & Major Crates](docs/architecture_and_crates.md) for a detailed component list.
 

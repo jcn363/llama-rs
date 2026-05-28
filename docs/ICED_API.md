@@ -1,6 +1,6 @@
 # Iced 0.13 API Reference for llama-ui
 
-## Overview
+- **Platform support**: Works on Linux with both X11 and Wayland backends, as well as macOS and Windows (via iced).
 
 This document summarizes the Iced 0.13 API patterns used in the llama-ui crate.
 The llama-ui application follows The Elm Architecture pattern with four core
