@@ -116,7 +116,7 @@ cargo bench -p llama --bench attention
 
 ## Desktop UI (llama-ui)
 
-A native Rust desktop application for interactive LLM inference with a full-screen GUI.
+A native Rust desktop application for interactive LLM inference with a polished, modern GUI.
 
 ### Building llama-ui
 
@@ -130,6 +130,7 @@ cargo build -p llama-ui --release
 
 ### Features
 
+- **Modern dark theme** — Custom-styled UI with color-coded message bubbles (blue for user, green for AI, gray for system)
 - **Multi-pane chat interface** — Multiple independent conversations with different models
 - **Model management** — Download, scan, and select GGUF models
 - **Session persistence** — Save/load chat history in JSON, Markdown, or plain text

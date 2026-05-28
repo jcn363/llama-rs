@@ -12,7 +12,7 @@ use iced::keyboard;
 use iced::keyboard::key::Named as NamedKey;
 use iced::stream;
 use iced::widget::{button, column, pick_list, row, scrollable, slider, text_input, vertical_rule};
-use iced::{Element, Fill, Subscription, Task, Theme, window};
+use iced::{Color, Element, Fill, Subscription, Task, Theme, window};
 
 use llama_ui_models::Manifest;
 use llama_ui_sandbox_client::{ResourceLimits, SandboxClient};
@@ -903,33 +903,95 @@ pub fn subscription(state: &LlamaApp) -> Subscription<Message> {
 /// View for model picker.
 fn view_model_picker(state: &LlamaApp) -> Element<'_, Message> {
     let mut children = vec![
-        iced::widget::text("llama-ui").size(32).into(),
-        iced::widget::text(&state.status).size(16).into(),
+        iced::widget::text("llama-rs")
+            .size(36)
+            .color(Color::from_rgba8(0x4A, 0x90, 0xE2, 1.0))
+            .into(),
+        iced::widget::text("LLM Inference Engine")
+            .size(16)
+            .color(Color::from_rgba8(0xA0, 0xA0, 0xA0, 1.0))
+            .into(),
+        iced::widget::text("").size(8).into(),
     ];
 
-    for (i, model) in state.models.iter().enumerate() {
-        let btn = button(iced::widget::text(&model.name).size(18))
+    if !state.status.is_empty() {
+        children.push(
+            iced::widget::text(&state.status)
+                .size(14)
+                .color(Color::from_rgba8(0xE2, 0x4A, 0x4A, 1.0))
+                .into(),
+        );
+    }
+
+    if state.models.is_empty() {
+        children.push(
+            iced::widget::text("No models found. Place .gguf files in:")
+                .size(14)
+                .color(Color::from_rgba8(0xA0, 0xA0, 0xA0, 1.0))
+                .into(),
+        );
+        children.push(
+            iced::widget::text("~/.local/share/llama-ui/models/")
+                .size(12)
+                .color(Color::from_rgba8(0x80, 0x80, 0x80, 1.0))
+                .into(),
+        );
+    } else {
+        children.push(
+            iced::widget::text(format!("Select a model ({} available)", state.models.len()))
+                .size(16)
+                .color(Color::from_rgba8(0xC0, 0xC0, 0xC0, 1.0))
+                .into(),
+        );
+        children.push(iced::widget::text("").size(8).into());
+
+        for (i, model) in state.models.iter().enumerate() {
+            let btn = button(
+                column(vec![
+                    iced::widget::text(&model.name)
+                        .size(18)
+                        .color(Color::WHITE)
+                        .into(),
+                    iced::widget::text(model.path.to_string_lossy())
+                        .size(11)
+                        .color(Color::from_rgba8(0xA0, 0xA0, 0xA0, 1.0))
+                        .into(),
+                ])
+                .spacing(4),
+            )
             .style(llama_ui_core::theme::primary_button_style)
             .on_press(Message::ModelSelected(i))
-            .padding(10);
-        children.push(btn.into());
+            .padding(iced::Padding::from([10, 16]))
+            .width(Fill);
+            children.push(btn.into());
+        }
     }
+
+    children.push(iced::widget::text("").size(16).into());
 
     children.push(
         button(iced::widget::text("Start Chat").size(20))
+            .style(if state.models.is_empty() {
+                llama_ui_core::theme::secondary_button_style
+            } else {
+                llama_ui_core::theme::success_button_style
+            })
             .on_press(Message::StartChat)
-            .padding(20)
+            .padding(iced::Padding::from([14, 32]))
+            .width(Fill)
             .into(),
     );
 
-    iced::widget::container(column(children))
-        .center_x(Fill)
-        .center_y(Fill)
-        .padding(20)
-        .into()
+    iced::widget::container(
+        iced::widget::scrollable(column(children).spacing(4).width(Fill)).height(Fill),
+    )
+    .style(llama_ui_core::theme::content_area_style)
+    .center_x(Fill)
+    .center_y(Fill)
+    .padding(40)
+    .into()
 }
 
-/// View for chat interface.
 /// Render a single chat pane.
 fn render_pane(state: &LlamaApp, pane: usize) -> Element<'_, Message> {
     let p = &state.panes[pane];
@@ -971,7 +1033,7 @@ fn render_pane(state: &LlamaApp, pane: usize) -> Element<'_, Message> {
         .into(),
     );
 
-    // ─── M12: Settings + Full-screen buttons ──────────────────
+    // Settings + Full-screen buttons
     children.push(
         row![
             button(iced::widget::text("⚙ Settings").size(12))
@@ -985,7 +1047,7 @@ fn render_pane(state: &LlamaApp, pane: usize) -> Element<'_, Message> {
         .into(),
     );
 
-    // ─── M11: Resource limit sliders ──────────────────────────
+    // Resource limit sliders
     children.push(
         row![
             iced::widget::text(format!("Mem: {} MB", p.resource_limits.memory_mb)).size(12),
@@ -1017,16 +1079,30 @@ fn render_pane(state: &LlamaApp, pane: usize) -> Element<'_, Message> {
 
     // Messages
     for msg in &p.session.messages {
-        let role = match msg.role {
-            Role::User => "You",
-            Role::Assistant => "AI",
-            Role::System => "System",
+        let (role_label, role_color) = match msg.role {
+            Role::User => ("You", Color::from_rgba8(0x4A, 0x90, 0xE2, 1.0)),
+            Role::Assistant => ("AI", Color::from_rgba8(0x4A, 0xE2, 0x6A, 1.0)),
+            Role::System => ("System", Color::from_rgba8(0xA0, 0xA0, 0xA0, 1.0)),
         };
-        children.push(
-            iced::widget::text(format!("{}: {}", role, msg.content))
-                .size(14)
-                .into(),
-        );
+        let msg_container = iced::widget::container(
+            column(vec![
+                iced::widget::text(role_label)
+                    .size(12)
+                    .color(role_color)
+                    .into(),
+                iced::widget::text(&msg.content).size(14).into(),
+            ])
+            .spacing(4),
+        )
+        .padding(iced::Padding::from([8, 12]))
+        .width(Fill);
+
+        let styled_msg = match msg.role {
+            Role::User => msg_container.style(llama_ui_core::theme::user_message_style),
+            Role::Assistant => msg_container.style(llama_ui_core::theme::assistant_message_style),
+            Role::System => msg_container.style(llama_ui_core::theme::system_message_style),
+        };
+        children.push(styled_msg.into());
     }
 
     // Token counter
@@ -1047,7 +1123,7 @@ fn render_pane(state: &LlamaApp, pane: usize) -> Element<'_, Message> {
         );
     }
 
-    // ─── M7: Sampler sliders ────────────────────────────────
+    // Sampler sliders
     children.push(
         row![
             iced::widget::text(format!("T: {:.2}", p.temperature)).size(12),
@@ -1093,7 +1169,7 @@ fn render_pane(state: &LlamaApp, pane: usize) -> Element<'_, Message> {
         .into(),
     );
 
-    // ─── M9: Export/Import buttons ──────────────────────────
+    // Export/Import buttons
     children.push(
         row![
             button(iced::widget::text("Export JSON").size(12))
@@ -1140,9 +1216,15 @@ fn render_pane(state: &LlamaApp, pane: usize) -> Element<'_, Message> {
         );
     }
 
-    // Status
+    // Status bar at bottom
     if !state.status.is_empty() {
-        children.push(iced::widget::text(&state.status).size(12).into());
+        children.push(
+            iced::widget::container(iced::widget::text(&state.status).size(12))
+                .style(llama_ui_core::theme::status_bar_style)
+                .padding(iced::Padding::from([6, 12]))
+                .width(Fill)
+                .into(),
+        );
     }
 
     iced::widget::container(scrollable(column(children)).width(Fill).height(Fill))
@@ -1174,10 +1256,21 @@ fn view_chat(state: &LlamaApp) -> Element<'_, Message> {
 
 /// Loading view.
 fn view_loading(state: &LlamaApp) -> Element<'_, Message> {
-    iced::widget::container(column(vec![
-        iced::widget::text("Loading...").size(24).into(),
-        iced::widget::text(&state.status).size(16).into(),
-    ]))
+    iced::widget::container(
+        column(vec![
+            iced::widget::text("Loading...")
+                .size(28)
+                .color(Color::from_rgba8(0x4A, 0x90, 0xE2, 1.0))
+                .into(),
+            iced::widget::text("").size(8).into(),
+            iced::widget::text(&state.status)
+                .size(16)
+                .color(Color::from_rgba8(0xA0, 0xA0, 0xA0, 1.0))
+                .into(),
+        ])
+        .spacing(8),
+    )
+    .style(llama_ui_core::theme::content_area_style)
     .center_x(Fill)
     .center_y(Fill)
     .into()
@@ -1185,16 +1278,30 @@ fn view_loading(state: &LlamaApp) -> Element<'_, Message> {
 
 /// Error view.
 fn view_error(err: &str) -> Element<'_, Message> {
-    iced::widget::container(column(vec![
-        iced::widget::text("Error").size(24).into(),
-        iced::widget::text(err).size(16).into(),
-        button(iced::widget::text("Back").size(16))
-            .on_press(Message::ModelSelected(0))
-            .padding(10)
-            .into(),
-    ]))
+    iced::widget::container(
+        column(vec![
+            iced::widget::text("Error")
+                .size(28)
+                .color(Color::from_rgba8(0xE2, 0x4A, 0x4A, 1.0))
+                .into(),
+            iced::widget::text("").size(8).into(),
+            iced::widget::text(err)
+                .size(16)
+                .color(Color::from_rgba8(0xE2, 0x4A, 0x4A, 1.0))
+                .into(),
+            iced::widget::text("").size(16).into(),
+            button(iced::widget::text("Back to Model Picker").size(16))
+                .style(llama_ui_core::theme::primary_button_style)
+                .on_press(Message::ModelSelected(0))
+                .padding(iced::Padding::from([10, 20]))
+                .into(),
+        ])
+        .spacing(8),
+    )
+    .style(llama_ui_core::theme::content_area_style)
     .center_x(Fill)
     .center_y(Fill)
+    .padding(40)
     .into()
 }
 
@@ -1202,58 +1309,118 @@ fn view_error(err: &str) -> Element<'_, Message> {
 fn view_settings(state: &LlamaApp) -> Element<'_, Message> {
     let mut children: Vec<Element<'_, Message>> = Vec::new();
 
-    children.push(iced::widget::text("Settings").size(24).into());
     children.push(
-        iced::widget::text(format!("Panes: {}", state.panes.len()))
-            .size(14)
+        iced::widget::text("Settings")
+            .size(28)
+            .color(Color::from_rgba8(0x4A, 0x90, 0xE2, 1.0))
             .into(),
     );
-    children.push(
-        iced::widget::text(format!("Models: {}", state.models.len()))
-            .size(14)
-            .into(),
-    );
-
     children.push(iced::widget::text("").size(8).into());
-    children.push(iced::widget::text("Keyboard Shortcuts").size(18).into());
-    children.push(iced::widget::text("Esc — Close Settings").size(14).into());
-    children.push(
-        iced::widget::text("F11 — Toggle Full-screen")
-            .size(14)
-            .into(),
-    );
-    children.push(
-        iced::widget::text("Enter (in text input) — Send message")
-            .size(14)
-            .into(),
-    );
 
-    children.push(iced::widget::text("").size(8).into());
-    children.push(iced::widget::text("General").size(18).into());
+    // System info section
     children.push(
-        iced::widget::text("Full-screen: toggle with F11 or the button in the chat view.")
-            .size(14)
+        iced::widget::text("System Information")
+            .size(18)
+            .color(Color::from_rgba8(0xC0, 0xC0, 0xC0, 1.0))
             .into(),
     );
     children.push(
-        iced::widget::text("Resource limits (memory/CPU) are set per-pane in the chat view.")
-            .size(14)
+        iced::widget::container(
+            column(vec![
+                iced::widget::text(format!("Active Panes: {}", state.panes.len()))
+                    .size(14)
+                    .into(),
+                iced::widget::text(format!("Available Models: {}", state.models.len()))
+                    .size(14)
+                    .into(),
+            ])
+            .spacing(4),
+        )
+        .style(llama_ui_core::theme::user_message_style)
+        .padding(iced::Padding::from([8, 12]))
+        .width(Fill)
+        .into(),
+    );
+    children.push(iced::widget::text("").size(12).into());
+
+    // Keyboard shortcuts section
+    children.push(
+        iced::widget::text("Keyboard Shortcuts")
+            .size(18)
+            .color(Color::from_rgba8(0xC0, 0xC0, 0xC0, 1.0))
             .into(),
     );
+    children.push(
+        iced::widget::container(
+            column(vec![
+                iced::widget::text("Esc — Close Settings").size(14).into(),
+                iced::widget::text("F11 — Toggle Full-screen")
+                    .size(14)
+                    .into(),
+                iced::widget::text("Enter — Send message (in text input)")
+                    .size(14)
+                    .into(),
+            ])
+            .spacing(4),
+        )
+        .style(llama_ui_core::theme::user_message_style)
+        .padding(iced::Padding::from([8, 12]))
+        .width(Fill)
+        .into(),
+    );
+    children.push(iced::widget::text("").size(12).into());
+
+    // General section
+    children.push(
+        iced::widget::text("General")
+            .size(18)
+            .color(Color::from_rgba8(0xC0, 0xC0, 0xC0, 1.0))
+            .into(),
+    );
+    children.push(
+        iced::widget::container(
+            column(vec![
+                iced::widget::text("Full-screen: toggle with F11 or the button in the chat view.")
+                    .size(14)
+                    .into(),
+                iced::widget::text(
+                    "Resource limits (memory/CPU) are set per-pane in the chat view.",
+                )
+                .size(14)
+                .into(),
+                iced::widget::text(
+                    "Backend selection (auto/cpu/cuda) is available in each chat pane.",
+                )
+                .size(14)
+                .into(),
+            ])
+            .spacing(4),
+        )
+        .style(llama_ui_core::theme::user_message_style)
+        .padding(iced::Padding::from([8, 12]))
+        .width(Fill)
+        .into(),
+    );
+    children.push(iced::widget::text("").size(16).into());
 
     // Back to chat
     children.push(
-        button(iced::widget::text("← Back to Chat").size(16))
+        button(iced::widget::text("Back to Chat").size(16))
+            .style(llama_ui_core::theme::primary_button_style)
             .on_press(Message::CloseSettings)
-            .padding(10)
+            .padding(iced::Padding::from([10, 20]))
+            .width(Fill)
             .into(),
     );
 
-    iced::widget::container(scrollable(column(children)).width(Fill).height(Fill))
-        .width(Fill)
-        .height(Fill)
-        .padding(20)
-        .into()
+    iced::widget::container(
+        iced::widget::scrollable(column(children).spacing(4).width(Fill)).height(Fill),
+    )
+    .style(llama_ui_core::theme::content_area_style)
+    .center_x(Fill)
+    .center_y(Fill)
+    .padding(40)
+    .into()
 }
 
 // ─── Drop: stop sandbox on exit ─────────────────────────────────────────
