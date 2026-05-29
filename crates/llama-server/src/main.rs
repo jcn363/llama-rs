@@ -362,7 +362,6 @@ async fn handle_tokenize(
 
     let tokenizer = llama::SimpleTokenizer::from_gguf_vocab(
         state.model.vocab_tokens.clone(),
-        state.model.vocab_scores.clone(),
         state.model.vocab_types.clone(),
         state.model.bos_token_id,
         state.model.eos_token_id,

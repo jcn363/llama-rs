@@ -117,7 +117,6 @@ impl InferenceContext {
     pub fn new(model: Arc<Model>, config: ModelConfig) -> Self {
         let tokenizer = crate::SimpleTokenizer::from_gguf_vocab(
             model.vocab_tokens.clone(),
-            model.vocab_scores.clone(),
             model.vocab_types.clone(),
             model.bos_token_id,
             model.eos_token_id,

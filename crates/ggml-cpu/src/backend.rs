@@ -10,23 +10,6 @@ thread_local! {
     static BUMP_ALLOCATOR: RefCell<Option<bumpalo::Bump>> = const { RefCell::new(None) };
 }
 
-/// Executes a closure with access to a thread‑local bump allocator.
-// Available for downstream crates to use; not called within ggml-cpu itself.
-#[expect(dead_code)]
-pub fn with_bump_allocator<F, R>(size: usize, f: F) -> R
-where
-    F: FnOnce(&mut bumpalo::Bump) -> R,
-{
-    BUMP_ALLOCATOR.with(|cell| {
-        let mut opt = cell.borrow_mut();
-        if opt.is_none() {
-            *opt = Some(bumpalo::Bump::with_capacity(size));
-        }
-        let bump = opt.as_mut().unwrap();
-        f(bump)
-    })
-}
-
 /// Resets the thread‑local bump allocator.
 pub fn reset_bump_allocator() {
     BUMP_ALLOCATOR.with(|cell| *cell.borrow_mut() = None);

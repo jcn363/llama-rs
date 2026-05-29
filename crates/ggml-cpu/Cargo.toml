@@ -12,7 +12,6 @@ repository.workspace = true
 simd = []
 
 [dependencies]
-llama-core = { workspace = true }
 ggml = { workspace = true }
 rayon = { workspace = true }
 tracing = { workspace = true }

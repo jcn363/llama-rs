@@ -14,8 +14,6 @@ path = "src/main.rs"
 [dependencies]
 llama = { workspace = true, features = ["cuda"] }
 common = { workspace = true }
-config = { workspace = true }
-error = { workspace = true }
 llama-ui-models = { workspace = true }
 llama-ui-session = { workspace = true }
 llama-ui-sandbox-client = { workspace = true }
@@ -25,8 +23,6 @@ serde_json = { workspace = true }
 tracing = { workspace = true }
 tokio = { workspace = true }
 futures = { workspace = true }
-tokio-stream = { workspace = true }
-anyhow = { workspace = true }
 tracing-subscriber = { workspace = true }
 llama-ui-core = { path = "../llama-ui-core" }
 iced = { workspace = true }

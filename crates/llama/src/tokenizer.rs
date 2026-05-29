@@ -43,9 +43,6 @@ pub struct SimpleTokenizer {
     id_to_token: HashMap<usize, String>,
     /// Token types for each token ID.
     token_types: Vec<TokenType>,
-    /// Scores for each token ID (used for BPE).
-    #[expect(dead_code)]
-    scores: Vec<f32>,
     /// BOS token ID.
     pub bos_token_id: usize,
     /// EOS token ID.
@@ -64,13 +61,11 @@ impl SimpleTokenizer {
         let mut token_to_id = HashMap::new();
         let mut id_to_token = HashMap::new();
         let mut token_types = Vec::new();
-        let mut scores = Vec::new();
 
         // Reserve token 0 for unknown/padding
         token_to_id.insert("<unk>".to_string(), 0);
         id_to_token.insert(0, "<unk>".to_string());
         token_types.push(TokenType::Unknown);
-        scores.push(0.0);
 
         // Add printable ASCII characters (32-126)
         for (i, ch) in (32u8..=126).enumerate() {
@@ -80,24 +75,20 @@ impl SimpleTokenizer {
             token_to_id.insert(token.clone(), id);
             id_to_token.insert(id, token);
             token_types.push(TokenType::Normal);
-            scores.push(0.0);
         }
 
         // Add special tokens
         token_to_id.insert("<s>".to_string(), 96);
         id_to_token.insert(96, "<s>".to_string());
         token_types.push(TokenType::Control);
-        scores.push(0.0);
         token_to_id.insert("</s>".to_string(), 97);
         id_to_token.insert(97, "</s>".to_string());
         token_types.push(TokenType::Control);
-        scores.push(0.0);
 
         Self {
             token_to_id,
             id_to_token,
             token_types,
-            scores,
             bos_token_id: 96,
             eos_token_id: 97,
             unk_token_id: 0,
@@ -111,7 +102,6 @@ impl SimpleTokenizer {
     /// # Arguments
     ///
     /// * `tokens` - Array of token strings from GGUF metadata
-    /// * `scores` - Array of token scores (for BPE ranking)
     /// * `token_types` - Array of token types
     /// * `bos_token_id` - BOS token ID
     /// * `eos_token_id` - EOS token ID
@@ -119,7 +109,6 @@ impl SimpleTokenizer {
     /// * `add_bos_token` - Whether to add BOS token automatically
     pub fn from_gguf_vocab(
         tokens: Vec<String>,
-        scores: Vec<f32>,
         token_types: Vec<TokenType>,
         bos_token_id: usize,
         eos_token_id: usize,
@@ -143,7 +132,6 @@ impl SimpleTokenizer {
             token_to_id,
             id_to_token,
             token_types,
-            scores,
             bos_token_id,
             eos_token_id,
             unk_token_id,
@@ -268,9 +256,8 @@ mod tests {
     #[test]
     fn test_from_gguf_vocab() {
         let tokens: Vec<String> = (0..100).map(|i| format!("token{}", i)).collect();
-        let scores: Vec<f32> = (0..100).map(|i| i as f32).collect();
         let types: Vec<TokenType> = (0..100).map(|_| TokenType::Normal).collect();
-        let tokenizer = SimpleTokenizer::from_gguf_vocab(tokens, scores, types, 1, 2, 0, true);
+        let tokenizer = SimpleTokenizer::from_gguf_vocab(tokens, types, 1, 2, 0, true);
 
         assert_eq!(tokenizer.vocab_size(), 100);
         assert_eq!(tokenizer.bos_token_id, 1);
@@ -295,7 +282,6 @@ mod tests {
             "l".to_string(),
             "o".to_string(),
         ];
-        let scores = vec![0.0, 1.0, 1.0, 1.0, 0.5, 0.5, 0.5, 0.5];
         let types = vec![
             TokenType::Unknown,
             TokenType::Normal,
@@ -306,7 +292,7 @@ mod tests {
             TokenType::Normal,
             TokenType::Normal,
         ];
-        let tokenizer = SimpleTokenizer::from_gguf_vocab(tokens, scores, types, 0, 0, 0, false);
+        let tokenizer = SimpleTokenizer::from_gguf_vocab(tokens, types, 0, 0, 0, false);
 
         // "Hello World!" should encode as ["Hello", " World", "!"]
         let tokens = tokenizer.encode("Hello World!");

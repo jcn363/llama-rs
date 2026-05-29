@@ -8,7 +8,6 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
-llama-core = { workspace = true }
 ggml = { workspace = true }
 cudarc = { workspace = true, optional = true, features = ["cuda-version-from-build-system"] }
 tracing = { workspace = true }

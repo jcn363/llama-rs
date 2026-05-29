@@ -211,8 +211,6 @@ pub struct Model {
     pub norm_eps: f32,
     /// Tokenizer vocabulary loaded from GGUF metadata.
     pub vocab_tokens: Vec<String>,
-    /// Tokenizer scores (for BPE ranking).
-    pub vocab_scores: Vec<f32>,
     /// Tokenizer token types.
     pub vocab_types: Vec<tokenizer::TokenType>,
     /// BOS token ID.

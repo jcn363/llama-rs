@@ -283,13 +283,10 @@ impl Model {
             d_head,
         ));
 
-        let (vocab_tokens, vocab_scores, vocab_types_raw) = (
+        let (vocab_tokens, vocab_types_raw) = (
             reader
                 .get_string_array("tokenizer.ggml.tokens")
                 .unwrap_or_else(|_| (0..vocab_size).map(|i| format!("<token{}>", i)).collect()),
-            reader
-                .get_f32_array("tokenizer.ggml.scores")
-                .unwrap_or_else(|_| vec![0.0; vocab_size]),
             reader
                 .get_i32_array("tokenizer.ggml.token_type")
                 .unwrap_or_else(|_| vec![1; vocab_size]),
@@ -330,7 +327,6 @@ impl Model {
             qk_norm_eps,
             norm_eps,
             vocab_tokens,
-            vocab_scores,
             vocab_types,
             bos_token_id,
             eos_token_id,

@@ -11,10 +11,7 @@ repository.workspace = true
 thiserror = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-tracing = { workspace = true }
 clap = { workspace = true }
 rand = "0.9"
 minijinja = { version = "2.7", features = ["loader"] }
-unicode-segmentation = "1.12"
-regex = "1.11"
 error = { workspace = true }

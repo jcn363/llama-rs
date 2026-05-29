@@ -390,8 +390,7 @@ pub fn default_geglu(a: &[f32], b: &[f32]) -> Vec<f32> {
         .map(|(x, y)| {
             let sqrt_2_over_pi = 0.797_884_6;
             let inner = sqrt_2_over_pi * (x + 0.044715 * x * x * x);
-            let tanh = (inner.exp() - (-inner).exp()) / (inner.exp() + (-inner).exp());
-            let g = 0.5 * x * (1.0 + tanh);
+            let g = 0.5 * x * (1.0 + inner.tanh());
             g * y
         })
         .collect()
@@ -552,10 +551,7 @@ pub fn default_argmax(x: &[f32]) -> usize {
 
 /// Default count equal.
 pub fn default_count_equal(a: &[f32], b: &[f32]) -> usize {
-    a.iter()
-        .zip(b.iter())
-        .filter(|(x, y)| (*x - *y).abs() < f32::EPSILON)
-        .count()
+    a.iter().zip(b.iter()).filter(|(x, y)| *x == *y).count()
 }
 
 /// Default cumulative sum.
@@ -1610,13 +1606,11 @@ pub fn default_solve_tri(
 /// Default triangular matrix.
 pub fn default_tri(n: usize, diagonal: i32) -> Vec<f32> {
     let mut out = vec![0.0f32; n * n];
-    if diagonal >= 0 {
-        let d = diagonal as usize;
-        for i in 0..n {
-            for j in d..=i.min(n - 1 - d) {
-                if j >= d && j <= i {
-                    out[i * n + j - d] = 1.0;
-                }
+    for i in 0..n {
+        for j in 0..n {
+            let effective_col = j as i32 - diagonal;
+            if effective_col >= 0 && effective_col <= i as i32 {
+                out[i * n + j] = 1.0;
             }
         }
     }
