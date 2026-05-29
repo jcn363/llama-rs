@@ -32,7 +32,7 @@ An example to use this approach can be the rewriting of source code by a LLM.
 
 This implementation looks for the last n-gram in history that matches the current n-gram and creates a draft using the m tokens following the matched n-gram. It is the simplest self-speculative approach with minimal overhead.
 
-```
+```text
 llama-server [...] --spec-type ngram-simple --spec-draft-n-max 64
 ```
 
@@ -43,7 +43,8 @@ This implementation looks for the current n-gram of size n (called the _key_) in
 The number of accepted tokens is stored for each used n-gram.
 
 **Example:**
-```
+
+```text
 llama-server [...] --spec-type ngram-map-k --spec-draft-n-max 64
 ```
 
@@ -54,7 +55,8 @@ This experimental implementation looks for the current n-gram of size n (called 
 The number of accepted tokens is stored for each used n-gram.
 
 **Example:** Server options to be used if there are a lot of longer repetitions.
-```
+
+```text
 llama-server [...] --spec-type ngram-map-k4v --spec-ngram-map-k4v-size-n 8 --spec-ngram-map-k4v-size-m 8 --spec-ngram-map-k4v-min-hits 2 --spec-draft-n-max 64
 ```
 
@@ -76,7 +78,7 @@ Currently, a single hash pool is shared across all server slots, so different re
 
 **Sample usage:**
 
-```
+```text
 # notes:
 # - small `n` are not recommended
 # - MoEs require long drafts
@@ -107,7 +109,7 @@ If a draft model is combined with a draftless decoding the draftless decoding ha
 
 ### General Speculative Parameters
 
-```
+```text
 --spec-type [none|draft-simple|draft-mtp|ngram-cache|ngram-simple|ngram-map-k|ngram-map-k4v|ngram-mod]
                                         comma-separated list of types of speculative decoding to use
                                         (default: none)
@@ -118,7 +120,7 @@ If a draft model is combined with a draftless decoding the draftless decoding ha
 
 ### Draft Model Parameters
 
-```
+```text
 --spec-draft-model, -md, --model-draft  FNAME
                                         draft model for speculative decoding (default: unused)
                                         (env: LLAMA_ARG_SPEC_DRAFT_MODEL)
@@ -147,7 +149,7 @@ If a draft model is combined with a draftless decoding the draftless decoding ha
 
 ### Draft Model CPU Scheduling Parameters
 
-```
+```text
 --spec-draft-threads, -td, --threads-draft  N
                                         number of CPU threads to use during generation
 --spec-draft-threads-batch, -tbd, --threads-batch-draft  N
@@ -176,7 +178,7 @@ If a draft model is combined with a draftless decoding the draftless decoding ha
 
 ### Draft Model KV Cache and Tensor Override Parameters
 
-```
+```text
 --spec-draft-type-k, -ctkd, --cache-type-k-draft  TYPE
                                         KV cache data type for K for the draft model
                                         allowed values: f32, f16, bf16, q8_0, q4_0, q4_1, iq4_nl, q5_0, q5_1
@@ -197,7 +199,7 @@ If a draft model is combined with a draftless decoding the draftless decoding ha
 
 ### n-gram Mod Parameters
 
-```
+```text
 --spec-ngram-mod-n-match                N
                                         ngram-mod lookup length (default: 24)
 --spec-ngram-mod-n-min                  N
@@ -208,7 +210,7 @@ If a draft model is combined with a draftless decoding the draftless decoding ha
 
 ### n-gram Simple Parameters
 
-```
+```text
 --spec-ngram-simple-size-n              N
                                         ngram size N for ngram-simple speculative decoding, length of lookup n-gram (default: 12)
 --spec-ngram-simple-size-m              N
@@ -219,7 +221,7 @@ If a draft model is combined with a draftless decoding the draftless decoding ha
 
 ### n-gram Map Key Parameters
 
-```
+```text
 --spec-ngram-map-k-size-n               N
                                         ngram size N for ngram-map-k speculative decoding, length of lookup n-gram (default: 12)
 --spec-ngram-map-k-size-m               N
@@ -230,7 +232,7 @@ If a draft model is combined with a draftless decoding the draftless decoding ha
 
 ### n-gram Map Key-4-Values Parameters
 
-```
+```text
 --spec-ngram-map-k4v-size-n             N
                                         ngram size N for ngram-map-k4v speculative decoding, length of lookup n-gram (default: 12)
 --spec-ngram-map-k4v-size-m             N
@@ -243,23 +245,25 @@ If a draft model is combined with a draftless decoding the draftless decoding ha
 
 Specifies a comma-separated list of speculative decoding types to use.
 
-| Type | Description |
-|------|-------------|
-| `none` | No speculative decoding (default) |
-| `draft-simple` | Use a simple draft model for speculation |
-| `draft-mtp` | Use Masked Token Prediction (MTP) heads from the main model |
-| `ngram-cache` | Use n-gram cache lookup |
-| `ngram-simple` | Use simple n-gram pattern matching |
-| `ngram-map-k` | Use n-gram pattern matching with n-gram-keys |
+| Type            | Description                                                                              |
+|-----------------|------------------------------------------------------------------------------------------|
+| `none`          | No speculative decoding (default)                                                        |
+| `draft-simple`  | Use a simple draft model for speculation                                                 |
+| `draft-mtp`     | Use Masked Token Prediction (MTP) heads from the main model                              |
+| `ngram-cache`   | Use n-gram cache lookup                                                                  |
+| `ngram-simple`  | Use simple n-gram pattern matching                                                       |
+| `ngram-map-k`   | Use n-gram pattern matching with n-gram-keys                                             |
 | `ngram-map-k4v` | Use n-gram pattern matching with n-gram-keys and up to four m-gram values (experimental) |
-| `ngram-mod` | Use basic ngram hasher for speculative decoding with shared pool |
+| `ngram-mod`     | Use basic ngram hasher for speculative decoding with shared pool                         |
 
 **Example:** Server-instance used to refactor source code.
+
 ```bash
 ./llama-server [...] --spec-type ngram-simple
 ```
 
 **Example:** Multiple speculative implementations.
+
 ```bash
 ./llama-server [...] --spec-type ngram-mod,ngram-map-k4v
 ```
@@ -299,23 +303,23 @@ Each n-gram implementation has its own parameter:
 - `--spec-ngram-map-k4v-min-hits` for `ngram-map-k4v`
 
 ## Statistics
+
 Each speculative decoding implementation prints statistics.
 
-```
+```text
 draft acceptance rate = 0.57576 (  171 accepted /   297 generated)
 statistics ngram_simple: #calls = 15, #gen drafts = 5, #acc drafts = 5, #gen tokens = 187, #acc tokens = 73
 statistics draft: #calls = 10, #gen drafts = 10, #acc drafts = 10, #gen tokens = 110, #acc tokens = 98
 ```
 
-```
+```text
 draft acceptance rate = 0.70312 (   90 accepted /   128 generated)
 statistics ngram_mod: #calls = 810, #gen drafts = 15, #acc drafts = 15, #gen tokens = 960, #acc tokens = 730, dur(b,g,a) = 0.149, 0.347, 0.005 ms
 ```
 
-```
+```text
 statistics ngram_map_k: #calls(b,g,a) = 6 1690 26, #gen drafts = 26, #acc drafts = 26, #gen tokens = 1248, #acc tokens = 968, dur(b,g,a) = 2.234, 1.427, 0.016 ms
 ```
-
 
 - `#calls(b,g,a)`: number of calls of begin (new prompt), generation and accumulation of this implementations
 - `#gen drafts`: number of drafts generated by this implementation

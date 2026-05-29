@@ -60,7 +60,7 @@ pub fn matmul_f32(
         for &(i_start, i_end) in &ranges {
             let c_start = i_start * n;
             let len = (i_end - i_start) * n;
-            // Safety: each thread accesses a non-overlapping region of c
+            // SAFETY: each thread accesses a non-overlapping region of c
             let c_slice = unsafe { std::slice::from_raw_parts_mut(c_ptr.add(c_start), len) };
             scope.spawn(move || {
                 matmul_f32_block(a, b, c_slice, n, k, i_start, i_end, 0, n);

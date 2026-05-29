@@ -2,7 +2,6 @@
 #![deny(missing_docs)]
 
 mod app;
-mod theme;
 
 use app::LlamaApp;
 

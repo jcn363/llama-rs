@@ -6,13 +6,5 @@
 override_dh_auto_build:
 	cargo build --release --locked --workspace
 
-override_dh_auto_install:
-	install -Dm755 target/release/llama-cli debian/llama-rs/usr/bin/llama-cli
-	install -Dm755 target/release/llama-server debian/llama-rs/usr/bin/llama-server
-	install -Dm755 target/release/llama-ui debian/llama-rs/usr/bin/llama-ui
-
 override_dh_auto_test:
 	cargo test --workspace
-
-override_dh_shlibdeps:
-	dh_shlibdeps -l/usr/lib/llama-rs

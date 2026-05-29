@@ -7,3 +7,6 @@ pub mod args;
 
 /// Shared sampling configuration for text generation.
 pub mod sampling;
+
+/// Chat template rendering using minijinja.
+pub mod chat_templates;

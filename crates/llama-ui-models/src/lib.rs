@@ -115,7 +115,6 @@ impl Manifest {
         // Read context length (may be stored under various keys depending on architecture)
         for key in &[
             "llama.context_length",
-            "llama.context_length",
             "mistral.context_length",
             "phi.context_length",
             "gemma.context_length",

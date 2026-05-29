@@ -4,7 +4,7 @@ Upstream-Contact: llama-rs developers <llama-rs-devs@example.com>
 Source: https://github.com/jcn363/llama-rs
 
 Files: *
-Copyright: 2024 llama-rs developers
+Copyright: 2024-2026 llama-rs developers
 License: MIT OR Apache-2.0
 
 License: MIT

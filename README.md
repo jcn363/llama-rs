@@ -12,30 +12,46 @@ A Rust port of [llama.cpp](https://github.com/ggml-org/llama.cpp), optimized for
 
 **Note:** This README serves as the single source of truth for project documentation. All other documentation files should reference or mirror information from here to avoid inconsistencies.
 
-The workspace splits concerns across 12 domain crates, each handling a specific subsystem:
+## Help & Documentation
 
-```
+| Document                           | Description                                                                                    |
+|------------------------------------|------------------------------------------------------------------------------------------------|
+| [Help Overview](docs/HELP.md)      | Master index linking to all documentation                                                      |
+| [CLI Help](docs/CLI_HELP.md)       | Comprehensive `llama-cli` reference — all flags, interactive mode, examples                    |
+| [Server Help](docs/SERVER_HELP.md) | Comprehensive `llama-server` reference — API endpoints, SSE streaming, cURL/Python examples    |
+| [UI Help](docs/UI_HELP.md)         | Comprehensive `llama-ui` reference — screens, controls, session management, keyboard shortcuts |
+| [Architecture](ARCHITECTURE.md)    | Crate dependency graph, data flow, per-crate breakdown                                         |
+| [Code Style](CODE_STYLE.md)        | Formatting, naming, error handling, unsafe, testing conventions                                |
+| [Contributing](CONTRIBUTING.md)    | Build, test, lint commands; contribution workflow                                              |
+| [Security](SECURITY.md)            | Threat model and vulnerability reporting                                                       |
+
+The workspace splits concerns across 16 domain crates, each handling a specific subsystem:
+
+```text
 llama-rs/
 ├── crates/
+│   ├── error/                   # Unified error handling — Error enum, Result<T> alias
+│   ├── config/                  # Configuration management — Config struct, env-based loading
 │   ├── gguf/                    # GGUF v3 parser — file format, tensor info, dequantization
 │   ├── ggml/                    # Core tensor library — Tensor, DType, computation graphs
 │   ├── ggml-cpu/                # CPU backend — AVX/SSE4.2 SIMD matmul, block-tiling
 │   ├── ggml-cuda/               # CUDA backend — cuBLAS matmul, VRAM tracking (requires CUDA toolkit)
+│   ├── llama-core/              # Core inference traits and shared types
 │   ├── llama/                   # Inference engine — transformer forward pass, attention, KV cache
 │   ├── common/                  # Shared utilities — argument parsing, sampling config, chat templates
-│   ├── config/                  # Unified configuration — Config struct, env-based loading
-│   ├── error/                   # Unified error handling — Error enum, Result<T> alias
 │   ├── llama-cli/               # CLI binary for interactive text generation
 │   ├── llama-server/            # HTTP server with /completion and /health endpoints
-│   ├── llama-ui/                # Desktop GUI (iced 0.13.1) — multi-pane chat interface
+│   ├── llama-ui-core/           # Shared UI types, theme, and error types
 │   ├── llama-ui-models/         # Model discovery, manifest, GGUF metadata extraction
 │   ├── llama-ui-session/        # Chat history, session persistence, export (JSON/MD/plain)
-│   └── llama-ui-sandbox-client/ # Sandbox server spawning with resource limits
+│   ├── llama-ui-sandbox-client/ # Sandbox server spawning with resource limits
+│   └── llama-ui/                # Desktop GUI (iced 0.13) — multi-pane chat interface
 ├── .cargo/            # cargo config (target-cpu=bdver1)
 ├── .github/workflows/ # CI: format → clippy → test → deny → doc
 ├── test-models/       # Test GGUF files (downloaded separately, gitignored)
 ├── media/             # Visual identity system and design assets
-├── Cargo.toml         # Workspace root (14 members)
+├── debian/            # Debian packaging files
+├── Cargo.toml         # Workspace root (16 members)
 ├── rustfmt.toml       # Formatting: max_width=100, 4-space indent
 └── deny.toml          # License policy (MIT, Apache-2.0, Unlicense)
 ```
@@ -51,6 +67,7 @@ A complete visual identity system is available in the `media/` directory, showca
 - **Design principles** — Fluid motion, micro-interactions, and a vibrant color palette for each of the 8 crates
 
 The design features:
+
 - Distinct accent colors for each crate (gguf: purple, ggml: blue, ggml-cpu: emerald, ggml-cuda: pink, llama: amber, common: slate, llama-cli: orange, llama-server: indigo)
 - Asymmetrical Bento layout with Double-Bezel architecture
 - Fluid Island navigation with morphing hamburger icon
@@ -59,23 +76,23 @@ The design features:
 
 ## Hardware Target
 
-| Component | Specs |
-|-----------|-------|
-| **CPU** | AMD Opteron 3280 (Bulldozer bdver1) — 8 cores, 32GB RAM |
-| **SIMD** | SSE4.2, AVX (NO FMA, AVX2, AVX512) |
-| **GPU** | NVIDIA GTX 1050 — 640 CUDA cores, 2GB VRAM, Compute 6.1 |
+| Component | Specs                                                   |
+|-----------|---------------------------------------------------------|
+| **CPU**   | AMD Opteron 3280 (Bulldozer bdver1) — 8 cores, 32GB RAM |
+| **SIMD**  | SSE4.2, AVX (NO FMA, AVX2, AVX512)                      |
+| **GPU**   | NVIDIA GTX 1050 — 640 CUDA cores, 2GB VRAM, Compute 6.1 |
 
 ## Performance
 
-| Operation | Size | Single Thread | Parallel (8 cores) | Speedup |
-|-----------|------|---------------|-------------------|---------|
-| Matmul | 64×64 | 86µs | 429µs | 0.2x (overhead) |
-| Matmul | 128×128 | 637µs | 562µs | 1.1x |
-| Matmul | 256×256 | 4.2ms | 1.7ms | 2.5x |
-| Matmul | 512×512 | 36.5ms | 11.4ms | **3.2x** |
-| Dot product | 4096 | 1.1µs | - | - |
-| Forward pass (13M params) | 1 token | ~18µs | - | - |
-| Token generation (13M params) | 5 tokens | ~84µs | - | - |
+| Operation                     | Size     | Single Thread | Parallel (8 cores) | Speedup         |
+|-------------------------------|----------|---------------|--------------------|-----------------|
+| Matmul                        | 64×64    | 86µs          | 429µs              | 0.2x (overhead) |
+| Matmul                        | 128×128  | 637µs         | 562µs              | 1.1x            |
+| Matmul                        | 256×256  | 4.2ms         | 1.7ms              | 2.5x            |
+| Matmul                        | 512×512  | 36.5ms        | 11.4ms             | **3.2x**        |
+| Dot product                   | 4096     | 1.1µs         | -                  | -               |
+| Forward pass (13M params)     | 1 token  | ~18µs         | -                  | -               |
+| Token generation (13M params) | 5 tokens | ~84µs         | -                  | -               |
 
 ## Installation
 
@@ -116,7 +133,7 @@ cargo bench -p llama --bench attention
 
 ## Desktop UI (llama-ui)
 
-A native Rust desktop application for interactive LLM inference with a polished, modern GUI.
+A native Rust desktop application for interactive LLM inference with a polished, modern GUI. Features include streaming/non-streaming modes, multi-pane chat for model comparison, session persistence, and per-pane resource controls.
 
 ### Building llama-ui
 
@@ -128,27 +145,31 @@ cargo build -p llama-ui --release
 ./target/release/llama-ui
 ```
 
-### Features
+### llama-ui Features
 
 - **Modern dark theme** — Custom-styled UI with color-coded message bubbles (blue for user, green for AI, gray for system)
 - **Multi-pane chat interface** — Multiple independent conversations with different models
-- **Model management** — Download, scan, and select GGUF models
+- **Streaming & non-streaming modes** — Toggle per-pane between real-time streaming (SSE) and block completion
+- **Model management** — Browse and add GGUF files from anywhere, auto-scan model directories
 - **Session persistence** — Save/load chat history in JSON, Markdown, or plain text
 - **Keyboard shortcuts**:
   - `Escape` — Close settings panel
   - `F11` — Toggle fullscreen
-  - `Ctrl+Enter` — Send message (in active pane)
-- **Real-time streaming** — SSE-based token streaming with visual feedback
-- **Resource monitoring** — Context usage warnings (80%) and alerts (95%)
-- **Sandbox isolation** — Optional cgroup resource limits (memory, CPU)
+  - `Enter` — Send message (in active pane)
+- **Real-time streaming** — SSE-based token streaming with visual feedback and progress indicator
+- **Context usage tracking** — Color-coded progress bar (blue → yellow → red) with token counts
+- **Resource monitoring** — Per-pane context usage warnings (80%) and alerts (95%)
+- **Clear chat** — Reset conversation history without restarting the server
+- **Sandbox isolation** — Optional resource limits (memory, CPU) per-pane
 - **Chat templates** — Support for ChatML, Llama, Gemma, StableLM formats
+- **Settings panel** — Version info, keyboard shortcuts, feature reference
 
 *Full platform support*: The `llama-ui` application runs on Linux with both X11 and Wayland display servers (via iced's cross‑platform backend), as well as macOS and Windows.
-
 
 See [Architecture & Major Crates](docs/architecture_and_crates.md) for a detailed component list.
 
 The UI is built on:
+
 - **`llama-ui`** — Main application (iced 0.13.1 function-based API)
 - **`llama-ui-models`** — Model discovery and metadata
 - **`llama-ui-session`** — Chat history and export (JSON/MD/plain)
@@ -163,6 +184,7 @@ cargo test --test integration_test -p llama-ui
 ```
 
 Tests verify:
+
 - Model entry creation and metadata
 - Session creation and message management
 - Export to JSON and Markdown formats
@@ -221,9 +243,11 @@ struct MyArgs {
 ## CLI Commands
 
 **llama-cli** — Interactive text generation:
-```
+
+```text
 llama-cli -m model.gguf [-p "prompt"] [-n 128] [-t 0] [-c 512]
 ```
+
 - `-m, --model` — Path to GGUF model file (required)
 - `-p, --prompt` — Input prompt (empty for interactive mode)
 - `-n, --n-predict` — Maximum tokens to generate (default: 128)
@@ -232,9 +256,11 @@ llama-cli -m model.gguf [-p "prompt"] [-n 128] [-t 0] [-c 512]
 - `--verbose` — Enable debug logging
 
 **llama-server** — HTTP inference API:
-```
+
+```text
 llama-server -m model.gguf [--host 127.0.0.1] [--port 8080]
 ```
+
 - `-m, --model` — Path to GGUF model file (required)
 - `--host` — Bind address (default: 127.0.0.1)
 - `-p, --port` — Listen port (default: 8080)
@@ -242,6 +268,7 @@ llama-server -m model.gguf [--host 127.0.0.1] [--port 8080]
 - `-c, --ctx-size` — Context window size (default: 512)
 
 **Endpoints:**
+
 - `GET /health` — Health check, returns `{"status": "ok"}`
 - `POST /completion` — Generate text (`prompt`, `max_tokens`, `stream`, `temperature`)
 
@@ -249,27 +276,27 @@ llama-server -m model.gguf [--host 127.0.0.1] [--port 8080]
 
 ### Build & Test
 
-| Command | Purpose |
-|---------|---------|
-| `cargo build --workspace` | Debug build |
-| `cargo build --release --workspace` | Release build (LTO thin, codegen-units=1) |
-| `cargo check` | Type-check without producing binaries |
-| `cargo test --workspace` | Run all unit + integration tests |
-| `cargo test --workspace --doc` | Run doctests |
-| `cargo test [test_name] -- --nocapture` | Run a single test with output |
-| `cargo bench -p ggml-cpu --bench cpu_bench` | Run CPU benchmarks |
-| `cargo bench -p llama --bench profiling` | Run profiling benchmarks |
-| `cargo bench -p llama --bench kv_cache` | Run KV cache benchmarks |
-| `cargo bench -p llama --bench attention` | Run attention (RoPE scaling + flash attn) benchmarks |
+| Command                                     | Purpose                                              |
+|---------------------------------------------|------------------------------------------------------|
+| `cargo build --workspace`                   | Debug build                                          |
+| `cargo build --release --workspace`         | Release build (LTO thin, codegen-units=1)            |
+| `cargo check`                               | Type-check without producing binaries                |
+| `cargo test --workspace`                    | Run all unit + integration tests                     |
+| `cargo test --workspace --doc`              | Run doctests                                         |
+| `cargo test [test_name] -- --nocapture`     | Run a single test with output                        |
+| `cargo bench -p ggml-cpu --bench cpu_bench` | Run CPU benchmarks                                   |
+| `cargo bench -p llama --bench profiling`    | Run profiling benchmarks                             |
+| `cargo bench -p llama --bench kv_cache`     | Run KV cache benchmarks                              |
+| `cargo bench -p llama --bench attention`    | Run attention (RoPE scaling + flash attn) benchmarks |
 
 ### Linting & Formatting
 
-| Command | Purpose |
-|---------|---------|
-| `cargo fmt --all -- --check` | Verify formatting (CI enforces this) |
-| `cargo fmt --all` | Auto-format all code |
-| `cargo clippy --workspace -- -D warnings` | Lint with warnings-as-errors |
-| `cargo deny check licenses` | Audit dependency licenses |
+| Command                                   | Purpose                              |
+|-------------------------------------------|--------------------------------------|
+| `cargo fmt --all -- --check`              | Verify formatting (CI enforces this) |
+| `cargo fmt --all`                         | Auto-format all code                 |
+| `cargo clippy --workspace -- -D warnings` | Lint with warnings-as-errors         |
+| `cargo deny check licenses`               | Audit dependency licenses            |
 
 **CI pipeline** runs: format check → clippy (warnings as errors) → test → license audit → doc build.
 
@@ -305,6 +332,7 @@ Key rules from `CODE_STYLE.md`:
 ## Testing Guidelines
 
 Tests are organized as:
+
 - **Unit tests**: Inline in source files under `#[cfg(test)] mod tests { ... }`
 - **Integration tests**: `crates/<name>/tests/<name>_test.rs`
 - **Benchmarks**: `crates/<name>/benches/<name>.rs` (criterion)
@@ -313,6 +341,7 @@ Tests are organized as:
 Naming convention: `describe_should_expected_behavior` — e.g., `dot_f32_should_compute_correct_result`.
 
 Tests that require external model files skip gracefully when the file is absent:
+
 ```rust
 if !model_path.exists() {
     println!("Skipping: test model not found");
@@ -329,22 +358,22 @@ if !model_path.exists() {
 
 ## Status
 
-| Phase | Status | Description |
-|-------|--------|-------------|
-| 1.1 | ✅ | Workspace setup (8 crates) |
-| 1.2 | ✅ | GGUF v3 parser |
-| 2 | ✅ | SIMD matmul (AVX + SSE4.2) |
-| 3 | ✅ | CUDA backend (cuBLAS) |
-| 4 | ✅ | Inference engine (transformer) |
-| 5 | ✅ | CLI and server binaries |
-| 6 | ✅ | CI/CD pipeline |
-| 7 | ✅ | Benchmarks |
-| 8 | ✅ | Multi-architecture support (Llama, Mistral, Phi, Gemma, Qwen2) |
-| 9 | ✅ | Flash attention and memory-mapped tensors |
-| 10 | ✅ | Profiling and per-layer timing benchmarks |
-| 11 | ✅ | RoPE scaling, ReLU², QK-norm, sliding window prefill |
-| 12 | ✅ | KV cache strategies (prefix caching, push_batch, O(1) reset) |
-| 13 | ✅ | Parallel matmul threshold, configuration-driven design |
+| Phase | Status | Description                                                    |
+|-------|--------|----------------------------------------------------------------|
+| 1.1   | ✅     | Workspace setup (8 crates)                                     |
+| 1.2   | ✅     | GGUF v3 parser                                                 |
+| 2     | ✅     | SIMD matmul (AVX + SSE4.2)                                     |
+| 3     | ✅     | CUDA backend (cuBLAS)                                          |
+| 4     | ✅     | Inference engine (transformer)                                 |
+| 5     | ✅     | CLI and server binaries                                        |
+| 6     | ✅     | CI/CD pipeline                                                 |
+| 7     | ✅     | Benchmarks                                                     |
+| 8     | ✅     | Multi-architecture support (Llama, Mistral, Phi, Gemma, Qwen2) |
+| 9     | ✅     | Flash attention and memory-mapped tensors                      |
+| 10    | ✅     | Profiling and per-layer timing benchmarks                      |
+| 11    | ✅     | RoPE scaling, ReLU², QK-norm, sliding window prefill           |
+| 12    | ✅     | KV cache strategies (prefix caching, push_batch, O(1) reset)   |
+| 13    | ✅     | Parallel matmul threshold, configuration-driven design         |
 
 **95+ tests pass** across all crates (unit, integration, and doctests).
 
@@ -366,10 +395,11 @@ sudo dpkg -r llama-rs
 ```
 
 The package includes:
+
 - `llama-cli` — Command-line interface for interactive text generation
 - `llama-server` — HTTP server with `/completion` and `/health` endpoints
 - `llama-ui` — Desktop GUI for interactive LLM inference
 
 ## License
 
-MIT (same as llama.cpp)
+MIT OR Apache-2.0 (see [LICENSE](LICENSE))

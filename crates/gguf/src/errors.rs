@@ -1,6 +1,7 @@
 use thiserror::Error;
 
 /// Errors specific to GGUF parsing and handling.
+#[allow(missing_docs)]
 #[derive(Debug, Error)]
 pub enum GgufError {
     #[error("IO error: {0}")]

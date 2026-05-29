@@ -1,4 +1,4 @@
-#![allow(dead_code, unused_imports, unused_variables)]
+#![allow(missing_docs)]
 use memmap2::Mmap;
 use std::sync::Arc;
 

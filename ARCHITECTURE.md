@@ -24,22 +24,31 @@ llama-rs is a modular Rust workspace for LLM inference with a native desktop GUI
 
 ```
 llama-rs/
-├── Cargo.toml                  # Workspace root (9 members)
+├── Cargo.toml                  # Workspace root (16 members)
 ├── rustfmt.toml                # max_width=100, tab_spaces=4, reorder_imports
 ├── deny.toml                   # License policy (MIT, Apache-2.0, Unlicense)
 ├── .cargo/config.toml          # --target-cpu=bdver1
 ├── .github/workflows/ci.yml    # format → clippy → test → deny → doc
 ├── crates/
+│   ├── error/                  # Unified error handling — Error enum, Result<T> alias
+│   ├── config/                 # Configuration management — Config struct, env-based loading
 │   ├── gguf/                   # GGUF v3 file parser (no deps on other internal crates)
 │   ├── ggml/                   # Core tensor types + computation graph + Backend trait (depends on nothing)
 │   ├── ggml-cpu/               # CPU backend: implements Backend trait, SIMD matmul (depends on ggml)
 │   ├── ggml-cuda/              # CUDA backend: implements Backend trait, cuBLAS (depends on ggml, requires CUDA toolkit)
+│   ├── llama-core/             # Core inference traits and shared types
 │   ├── llama/                  # Inference engine: factory + dispatch via Arc<dyn Backend> (depends on gguf, ggml, ggml-cpu, ggml-cuda)
 │   ├── common/                 # Shared utils: args, sampling config, chat templates
 │   ├── llama-cli/              # CLI binary with --backend flag (depends on llama, common)
-│   └── llama-server/           # HTTP server with --backend flag (depends on llama, common, axum)
+│   ├── llama-server/           # HTTP server with --backend flag (depends on llama, common, axum)
+│   ├── llama-ui-core/          # Shared UI types, theme, and error types
+│   ├── llama-ui-models/        # Model discovery, manifest, GGUF metadata extraction
+│   ├── llama-ui-session/       # Chat history, session persistence, export (JSON/MD/plain)
+│   ├── llama-ui-sandbox-client/ # Sandbox server spawning with resource limits
+│   └── llama-ui/               # Desktop GUI (iced 0.13) — multi-pane chat interface
 ├── test-models/                 # Test GGUF files (gitignored, downloaded separately)
 ├── docs/                        # Additional documentation
+├── debian/                      # Debian packaging files
 └── media/                       # Screenshots, diagrams
 ```
 
@@ -153,19 +162,21 @@ User Selects Model + Pane
     ↓
 [llama-ui-sandbox-client] Spawn Server
     ├─ Resolve llama-server binary
-    ├─ Apply resource limits (cgroup)
+    ├─ Apply resource limits (cgroup/systemd-run)
     └─ Wait for /health endpoint
     ↓
 User Types Message
     ↓
-[llama-ui] Send /completion Request (SSE)
+[llama-ui] Send /completion Request
     ├─ Tokenize prompt via /tokenize
     ├─ Check context overflow (80% warning, 95% alert)
-    └─ Stream tokens via /completion
+    ├─ Stream tokens via SSE (streaming mode)
+    └─ Or non-streaming block completion
     ↓
 [llama-ui] Render Tokens in Real-Time
     ├─ Update message in active pane
     ├─ Auto-scroll to bottom
+    ├─ Update context usage progress bar
     └─ Update token count
     ↓
 User Saves Session
@@ -254,12 +265,16 @@ User Saves Session
 #### `llama-ui` (Desktop GUI)
 - **Responsibility**: Multi-pane chat interface, model management, session persistence
 - **Key Components**:
-  - `app.rs` — Main application state machine
-  - `ui.rs` — Rendering logic (iced 0.13.1 function-based API)
-  - `subscription.rs` — SSE streaming, keyboard input
-  - `task.rs` — Async tasks (model loading, completion requests)
+  - `app.rs` — Main application state machine, update/view/subscription logic
+  - `theme.rs` — Custom button style module (delegates to `llama_ui_core::theme`)
+- **Key Features**:
+  - Streaming & non-streaming modes per pane
+  - Context usage progress bar with color-coded warnings
+  - Clear chat, session export/import, model browsing
+  - Per-pane backend selection (auto/cpu/cuda)
+  - Per-pane resource limits (memory/CPU)
 - **Dependencies**: `llama-ui-models`, `llama-ui-session`, `llama-ui-sandbox-client`, `common`, `error`, `iced`, `tokio`
-- **Tests**: Integration tests for session management, model discovery
+- **Tests**: Unit tests for model picker rendering
 
 #### `llama-ui-models` (Model Discovery)
 - **Responsibility**: Scan for GGUF files, extract metadata, build manifest
@@ -367,7 +382,7 @@ User Saves Session
 - Push-batch strategy for efficient memory layout
 
 ### Inference
-- Token generation: ~84µs per token (13M params, CPU)
+- Token generation: ~84µs per token including sampling (13M params, CPU)
 - Streaming: Real-time token rendering in GUI
 
 ## Future Improvements

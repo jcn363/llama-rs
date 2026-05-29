@@ -5,7 +5,7 @@
 1. **Clone the repository**
 
    ```bash
-   git clone https://github.com/your-org/llama-rs.git
+   git clone https://github.com/jcn363/llama-rs.git
    cd llama-rs
    ```
 

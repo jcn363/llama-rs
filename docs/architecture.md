@@ -6,6 +6,7 @@ The **llama‑rs** repository implements a Rust‑based LLM inference stack.  It
 
 * **llama‑cli** – a command‑line client for interactive prompting.
 * **llama‑server** – an HTTP server exposing the model as a REST‑style API.
+* **llama-ui** – a native desktop GUI (iced 0.13) for interactive LLM inference.
 * **ggml** – the core tensor library handling low‑level math.
 * **gguf** – a format library for loading GGUF model files.
 * **common** – shared utilities and abstractions used across the crates.
@@ -18,11 +19,11 @@ These components are built as separate Cargo crates under the workspace and are 
 ```mermaid
 graph LR
     subgraph Client
-        CLI[llama‑cli]
-        UI[Web UI (optional)]
+        CLI[llama-cli]
+        UI[llama-ui (desktop)]
     end
     subgraph Server
-        SERVER[llama‑server]
+        SERVER[llama-server]
     end
     subgraph Core
         GGML[ggml]
@@ -31,7 +32,7 @@ graph LR
     end
 
     CLI -->|HTTP/JSON| SERVER
-    UI -->|WebSocket/HTTP| SERVER
+    UI -->|SSE/HTTP| SERVER
     SERVER -->|calls| GGML
     SERVER -->|loads| GGUF
     GGML -->|uses| COMMON

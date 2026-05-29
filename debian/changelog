@@ -1,5 +1,8 @@
 llama-rs (0.1.0-1) unstable; urgency=medium
 
-  * Initial release.
+  * Initial release with 16 workspace crates.
+  * Desktop GUI (iced 0.13) with streaming, multi-pane chat.
+  * CLI and HTTP server frontends.
+  * GGUF v3 parser, SIMD matmul, CUDA backend.
 
- -- llama-rs developers <llama-rs-devs@example.com>  Mon, 26 May 2025 00:00:00 +0000
+ -- llama-rs developers <llama-rs-devs@example.com>  Mon, 28 May 2026 00:00:00 +0000

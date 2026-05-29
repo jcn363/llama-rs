@@ -132,6 +132,7 @@ impl CudaBackend {
                 CudaError::NotAvailable(format!("failed to initialize CUDA context: {e}"))
             })?;
 
+            // SAFETY: cuMemGetInfo_v2 is a CUDA runtime API call that returns valid VRAM info.
             let total_vram = unsafe {
                 let mut free: usize = 0;
                 let mut total: usize = 0;

@@ -10,6 +10,7 @@ use crate::GgmlType;
 /// `true` if the type is an imatrix quantization (IQ1_S, IQ1_M, IQ2_S, IQ2_XS, IQ3_S, IQ3_M, IQ3_XS, IQ4_NL, IQ4_XS),
 /// `false` otherwise.
 #[inline]
+#[allow(dead_code)]
 pub fn is_imatrix(ty: GgmlType) -> bool {
     matches!(
         ty,
@@ -33,6 +34,7 @@ pub fn is_imatrix(ty: GgmlType) -> bool {
 ///
 /// A descriptive string for the imatrix type, or None if the type is not an imatrix quantization.
 #[must_use]
+#[allow(dead_code)]
 pub fn imatrix_description(ty: GgmlType) -> Option<&'static str> {
     match ty {
         GgmlType::Iq1S => Some("IQ1 S"),
@@ -56,6 +58,7 @@ pub fn imatrix_description(ty: GgmlType) -> Option<&'static str> {
 ///
 /// The nominal bit width for the imatrix type, or None if the type is not an imatrix quantization.
 #[must_use]
+#[allow(dead_code)]
 pub fn imatrix_bit_width(ty: GgmlType) -> Option<u8> {
     match ty {
         GgmlType::Iq1S | GgmlType::Iq1M => Some(1),

@@ -25,6 +25,7 @@ server.log
 
 .agents/
 .cargo/
+!.cargo/config.toml
 .cursor/
 .git/
 # .github/  # unignore CI workflow directory

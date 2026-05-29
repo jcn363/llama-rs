@@ -5,6 +5,7 @@ use ggml_cpu::{CpuBackend, cpu_features, dot_f32};
 
 fn fill_tensor(tensor: &mut Tensor, seed: u64) {
     let data = tensor.data();
+    // SAFETY: tensor data buffer is valid and aligned for f32; length is a multiple of 4 bytes.
     let f32_data = unsafe {
         std::slice::from_raw_parts_mut(data.as_ptr().cast::<f32>() as *mut f32, data.len() / 4)
     };
