@@ -539,6 +539,47 @@ impl Backend for CudaBackend {
     // benefit little from GPU launch overhead, while complex ops (norm, rope,
     // attention, conv) require custom CUDA kernels not yet implemented.
     // The trait defaults provide correct CPU fallback for all 100+ operations.
+
+    /// Matrix multiply using cuBLAS GPU acceleration.
+    ///
+    /// Copies both tensors to device, performs `C = A @ B^T` via cuBLAS gemm,
+    /// and copies the result back. Falls back to CPU if CUDA is not available
+    /// or the operation fails.
+    fn mat_mul(&self, a: &Tensor, b: &Tensor) -> Tensor {
+        if !self.available {
+            return ggml::backend::default_mat_mul(a, b);
+        }
+
+        #[cfg(feature = "cuda")]
+        {
+            match self
+                .copy_to_device(a)
+                .and_then(|a_dev| {
+                    let b_dev = self.copy_to_device(b)?;
+                    Ok((a_dev, b_dev))
+                })
+                .and_then(|(a_dev, b_dev)| self.matmul(&a_dev, &b_dev))
+                .and_then(|result_dev| result_dev.to_host())
+            {
+                Ok(result) => {
+                    let shape = a.shape();
+                    let m = shape[0];
+                    let b_shape = b.shape();
+                    let n = b_shape[0];
+                    Tensor::from_f32(&[m, n], &result)
+                }
+                Err(e) => {
+                    tracing::warn!("CUDA mat_mul failed, falling back to CPU: {e}");
+                    ggml::backend::default_mat_mul(a, b)
+                }
+            }
+        }
+
+        #[cfg(not(feature = "cuda"))]
+        {
+            ggml::backend::default_mat_mul(a, b)
+        }
+    }
 }
 
 // ─── Tests ──────────────────────────────────────────────────────────────────

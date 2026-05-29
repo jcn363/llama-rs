@@ -60,6 +60,15 @@ impl Backend for CpuBackend {
     fn mat_vec(&self, weight: &[f32], rows: usize, cols: usize, input: &[f32]) -> Vec<f32> {
         ggml::backend::default_mat_vec(weight, rows, cols, input)
     }
+
+    /// Matrix multiply using SIMD-accelerated block-tiled implementation.
+    ///
+    /// Computes `C = A @ B^T` where A has shape `[m, k]` and B has shape `[n, k]`,
+    /// producing output C of shape `[m, n]`. Uses AVX/SSE4.2 dot products with
+    /// 16×16 block tiling and parallel row execution.
+    fn mat_mul(&self, a: &Tensor, b: &Tensor) -> Tensor {
+        self.matmul(a, b)
+    }
 }
 
 impl CpuBackend {
