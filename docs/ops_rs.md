@@ -6,9 +6,9 @@ Comprehensive reference for GGML tensor operations in the `llama-rs` Rust port.
 
 The `ggml` crate defines **105 `Backend` trait methods** (2 required, 103 with default CPU implementations). Two concrete backends exist:
 
-| Backend  | Crate       | GPU-Accelerated Ops                      | Notes                                       |
-| -------- | ----------- | ---------------------------------------- | ------------------------------------------- |
-| **CPU**  | `ggml-cpu`  | mat_vec + mat_mul + mat_vec_quant (SIMD) | All 105 operations supported                |
+| Backend  | Crate       | GPU-Accelerated Ops                      | Notes                                        |
+| -------- | ----------- | ---------------------------------------- | -------------------------------------------- |
+| **CPU**  | `ggml-cpu`  | mat_vec + mat_mul + mat_vec_quant (SIMD) | All 105 operations supported                 |
 | **CUDA** | `ggml-cuda` | mat_vec + mat_mul (cuBLAS)               | 2 GPU ops, 103 trait defaults (CPU fallback) |
 
 ## Architecture
@@ -33,11 +33,11 @@ Backend trait (105 methods)
 
 ### Matrix Operations (6)
 
-| Operation        | Backend Method       | CPU                    | CUDA           | Notes                                  |
-| ---------------- | -------------------- | ---------------------- | -------------- | -------------------------------------- |
-| MAT_VEC          | `mat_vec()`          | ✅ SIMD dot            | ✅ cuBLAS      | GPU-accelerated matrix-vector product  |
-| MAT_VEC_QUANT    | `mat_vec_quant()`    | ✅ quant kernels       | ❌ CPU default | Direct Q4_0/Q4_1/Q8_0 dot, no dequant  |
-| MAT_MUL          | `mat_mul()`          | ✅ SIMD block-tiled    | ✅ cuBLAS gemm | GPU-accelerated matrix-matrix multiply |
+| Operation        | Backend Method       | CPU                 | CUDA           | Notes                                  |
+| ---------------- | -------------------- | ------------------- | -------------- | -------------------------------------- |
+| MAT_VEC          | `mat_vec()`          | ✅ SIMD dot         | ✅ cuBLAS      | GPU-accelerated matrix-vector product  |
+| MAT_VEC_QUANT    | `mat_vec_quant()`    | ✅ quant kernels    | ❌ CPU default | Direct Q4_0/Q4_1/Q8_0 dot, no dequant  |
+| MAT_MUL          | `mat_mul()`          | ✅ SIMD block-tiled | ✅ cuBLAS gemm | GPU-accelerated matrix-matrix multiply |
 | OUT_PROD         | `out_prod()`         | ✅                  | ❌ CPU default | Outer product                          |
 | MAT_MUL_ID       | `mat_mul_id()`       | ✅                  | ❌ CPU default | Identity-aware matmul                  |
 | MUL_MAT_HADAMARD | `mul_mat_hadamard()` | ✅                  | ❌ CPU default | Element-wise Hadamard product          |
@@ -228,12 +228,12 @@ All 103 non-mat_vec/mat_mul operations use the `Backend` trait's default impleme
 
 The CPU backend (`crates/ggml-cpu`) provides SIMD-accelerated matrix operations:
 
-| Operation       | SIMD / Kernel        | Notes                                            |
-| --------------- | -------------------- | ------------------------------------------------ |
-| `mat_vec`       | AVX / SSE4.2 dot     | 8-wide unrolling, 2.5–3.2x speedup              |
-| `mat_mul`       | AVX / SSE4.2 block   | 16×16 block-tiled, parallel row execution        |
+| Operation       | SIMD / Kernel          | Notes                                           |
+| --------------- | ---------------------- | ----------------------------------------------- |
+| `mat_vec`       | AVX / SSE4.2 dot       | 8-wide unrolling, 2.5–3.2x speedup              |
+| `mat_mul`       | AVX / SSE4.2 block     | 16×16 block-tiled, parallel row execution       |
 | `mat_vec_quant` | Q4_0/Q4_1/Q8_0 kernels | Direct quantized dot, 2-4x over dequant-compute |
-| All other ops   | Scalar               | Via `ggml::defaults` implementations             |
+| All other ops   | Scalar                 | Via `ggml::defaults` implementations            |
 
 ## Source References
 
@@ -241,5 +241,5 @@ The CPU backend (`crates/ggml-cpu`) provides SIMD-accelerated matrix operations:
 | -------------------------------- | -------------------------------------------------------------------- |
 | `crates/ggml/src/backend.rs`     | `Backend` trait (105 methods)                                        |
 | `crates/ggml/src/defaults.rs`    | Default CPU implementations for all 102 non-required Backend methods |
-| `crates/ggml-cpu/src/backend.rs` | CPU backend with SIMD mat_vec + mat_mul + quant_dot overrides |
+| `crates/ggml-cpu/src/backend.rs` | CPU backend with SIMD mat_vec + mat_mul + quant_dot overrides        |
 | `crates/ggml-cuda/src/lib.rs`    | CUDA backend with cuBLAS mat_vec + mat_mul                           |

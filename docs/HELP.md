@@ -6,11 +6,11 @@ This file serves as a single entry point for all **helpful documentation** withi
 
 ## Binary Help (Comprehensive)
 
-| Binary | Help Document | Description |
-|--------|---------------|-------------|
-| **llama-cli** | [CLI_HELP.md](CLI_HELP.md) | Command-line text generation — flags, interactive mode, sampling |
+| Binary           | Help Document                    | Description                                                           |
+| ---------------- | -------------------------------- | --------------------------------------------------------------------- |
+| **llama-cli**    | [CLI_HELP.md](CLI_HELP.md)       | Command-line text generation — flags, interactive mode, sampling      |
 | **llama-server** | [SERVER_HELP.md](SERVER_HELP.md) | HTTP server — REST API endpoints, SSE streaming, cURL/Python examples |
-| **llama-ui** | [UI_HELP.md](UI_HELP.md) | Desktop GUI — screens, controls, session management, theme |
+| **llama-ui**     | [UI_HELP.md](UI_HELP.md)         | Desktop GUI — screens, controls, session management, theme            |
 
 ---
 
@@ -66,4 +66,4 @@ This file serves as a single entry point for all **helpful documentation** withi
 
 ---
 
-*Last updated: 2026-05-29*
+_Last updated: 2026-05-29_
