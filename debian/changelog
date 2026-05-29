@@ -1,7 +1,13 @@
-llama-rs (0.1.0) unstable; urgency=medium
+llama-rs (0.1.1) unstable; urgency=medium
 
   * Initial release with 16 workspace crates.
   * CLI and HTTP server frontends.
   * GGUF v3 parser, SIMD matmul, CUDA backend.
+  * GUI/UX improvements: Enhanced keyboard navigation, visual design, and accessibility
+    - Added comprehensive keyboard shortcuts for all major actions
+    - Improved visual hierarchy with better spacing and typography
+    - Enhanced accessibility with improved color contrast and touch targets
+    - Better loading states and user feedback
+    - Fixed context usage percentage calculation
 
- -- llama-rs developers <llama-rs-devs@example.com>  Thu, 29 May 2026 00:00:00 +0000
+  -- llama-rs developers <llama-rs-devs@example.com>  Fri, 30 May 2026 00:00:00 +0000

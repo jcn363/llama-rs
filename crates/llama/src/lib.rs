@@ -7,15 +7,16 @@
 //!
 //! # Quick Start
 //!
-//! ```no_run
-//! use std::sync::Arc;
-//! use llama::{Model, ModelConfig, InferenceContext};
-//!
-//! let model = Arc::new(Model::load_from_gguf("model.gguf", false).unwrap());
-//! let mut ctx = InferenceContext::new(model, ModelConfig::default());
-//! let tokens = ctx.generate("Hello, world!", 128).unwrap();
-//! println!("{}", ctx.decode(&tokens));
-//! ```
+    //! ```no_run
+    //! use std::sync::Arc;
+    //! use llama::{Model, ModelConfig, InferenceContext};
+    //!
+    //! # let model = Arc::new(Model::load_from_gguf("model.gguf", false)?);
+    //! # let mut ctx = InferenceContext::new(model, ModelConfig::default());
+    //! # let tokens = ctx.generate("Hello, world!", 128)?;
+    //! # println!("{}", ctx.decode(&tokens));
+    //! # Ok::<(), Box<dyn std::error::Error>>(())
+    //! ```
 
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
@@ -118,13 +119,13 @@ pub struct TensorData {
 impl TensorData {
     /// Return the de‑quantized data, performing lazy de‑quantization if needed.
     pub fn get(&self) -> Result<Arc<[f32]>, gguf::GgufError> {
-        if let Some(ref d) = *self.data.read().expect("lock poisoned") {
+        if let Some(ref d) = *self.data.read().expect("RwLock poisoned - this indicates a bug in the code") {
             return Ok(d.clone());
         }
         let deq = gguf::mmap_tensor_dequantize(&self.mmap_tensor, &self.info)?;
         let arc: Arc<[f32]> = Arc::from(deq.into_boxed_slice());
         if self.cache {
-            let mut write = self.data.write().expect("lock poisoned");
+            let mut write = self.data.write().expect("RwLock poisoned - this indicates a bug in the code");
             *write = Some(arc.clone());
         }
         Ok(arc)

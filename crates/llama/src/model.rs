@@ -250,7 +250,7 @@ impl Model {
             .map(|info| {
                 let mmap_tensor = reader.mmap_tensor(info, shared_mmap.clone())?;
                 let shape = info.shape.iter().map(|&d| d as usize).collect();
-                let mut guard = interned.lock().expect("lock poisoned");
+                 let mut guard = interned.lock().expect("RwLock poisoned - this indicates a bug in the code");
                 let id = guard.intern(&info.name);
                 drop(guard);
                 // Determine if we should cache this tensor.
