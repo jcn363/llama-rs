@@ -65,54 +65,7 @@ pub fn sample_argmax(logits: &[f32]) -> usize {
         .unwrap_or(0)
 }
 
-/// Matrix-vector multiplication: y = mat @ vec
-///
-/// `mat` is row-major of shape (rows, cols).
-/// `vec` is of length cols.
-/// Returns a vector of length rows.
-///
-/// Optimized with:
-/// - Parallel execution across rows using Rayon
-/// - SIMD-friendly 4-wide unrolling in dot product
-/// - Cache-friendly sequential row access
-///
-/// Note: The [`Backend`](ggml::backend::Backend) trait provides a pluggable
-/// equivalent; this function is kept for backward compatibility.
-#[expect(dead_code)]
-pub fn mat_vec(
-    mat: &[f32],
-    rows: usize,
-    cols: usize,
-    vec: &[f32],
-    parallel_min_rows: usize,
-) -> Vec<f32> {
-    use rayon::prelude::*;
-    assert_eq!(mat.len(), rows * cols);
-    assert_eq!(vec.len(), cols);
-
-    // For small matrices, sequential is faster due to overhead
-    if rows < parallel_min_rows {
-        (0..rows)
-            .map(|r| {
-                let start = r * cols;
-                let row = &mat[start..start + cols];
-                dot_product(row, vec)
-            })
-            .collect()
-    } else {
-        // Parallel for larger matrices
-        (0..rows)
-            .into_par_iter()
-            .map(|r| {
-                let start = r * cols;
-                let row = &mat[start..start + cols];
-                dot_product(row, vec)
-            })
-            .collect()
-    }
-}
-
-/// Optimized dot product with 4-wide SIMD-friendly unrolling.
+/// Dot product of two vectors.
 #[inline(always)]
 pub fn dot_product(a: &[f32], b: &[f32]) -> f32 {
     let len = a.len().min(b.len());
@@ -138,52 +91,6 @@ pub fn dot_product(a: &[f32], b: &[f32]) -> f32 {
     }
 
     sum
-}
-
-/// Element-wise multiplication of two vectors.
-/// Parallelized for vectors > parallel_min_rows elements.
-///
-/// Note: The [`Backend`](ggml::backend::Backend) trait provides a pluggable
-/// equivalent; this function is kept for backward compatibility.
-#[expect(dead_code)]
-pub fn mul_vec(a: &[f32], b: &[f32], parallel_min_rows: usize) -> Vec<f32> {
-    use rayon::prelude::*;
-    assert_eq!(a.len(), b.len());
-    let len = a.len();
-
-    if len < parallel_min_rows {
-        a.iter().zip(b.iter()).map(|(x, y)| x * y).collect()
-    } else {
-        let mut result = vec![0.0f32; len];
-        result
-            .par_iter_mut()
-            .zip(a.par_iter().zip(b.par_iter()))
-            .for_each(|(out, (x, y))| *out = x * y);
-        result
-    }
-}
-
-/// Add two vectors element-wise.
-/// Parallelized for vectors > parallel_min_rows elements.
-///
-/// Note: The [`Backend`](ggml::backend::Backend) trait provides a pluggable
-/// equivalent; this function is kept for backward compatibility.
-#[expect(dead_code)]
-pub fn add_vec(a: &[f32], b: &[f32], parallel_min_rows: usize) -> Vec<f32> {
-    use rayon::prelude::*;
-    assert_eq!(a.len(), b.len());
-    let len = a.len();
-
-    if len < parallel_min_rows {
-        a.iter().zip(b.iter()).map(|(x, y)| x + y).collect()
-    } else {
-        let mut result = vec![0.0f32; len];
-        result
-            .par_iter_mut()
-            .zip(a.par_iter().zip(b.par_iter()))
-            .for_each(|(out, (x, y))| *out = x + y);
-        result
-    }
 }
 
 /// Apply temperature to logits and compute softmax.

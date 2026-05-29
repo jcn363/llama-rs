@@ -181,59 +181,6 @@ pub fn apply_rope(
     apply_rope_with_config(x, seq_len, head_dim, position_offset, &config, None);
 }
 
-/// Compute scaled dot-product attention for a single head with causal masking.
-/// (Legacy implementation, kept for reference. Flash attention is preferred.)
-#[expect(dead_code)]
-fn attention_head_with_cache(
-    q: &[f32],
-    k_cache: &[f32],
-    v_cache: &[f32],
-    seq_len: usize,
-    head_dim: usize,
-    scores: &mut [f32],
-) -> Vec<f32> {
-    assert_eq!(q.len(), head_dim);
-    assert_eq!(k_cache.len(), seq_len * head_dim);
-    assert_eq!(v_cache.len(), seq_len * head_dim);
-    assert_eq!(scores.len(), seq_len);
-
-    let scale = 1.0 / (head_dim as f32).sqrt();
-
-    // 1. Compute Q @ K^T for all cached positions
-    let mut max_val = f32::NEG_INFINITY;
-    for j in 0..seq_len {
-        let k_row = &k_cache[j * head_dim..(j + 1) * head_dim];
-        let val = dot_product(q, k_row) * scale;
-        scores[j] = val;
-        if val > max_val {
-            max_val = val;
-        }
-    }
-
-    // 2. Softmax with numerical stability
-    let mut sum = 0.0f32;
-    for s in &mut scores[..seq_len] {
-        let exp_val = (*s - max_val).exp();
-        *s = exp_val;
-        sum += exp_val;
-    }
-    for s in &mut scores[..seq_len] {
-        *s /= sum;
-    }
-
-    // 3. Weighted sum of V
-    let mut out = vec![0.0f32; head_dim];
-    for j in 0..seq_len {
-        let weight = scores[j];
-        let v_row = &v_cache[j * head_dim..(j + 1) * head_dim];
-        for d in 0..head_dim {
-            out[d] += weight * v_row[d];
-        }
-    }
-
-    out
-}
-
 /// Multi-head attention with KV cache support.
 ///
 /// # Arguments

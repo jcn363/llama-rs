@@ -59,11 +59,10 @@ pub type CudaResult<T> = Result<T, CudaError>;
 impl From<CudaError> for error::Error {
     fn from(err: CudaError) -> Self {
         match err {
-            CudaError::NotAvailable(s) => error::Error::Network(s),
             CudaError::OutOfMemory { needed, available } => error::Error::Other(format!(
                 "insufficient VRAM: needed {needed} bytes, available {available} bytes"
             )),
-            CudaError::RuntimeError(s) => error::Error::Other(s),
+            CudaError::NotAvailable(s) | CudaError::RuntimeError(s) => error::Error::Other(s),
         }
     }
 }
@@ -535,35 +534,11 @@ impl Backend for CudaBackend {
         }
     }
 
-    /// Element-wise addition (CPU fallback — cheap operation).
-    fn add(&self, a: &[f32], b: &[f32]) -> Vec<f32> {
-        ggml::backend::default_add(a, b)
-    }
-
-    /// Element-wise multiplication (CPU fallback — cheap operation).
-    fn mul(&self, a: &[f32], b: &[f32]) -> Vec<f32> {
-        ggml::backend::default_mul(a, b)
-    }
-
-    /// Root Mean Square Normalization: `y = (x / RMS(x)) * weight`
-    /// where `RMS(x) = sqrt(mean(x^2) + eps)`.
-    /// CPU fallback implementation.
-    fn rms_norm(&self, x: &[f32], weight: &[f32], eps: f32) -> Vec<f32> {
-        ggml::backend::default_rms_norm(x, weight, eps)
-    }
-
-    /// Sigmoid Linear Unit (`SiLU`) activation: `y = x * sigmoid(x)`
-    /// CPU fallback implementation.
-    fn silu(&self, x: &[f32]) -> Vec<f32> {
-        ggml::backend::default_silu(x)
-    }
-
-    /// Gaussian Error Linear Unit (`GELU`) activation:
-    /// `y = x * Φ(x)` where Φ is the standard Gaussian CDF.
-    /// CPU fallback implementation.
-    fn gelu(&self, x: &[f32]) -> Vec<f32> {
-        ggml::backend::default_gelu(x)
-    }
+    // All non-mat_vec operations use the trait's default CPU implementations.
+    // This is intentional: element-wise ops are memory-bandwidth bound and
+    // benefit little from GPU launch overhead, while complex ops (norm, rope,
+    // attention, conv) require custom CUDA kernels not yet implemented.
+    // The trait defaults provide correct CPU fallback for all 100+ operations.
 }
 
 // ─── Tests ──────────────────────────────────────────────────────────────────

@@ -1,5 +1,4 @@
 use crate::tensor::Tensor;
-use libm;
 use llama_core::backend::QuantType;
 
 fn dequantize_block(block: &[u8], quant_type: QuantType, out: &mut [f32]) {
@@ -319,6 +318,7 @@ pub fn default_gelu_erf(x: &[f32]) -> Vec<f32> {
 /// Default GELU activation (standard Erf based implementation).
 pub fn default_gelu(x: &[f32]) -> Vec<f32> {
     // GELU = 0.5 * x * (1 + erf(x / sqrt(2)))
+    use libm;
     use std::f32::consts::FRAC_1_SQRT_2;
     x.iter()
         .map(|v| 0.5 * v * (1.0 + libm::erff(v * FRAC_1_SQRT_2)))
@@ -407,6 +407,7 @@ pub fn default_reglu(a: &[f32], b: &[f32]) -> Vec<f32> {
 
 /// Default GEGLU Erf.
 pub fn default_geglu_erf(a: &[f32], b: &[f32]) -> Vec<f32> {
+    use libm;
     use std::f32::consts::FRAC_1_SQRT_2;
     a.iter()
         .zip(b.iter())
@@ -443,7 +444,13 @@ pub fn default_xielu(a: &[f32], b: &[f32]) -> Vec<f32> {
 
 /// Default RMSNorm implementation.
 pub fn default_rms_norm(x: &[f32], weight: &[f32], eps: f32) -> Vec<f32> {
-    crate::improvements::rms_norm_simd(x, weight, eps)
+    let n = x.len();
+    let ssq: f32 = x.iter().map(|v| v * v).sum();
+    let rms = (ssq / n as f32 + eps).sqrt();
+    x.iter()
+        .zip(weight.iter().cycle())
+        .map(|(&xi, &wi)| wi * (xi / rms))
+        .collect()
 }
 
 /// Default RMSNorm backward.

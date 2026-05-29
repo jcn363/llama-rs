@@ -45,19 +45,12 @@ pub mod graph;
 /// that hardware backends can override for performance.
 pub mod defaults;
 
-/// Stub implementations for performance improvements.
-///
-/// These are placeholders for future SIMD-accelerated or otherwise optimized
-/// implementations of certain operations.
-pub mod improvements;
-
 /// Tensor definition and basic operations.
 ///
 /// This module defines the `Tensor` struct and basic operations on tensors.
 pub mod tensor;
 
 // Re‑export the most important items for a convenient top‑level API.
-// Backend module removed; QuantType not currently used.
 pub use dtype::DType;
 pub use graph::Graph;
 pub use tensor::Tensor;

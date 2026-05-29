@@ -12,9 +12,8 @@ llama-core = { workspace = true }
 # gguf dependency removed to break cyclic dependency
 bytemuck = { workspace = true }
 half = { workspace = true }
-tracing = { workspace = true }
- bumpalo = { workspace = true, features = ["boxed"] }
- libm = { version = "0.2.16" }
+bumpalo = { workspace = true, features = ["boxed"] }
+libm = { version = "0.2.16" }
 
 [dev-dependencies]
 criterion = { workspace = true }

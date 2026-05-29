@@ -417,7 +417,6 @@ impl InferenceContext {
             let residual = x.clone();
 
             // ─── Pre-attention norm ───
-            // ─── Pre-attention norm ───
             let attn_norm_name = format!("blk.{}.attn_norm.weight", layer_idx);
             if let Ok(attn_norm_weight) = self.model.get_tensor(&attn_norm_name) {
                 x = apply_norm(&x, &attn_norm_weight, self.model.norm_eps);

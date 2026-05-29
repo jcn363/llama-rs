@@ -22,11 +22,6 @@ pub struct Graph {
 }
 
 impl Graph {
-    /// Create a new empty graph.
-    pub fn new() -> Self {
-        Self::default()
-    }
-
     /// Add a node producing `tensor` with given `inputs`.
     pub fn add_node(&mut self, tensor: Tensor, inputs: Vec<usize>) -> usize {
         let id = self.next_id;
