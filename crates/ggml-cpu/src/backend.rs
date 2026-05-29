@@ -2,8 +2,8 @@
 //! This provides just enough implementation to satisfy the workspace compilation
 //! while the full backend is under development.
 
-use ggml::backend::{Backend, BackendInfo};
 use ggml::backend::QuantType;
+use ggml::backend::{Backend, BackendInfo};
 use ggml::{DType, Tensor};
 use std::cell::RefCell;
 
@@ -101,7 +101,12 @@ impl Backend for CpuBackend {
                 (0..rows)
                     .map(|r| {
                         let row_start = r * row_bytes;
-                        quant_dot_row(&kernel, &weight[row_start..row_start + row_bytes], input, cols)
+                        quant_dot_row(
+                            &kernel,
+                            &weight[row_start..row_start + row_bytes],
+                            input,
+                            cols,
+                        )
                     })
                     .collect()
             }
@@ -110,7 +115,12 @@ impl Backend for CpuBackend {
                 (0..rows)
                     .map(|r| {
                         let row_start = r * row_bytes;
-                        quant_dot_row(&kernel, &weight[row_start..row_start + row_bytes], input, cols)
+                        quant_dot_row(
+                            &kernel,
+                            &weight[row_start..row_start + row_bytes],
+                            input,
+                            cols,
+                        )
                     })
                     .collect()
             }
@@ -119,7 +129,12 @@ impl Backend for CpuBackend {
                 (0..rows)
                     .map(|r| {
                         let row_start = r * row_bytes;
-                        quant_dot_row(&kernel, &weight[row_start..row_start + row_bytes], input, cols)
+                        quant_dot_row(
+                            &kernel,
+                            &weight[row_start..row_start + row_bytes],
+                            input,
+                            cols,
+                        )
                     })
                     .collect()
             }

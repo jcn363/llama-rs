@@ -1315,6 +1315,7 @@ pub fn default_flash_attn_ext(
             let kv_h = h / n_groups;
             // Compute attention scores
             let mut scores = vec![0.0f32; n_tokens_kv];
+            // Index arithmetic on tok_kv prevents iterator conversion.
             #[allow(clippy::needless_range_loop)]
             for tok_kv in 0..n_tokens_kv {
                 let mut score = 0.0f32;
@@ -1337,6 +1338,7 @@ pub fn default_flash_attn_ext(
             // Weighted sum of values
             for d in 0..head_size {
                 let mut val = 0.0f32;
+                // Index arithmetic on tok_kv prevents iterator conversion.
                 #[allow(clippy::needless_range_loop)]
                 for tok_kv in 0..n_tokens_kv {
                     let v_idx = tok_kv * (n_kv_heads * head_size) + kv_h * head_size + d;
@@ -1488,6 +1490,7 @@ pub fn default_gated_delta_net(
     let mut out = vec![0.0f32; n_tokens * n_channels];
     let mut s = state.to_vec();
     for tok in 0..n_tokens {
+        // Index arithmetic on c prevents iterator conversion.
         #[allow(clippy::needless_range_loop)]
         for c in 0..n_channels {
             let idx = tok * n_channels + c;

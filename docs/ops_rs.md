@@ -35,7 +35,7 @@ Backend trait (105 methods)
 
 | Operation        | Backend Method       | CPU                 | CUDA           | Notes                                  |
 | ---------------- | -------------------- | ------------------- | -------------- | -------------------------------------- |
-| MAT_VEC          | `mat_vec()`          | ✅ SIMD dot         | ✅ cuBLAS      | GPU-accelerated matrix-vector product  |
+| MAT_VEC          | `mat_vec()`          | ✅ SIMD dot         | ✅ cuBLAS gemm | GPU-accelerated matrix-vector product  |
 | MAT_VEC_QUANT    | `mat_vec_quant()`    | ✅ quant kernels    | ❌ CPU default | Direct Q4_0/Q4_1/Q8_0 dot, no dequant  |
 | MAT_MUL          | `mat_mul()`          | ✅ SIMD block-tiled | ✅ cuBLAS gemm | GPU-accelerated matrix-matrix multiply |
 | OUT_PROD         | `out_prod()`         | ✅                  | ❌ CPU default | Outer product                          |

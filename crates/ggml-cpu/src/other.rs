@@ -8,6 +8,13 @@
 //! - **Matrix Operations:** outer product, Hadamard product, triangular solve.
 //! - **Special Ops:** RoPE, flash attention, SSM (Mamba), RWKV, gated variants,
 //!   timestep embedding, upscale, optimizer steps, top-k, argsort.
+//!
+//! # A note on `#[allow(clippy::too_many_arguments)]`
+//!
+//! Many convolution and pooling functions accept raw tensor dimensions as separate
+//! `usize` parameters rather than a parameter struct.  This mirrors the ggml C API
+//! convention and avoids heap allocation in hot paths.  Each function documents
+//! every parameter in its doc comment.
 
 // ─── Shape / Data Movement ──────────────────────────────────────────────────
 

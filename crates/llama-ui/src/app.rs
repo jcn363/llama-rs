@@ -3,17 +3,17 @@
 //! Manages sandbox lifecycle (spawn, health, stop), chat sessions,
 //! and context tracking. M5+ with M6 non-streaming /completion.
 
-use std::sync::Arc;
-use iced::{Element, Theme, Subscription, Task, Color, window};
 use iced::Length::Fill;
+use iced::{Color, Element, Subscription, Task, Theme, window};
+use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
+use futures::SinkExt;
 use iced::keyboard;
 use iced::keyboard::key::Named as NamedKey;
 use iced::stream;
 use iced::widget::{button, column, pick_list, row, scrollable, slider, text_input, vertical_rule};
-use futures::SinkExt;
 
 use llama_ui_models::Manifest;
 use llama_ui_sandbox_client::{ResourceLimits, SandboxClient};
