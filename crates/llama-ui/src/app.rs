@@ -4,7 +4,7 @@
 //! and context tracking. M5+ with M6 non-streaming /completion.
 
 use std::sync::Arc;
-use iced::{Element, Length, Theme, Subscription, Task, Color, window};
+use iced::{Element, Theme, Subscription, Task, Color, window};
 use iced::Length::Fill;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
@@ -158,8 +158,6 @@ pub enum Message {
     ModelSelected(usize),
     /// Start first chat pane with selected model.
     StartChat,
-    /// Add a second chat pane (M10 dual-model).
-    AddPane(usize),
     /// Send message on a pane.
     Send(usize),
     /// Input text changed on a pane.
@@ -255,36 +253,6 @@ pub fn update(state: &mut LlamaApp, message: Message) -> Task<Message> {
             let model = state.models[selected].clone();
 
             state.panes.push(ChatPane::new(selected, &model.name));
-            let pane = state.panes.len() - 1;
-            let backend = state.panes[pane].backend.clone();
-            let limits = state.panes[pane].resource_limits.clone();
-
-            Task::perform(
-                async move {
-                    let binary = SandboxClient::resolve_binary().map_err(|e| e.to_string())?;
-                    let mut client = SandboxClient::new(binary, model.path, &backend, "llama-ui")
-                        .with_limits(limits);
-                    client.spawn().map_err(|e| e.to_string())?;
-                    client
-                        .wait_for_ready(Duration::from_secs(30))
-                        .await
-                        .map_err(|e| e.to_string())?;
-                    Ok::<u16, String>(client.port)
-                },
-                move |result| match result {
-                    Ok(port) => Message::SandboxStarted(pane, port),
-                    Err(e) => Message::Error(e),
-                },
-            )
-        }
-
-        // ─── Add a second pane (M10 dual-model) ──────────────
-        Message::AddPane(model_idx) => {
-            if model_idx >= state.models.len() || state.panes.len() >= 2 {
-                return Task::none();
-            }
-            let model = state.models[model_idx].clone();
-            state.panes.push(ChatPane::new(model_idx, &model.name));
             let pane = state.panes.len() - 1;
             let backend = state.panes[pane].backend.clone();
             let limits = state.panes[pane].resource_limits.clone();

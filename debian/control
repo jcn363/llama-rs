@@ -14,7 +14,7 @@ Architecture: any
 Depends: ${shlibs:Depends}, ${misc:Depends}
 Description: LLM inference engine in Rust
  llama-rs is a Rust implementation of llama.cpp providing high-performance
- inference for large language models. It includes CLI, HTTP server, and
- GUI frontends.
+ inference for large language models. It includes CLI and HTTP server
+ frontends.
  .
- This package contains the llama-cli, llama-server, and llama-ui binaries.
+ This package contains the llama-cli and llama-server binaries.

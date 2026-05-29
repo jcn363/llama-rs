@@ -25,7 +25,6 @@ mod constants;
 mod cursor;
 mod dequant;
 mod errors;
-mod imatrix;
 mod loader;
 mod reader;
 mod tensor;

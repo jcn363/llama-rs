@@ -32,3 +32,4 @@ server.log
 .specs/
 .vscode/
 *.lock
+*.deb

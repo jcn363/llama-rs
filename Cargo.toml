@@ -15,7 +15,7 @@ members = [
     "crates/llama-ui-models",
     "crates/llama-ui-session",
     "crates/llama-ui-sandbox-client",
-    # "crates/llama-ui",
+    "crates/llama-ui",
     "crates/llama-ui-core",
 ]
 
@@ -70,6 +70,7 @@ proptest = "1"
 nix = { version = "0.29", features = ["signal"] }
 
 # llama-ui dependencies
+llama-ui = { path = "crates/llama-ui" }
 reqwest = { version = "0.12", features = ["stream", "json"] }
 toml = "0.5"
 futures = "0.3"

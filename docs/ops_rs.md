@@ -6,14 +6,14 @@ Comprehensive reference for GGML tensor operations in the `llama-rs` Rust port.
 
 The `ggml` crate defines **105 `Backend` trait methods** (2 required, 103 with default CPU implementations). Two concrete backends exist:
 
-| Backend | Crate | GPU-Accelerated Ops | Notes |
-|---------|-------|---------------------|-------|
-| **CPU** | `ggml-cpu` | SIMD matvec (AVX/SSE4.2) | All 105 operations supported |
-| **CUDA** | `ggml-cuda` | mat_vec only (cuBLAS) | 1 GPU op, 104 trait defaults (CPU fallback) |
+| Backend  | Crate       | GPU-Accelerated Ops      | Notes                                       |
+| -------- | ----------- | ------------------------ | ------------------------------------------- |
+| **CPU**  | `ggml-cpu`  | SIMD matvec (AVX/SSE4.2) | All 105 operations supported                |
+| **CUDA** | `ggml-cuda` | mat_vec only (cuBLAS)    | 1 GPU op, 104 trait defaults (CPU fallback) |
 
 ## Architecture
 
-```
+```text
 Backend trait (105 methods)
   ├── info()              — required, no default
   ├── mat_vec()           — required, no default
@@ -32,174 +32,174 @@ Backend trait (105 methods)
 
 ### Matrix Operations (6)
 
-| Operation | Backend Method | CPU | CUDA | Notes |
-|-----------|----------------|-----|------|-------|
-| MAT_VEC | `mat_vec()` | ✅ SIMD | ✅ cuBLAS | Only GPU-accelerated operation |
-| MAT_VEC_QUANT | `mat_vec_quant()` | ✅ | ❌ CPU default | Dequantizes Q4_0/Q4_1/Q8_0 on CPU |
-| MAT_MUL | `mat_mul()` | ✅ | ❌ CPU default | Full matrix-matrix multiply |
-| OUT_PROD | `out_prod()` | ✅ | ❌ CPU default | Outer product |
-| MAT_MUL_ID | `mat_mul_id()` | ✅ | ❌ CPU default | Identity-aware matmul |
-| MUL_MAT_HADAMARD | `mul_mat_hadamard()` | ✅ | ❌ CPU default | Element-wise Hadamard product |
+| Operation        | Backend Method       | CPU     | CUDA           | Notes                             |
+| ---------------- | -------------------- | ------- | -------------- | --------------------------------- |
+| MAT_VEC          | `mat_vec()`          | ✅ SIMD | ✅ cuBLAS      | Only GPU-accelerated operation    |
+| MAT_VEC_QUANT    | `mat_vec_quant()`    | ✅      | ❌ CPU default | Dequantizes Q4_0/Q4_1/Q8_0 on CPU |
+| MAT_MUL          | `mat_mul()`          | ✅      | ❌ CPU default | Full matrix-matrix multiply       |
+| OUT_PROD         | `out_prod()`         | ✅      | ❌ CPU default | Outer product                     |
+| MAT_MUL_ID       | `mat_mul_id()`       | ✅      | ❌ CPU default | Identity-aware matmul             |
+| MUL_MAT_HADAMARD | `mul_mat_hadamard()` | ✅      | ❌ CPU default | Element-wise Hadamard product     |
 
 ### Unary Activations (25)
 
-| Operation | Backend Method | CPU | CUDA |
-|-----------|----------------|-----|------|
-| ABS | `abs()` | ✅ | ❌ CPU default |
-| SGN | `sgn()` | ✅ | ❌ CPU default |
-| NEG | `neg()` | ✅ | ❌ CPU default |
-| STEP | `step()` | ✅ | ❌ CPU default |
-| TANH | `tanh()` | ✅ | ❌ CPU default |
-| ELU | `elu()` | ✅ | ❌ CPU default |
-| RELU | `relu()` | ✅ | ❌ CPU default |
-| SIGMOID | `sigmoid()` | ✅ | ❌ CPU default |
-| HARD_SIGMOID | `hard_sigmoid()` | ✅ | ❌ CPU default |
-| HARD_SWISH | `hard_swish()` | ✅ | ❌ CPU default |
-| EXP | `exp()` | ✅ | ❌ CPU default |
-| EXPM1 | `expm1()` | ✅ | ❌ CPU default |
-| SOFTPLUS | `softplus()` | ✅ | ❌ CPU default |
-| FLOOR | `floor()` | ✅ | ❌ CPU default |
-| CEIL | `ceil()` | ✅ | ❌ CPU default |
-| ROUND | `round()` | ✅ | ❌ CPU default |
-| TRUNC | `trunc()` | ✅ | ❌ CPU default |
-| SIN | `sin()` | ✅ | ❌ CPU default |
-| COS | `cos()` | ✅ | ❌ CPU default |
-| SQR | `sqr()` | ✅ | ❌ CPU default |
-| SQRT | `sqrt()` | ✅ | ❌ CPU default |
-| SILU_BACK | `silu_back()` | ✅ | ❌ CPU default |
-| LEAKY_RELU | `leaky_relu()` | ✅ | ❌ CPU default |
-| GELU_ERF | `gelu_erf()` | ✅ | ❌ CPU default |
-| GELU_QUICK | `gelu_quick()` | ✅ | ❌ CPU default |
+| Operation    | Backend Method   | CPU | CUDA           |
+| ------------ | ---------------- | --- | -------------- |
+| ABS          | `abs()`          | ✅  | ❌ CPU default |
+| SGN          | `sgn()`          | ✅  | ❌ CPU default |
+| NEG          | `neg()`          | ✅  | ❌ CPU default |
+| STEP         | `step()`         | ✅  | ❌ CPU default |
+| TANH         | `tanh()`         | ✅  | ❌ CPU default |
+| ELU          | `elu()`          | ✅  | ❌ CPU default |
+| RELU         | `relu()`         | ✅  | ❌ CPU default |
+| SIGMOID      | `sigmoid()`      | ✅  | ❌ CPU default |
+| HARD_SIGMOID | `hard_sigmoid()` | ✅  | ❌ CPU default |
+| HARD_SWISH   | `hard_swish()`   | ✅  | ❌ CPU default |
+| EXP          | `exp()`          | ✅  | ❌ CPU default |
+| EXPM1        | `expm1()`        | ✅  | ❌ CPU default |
+| SOFTPLUS     | `softplus()`     | ✅  | ❌ CPU default |
+| FLOOR        | `floor()`        | ✅  | ❌ CPU default |
+| CEIL         | `ceil()`         | ✅  | ❌ CPU default |
+| ROUND        | `round()`        | ✅  | ❌ CPU default |
+| TRUNC        | `trunc()`        | ✅  | ❌ CPU default |
+| SIN          | `sin()`          | ✅  | ❌ CPU default |
+| COS          | `cos()`          | ✅  | ❌ CPU default |
+| SQR          | `sqr()`          | ✅  | ❌ CPU default |
+| SQRT         | `sqrt()`         | ✅  | ❌ CPU default |
+| SILU_BACK    | `silu_back()`    | ✅  | ❌ CPU default |
+| LEAKY_RELU   | `leaky_relu()`   | ✅  | ❌ CPU default |
+| GELU_ERF     | `gelu_erf()`     | ✅  | ❌ CPU default |
+| GELU_QUICK   | `gelu_quick()`   | ✅  | ❌ CPU default |
 
 ### Activation Aliases (2)
 
-| Operation | Backend Method | CPU | CUDA |
-|-----------|----------------|-----|------|
-| SILU | `silu()` | ✅ | ❌ CPU default |
-| GELU | `gelu()` | ✅ | ❌ CPU default |
+| Operation | Backend Method | CPU | CUDA           |
+| --------- | -------------- | --- | -------------- |
+| SILU      | `silu()`       | ✅  | ❌ CPU default |
+| GELU      | `gelu()`       | ✅  | ❌ CPU default |
 
 ### Binary Element-wise (5)
 
-| Operation | Backend Method | CPU | CUDA |
-|-----------|----------------|-----|------|
-| ADD | `add()` | ✅ | ❌ CPU default |
-| SUB | `sub()` | ✅ | ❌ CPU default |
-| MUL | `mul()` | ✅ | ❌ CPU default |
-| DIV | `div()` | ✅ | ❌ CPU default |
-| ADD1 | `add1()` | ✅ | ❌ CPU default |
+| Operation | Backend Method | CPU | CUDA           |
+| --------- | -------------- | --- | -------------- |
+| ADD       | `add()`        | ✅  | ❌ CPU default |
+| SUB       | `sub()`        | ✅  | ❌ CPU default |
+| MUL       | `mul()`        | ✅  | ❌ CPU default |
+| DIV       | `div()`        | ✅  | ❌ CPU default |
+| ADD1      | `add1()`       | ✅  | ❌ CPU default |
 
 ### Gated Activations (7)
 
-| Operation | Backend Method | CPU | CUDA |
-|-----------|----------------|-----|------|
-| SWIGLU | `swiglu()` | ✅ | ❌ CPU default |
-| SWIGLU_OAI | `swiglu_oai()` | ✅ | ❌ CPU default |
-| GEGLU | `geglu()` | ✅ | ❌ CPU default |
-| REGLU | `reglu()` | ✅ | ❌ CPU default |
-| GEGLU_ERF | `geglu_erf()` | ✅ | ❌ CPU default |
-| GEGLU_QUICK | `geglu_quick()` | ✅ | ❌ CPU default |
-| XIELU | `xielu()` | ✅ | ❌ CPU default |
+| Operation   | Backend Method  | CPU | CUDA           |
+| ----------- | --------------- | --- | -------------- |
+| SWIGLU      | `swiglu()`      | ✅  | ❌ CPU default |
+| SWIGLU_OAI  | `swiglu_oai()`  | ✅  | ❌ CPU default |
+| GEGLU       | `geglu()`       | ✅  | ❌ CPU default |
+| REGLU       | `reglu()`       | ✅  | ❌ CPU default |
+| GEGLU_ERF   | `geglu_erf()`   | ✅  | ❌ CPU default |
+| GEGLU_QUICK | `geglu_quick()` | ✅  | ❌ CPU default |
+| XIELU       | `xielu()`       | ✅  | ❌ CPU default |
 
 ### Normalization (5)
 
-| Operation | Backend Method | CPU | CUDA |
-|-----------|----------------|-----|------|
-| RMS_NORM | `rms_norm()` | ✅ | ❌ CPU default |
-| RMS_NORM_BACK | `rms_norm_back()` | ✅ | ❌ CPU default |
-| NORM | `norm()` | ✅ | ❌ CPU default |
-| GROUP_NORM | `group_norm()` | ✅ | ❌ CPU default |
-| L2_NORM | `l2_norm()` | ✅ | ❌ CPU default |
+| Operation     | Backend Method    | CPU | CUDA           |
+| ------------- | ----------------- | --- | -------------- |
+| RMS_NORM      | `rms_norm()`      | ✅  | ❌ CPU default |
+| RMS_NORM_BACK | `rms_norm_back()` | ✅  | ❌ CPU default |
+| NORM          | `norm()`          | ✅  | ❌ CPU default |
+| GROUP_NORM    | `group_norm()`    | ✅  | ❌ CPU default |
+| L2_NORM       | `l2_norm()`       | ✅  | ❌ CPU default |
 
 ### Reduction (10)
 
-| Operation | Backend Method | CPU | CUDA |
-|-----------|----------------|-----|------|
-| SUM | `sum()` | ✅ | ❌ CPU default |
-| MEAN | `mean()` | ✅ | ❌ CPU default |
-| ARGMAX | `argmax()` | ✅ | ❌ CPU default |
-| COUNT_EQUAL | `count_equal()` | ✅ | ❌ CPU default |
-| CUMSUM | `cumsum()` | ✅ | ❌ CPU default |
-| SUM_ROWS | `sum_rows()` | ✅ | ❌ CPU default |
-| SOFT_MAX | `soft_max()` | ✅ | ❌ CPU default |
-| SOFT_MAX_BACK | `soft_max_back()` | ✅ | ❌ CPU default |
-| CROSS_ENTROPY_LOSS | `cross_entropy_loss()` | ✅ | ❌ CPU default |
-| CROSS_ENTROPY_LOSS_BACK | `cross_entropy_loss_back()` | ✅ | ❌ CPU default |
+| Operation               | Backend Method              | CPU | CUDA           |
+| ----------------------- | --------------------------- | --- | -------------- |
+| SUM                     | `sum()`                     | ✅  | ❌ CPU default |
+| MEAN                    | `mean()`                    | ✅  | ❌ CPU default |
+| ARGMAX                  | `argmax()`                  | ✅  | ❌ CPU default |
+| COUNT_EQUAL             | `count_equal()`             | ✅  | ❌ CPU default |
+| CUMSUM                  | `cumsum()`                  | ✅  | ❌ CPU default |
+| SUM_ROWS                | `sum_rows()`                | ✅  | ❌ CPU default |
+| SOFT_MAX                | `soft_max()`                | ✅  | ❌ CPU default |
+| SOFT_MAX_BACK           | `soft_max_back()`           | ✅  | ❌ CPU default |
+| CROSS_ENTROPY_LOSS      | `cross_entropy_loss()`      | ✅  | ❌ CPU default |
+| CROSS_ENTROPY_LOSS_BACK | `cross_entropy_loss_back()` | ✅  | ❌ CPU default |
 
 ### Shape Manipulation (13)
 
-| Operation | Backend Method | CPU | CUDA |
-|-----------|----------------|-----|------|
-| CONCAT | `concat()` | ✅ | ❌ CPU default |
-| REPEAT | `repeat()` | ✅ | ❌ CPU default |
-| REPEAT_BACK | `repeat_back()` | ✅ | ❌ CPU default |
-| PAD | `pad()` | ✅ | ❌ CPU default |
-| PAD_REFLECT_1D | `pad_reflect_1d()` | ✅ | ❌ CPU default |
-| ROLL | `roll()` | ✅ | ❌ CPU default |
-| DIAG | `diag()` | ✅ | ❌ CPU default |
-| DIAG_MASK_INF | `diag_mask_inf()` | ✅ | ❌ CPU default |
-| DUP | `dup()` | ✅ | ❌ CPU default |
-| CONT | `cont()` | ✅ | ❌ CPU default |
-| GET_ROWS | `get_rows()` | ✅ | ❌ CPU default |
-| GET_ROWS_BACK | `get_rows_back()` | ✅ | ❌ CPU default |
-| SET_ROWS | `set_rows()` | ✅ | ❌ CPU default |
+| Operation      | Backend Method     | CPU | CUDA           |
+| -------------- | ------------------ | --- | -------------- |
+| CONCAT         | `concat()`         | ✅  | ❌ CPU default |
+| REPEAT         | `repeat()`         | ✅  | ❌ CPU default |
+| REPEAT_BACK    | `repeat_back()`    | ✅  | ❌ CPU default |
+| PAD            | `pad()`            | ✅  | ❌ CPU default |
+| PAD_REFLECT_1D | `pad_reflect_1d()` | ✅  | ❌ CPU default |
+| ROLL           | `roll()`           | ✅  | ❌ CPU default |
+| DIAG           | `diag()`           | ✅  | ❌ CPU default |
+| DIAG_MASK_INF  | `diag_mask_inf()`  | ✅  | ❌ CPU default |
+| DUP            | `dup()`            | ✅  | ❌ CPU default |
+| CONT           | `cont()`           | ✅  | ❌ CPU default |
+| GET_ROWS       | `get_rows()`       | ✅  | ❌ CPU default |
+| GET_ROWS_BACK  | `get_rows_back()`  | ✅  | ❌ CPU default |
+| SET_ROWS       | `set_rows()`       | ✅  | ❌ CPU default |
 
 ### Convolution (9)
 
-| Operation | Backend Method | CPU | CUDA |
-|-----------|----------------|-----|------|
-| CONV_2D | `conv_2d()` | ✅ | ❌ CPU default |
-| CONV_2D_DW | `conv_2d_dw()` | ✅ | ❌ CPU default |
-| CONV_TRANSPOSE_1D | `conv_transpose_1d()` | ✅ | ❌ CPU default |
-| CONV_TRANSPOSE_2D | `conv_transpose_2d()` | ✅ | ❌ CPU default |
-| IM2COL | `im2col()` | ✅ | ❌ CPU default |
-| POOL_1D | `pool_1d()` | ✅ | ❌ CPU default |
-| POOL_2D | `pool_2d()` | ✅ | ❌ CPU default |
-| CONV_3D | `conv_3d()` | ✅ | ❌ CPU default |
-| IM2COL_3D | `im2col_3d()` | ✅ | ❌ CPU default |
+| Operation         | Backend Method        | CPU | CUDA           |
+| ----------------- | --------------------- | --- | -------------- |
+| CONV_2D           | `conv_2d()`           | ✅  | ❌ CPU default |
+| CONV_2D_DW        | `conv_2d_dw()`        | ✅  | ❌ CPU default |
+| CONV_TRANSPOSE_1D | `conv_transpose_1d()` | ✅  | ❌ CPU default |
+| CONV_TRANSPOSE_2D | `conv_transpose_2d()` | ✅  | ❌ CPU default |
+| IM2COL            | `im2col()`            | ✅  | ❌ CPU default |
+| POOL_1D           | `pool_1d()`           | ✅  | ❌ CPU default |
+| POOL_2D           | `pool_2d()`           | ✅  | ❌ CPU default |
+| CONV_3D           | `conv_3d()`           | ✅  | ❌ CPU default |
+| IM2COL_3D         | `im2col_3d()`         | ✅  | ❌ CPU default |
 
 ### Special Operations (14)
 
-| Operation | Backend Method | CPU | CUDA |
-|-----------|----------------|-----|------|
-| ROPE | `rope()` | ✅ | ❌ CPU default |
-| ROPE_BACK | `rope_back()` | ✅ | ❌ CPU default |
-| FLASH_ATTN_EXT | `flash_attn_ext()` | ✅ | ❌ CPU default |
-| SSM_CONV | `ssm_conv()` | ✅ | ❌ CPU default |
-| SSM_SCAN | `ssm_scan()` | ✅ | ❌ CPU default |
-| RWKV_WKV6 | `rwkv_wkv6()` | ✅ | ❌ CPU default |
-| RWKV_WKV7 | `rwkv_wkv7()` | ✅ | ❌ CPU default |
-| GATED_DELTA_NET | `gated_delta_net()` | ✅ | ❌ CPU default |
-| GATED_LINEAR_ATTN | `gated_linear_attn()` | ✅ | ❌ CPU default |
-| TIMESTEP_EMBEDDING | `timestep_embedding()` | ✅ | ❌ CPU default |
-| UPSCALE | `upscale()` | ✅ | ❌ CPU default |
-| SOLVE_TRI | `solve_tri()` | ✅ | ❌ CPU default |
-| TRI | `tri()` | ✅ | ❌ CPU default |
+| Operation          | Backend Method         | CPU | CUDA           |
+| ------------------ | ---------------------- | --- | -------------- |
+| ROPE               | `rope()`               | ✅  | ❌ CPU default |
+| ROPE_BACK          | `rope_back()`          | ✅  | ❌ CPU default |
+| FLASH_ATTN_EXT     | `flash_attn_ext()`     | ✅  | ❌ CPU default |
+| SSM_CONV           | `ssm_conv()`           | ✅  | ❌ CPU default |
+| SSM_SCAN           | `ssm_scan()`           | ✅  | ❌ CPU default |
+| RWKV_WKV6          | `rwkv_wkv6()`          | ✅  | ❌ CPU default |
+| RWKV_WKV7          | `rwkv_wkv7()`          | ✅  | ❌ CPU default |
+| GATED_DELTA_NET    | `gated_delta_net()`    | ✅  | ❌ CPU default |
+| GATED_LINEAR_ATTN  | `gated_linear_attn()`  | ✅  | ❌ CPU default |
+| TIMESTEP_EMBEDDING | `timestep_embedding()` | ✅  | ❌ CPU default |
+| UPSCALE            | `upscale()`            | ✅  | ❌ CPU default |
+| SOLVE_TRI          | `solve_tri()`          | ✅  | ❌ CPU default |
+| TRI                | `tri()`                | ✅  | ❌ CPU default |
 
 ### Optimizer Steps (2)
 
-| Operation | Backend Method | CPU | CUDA |
-|-----------|----------------|-----|------|
-| OPT_STEP_ADAMW | `opt_step_adamw()` | ✅ | ❌ CPU default |
-| OPT_STEP_SGD | `opt_step_sgd()` | ✅ | ❌ CPU default |
+| Operation      | Backend Method     | CPU | CUDA           |
+| -------------- | ------------------ | --- | -------------- |
+| OPT_STEP_ADAMW | `opt_step_adamw()` | ✅  | ❌ CPU default |
+| OPT_STEP_SGD   | `opt_step_sgd()`   | ✅  | ❌ CPU default |
 
 ### Miscellaneous (7)
 
-| Operation | Backend Method | CPU | CUDA |
-|-----------|----------------|-----|------|
-| CLAMP | `clamp()` | ✅ | ❌ CPU default |
-| SCALE | `scale()` | ✅ | ❌ CPU default |
-| FILL | `fill()` | ✅ | ❌ CPU default |
-| ARANGE | `arange()` | ✅ | ❌ CPU default |
-| TOP_K | `top_k()` | ✅ | ❌ CPU default |
-| ARGSORT | `argsort()` | ✅ | ❌ CPU default |
-| ACC | `acc()` | ✅ | ❌ CPU default |
+| Operation | Backend Method | CPU | CUDA           |
+| --------- | -------------- | --- | -------------- |
+| CLAMP     | `clamp()`      | ✅  | ❌ CPU default |
+| SCALE     | `scale()`      | ✅  | ❌ CPU default |
+| FILL      | `fill()`       | ✅  | ❌ CPU default |
+| ARANGE    | `arange()`     | ✅  | ❌ CPU default |
+| TOP_K     | `top_k()`      | ✅  | ❌ CPU default |
+| ARGSORT   | `argsort()`    | ✅  | ❌ CPU default |
+| ACC       | `acc()`        | ✅  | ❌ CPU default |
 
 ## Legend
 
-| Symbol | Meaning |
-|--------|---------|
-| ✅ | Fully supported (GPU-accelerated or SIMD-optimized) |
-| ❌ | Uses default CPU implementation from `ggml::defaults` |
+| Symbol | Meaning                                               |
+| ------ | ----------------------------------------------------- |
+| ✅     | Fully supported (GPU-accelerated or SIMD-optimized)   |
+| ❌     | Uses default CPU implementation from `ggml::defaults` |
 
 ## CUDA Backend Details
 
@@ -207,8 +207,8 @@ The CUDA backend (`crates/ggml-cuda`) provides minimal GPU acceleration:
 
 ### GPU-Accelerated Operations
 
-| Operation | Implementation | Notes |
-|-----------|---------------|-------|
+| Operation | Implementation               | Notes                                     |
+| --------- | ---------------------------- | ----------------------------------------- |
 | `mat_vec` | cuBLAS `sgemm` (C = A × B^T) | Copies H2D, computes, copies D2H per call |
 
 ### Fallback Mechanism
@@ -226,17 +226,17 @@ All 104 non-mat_vec operations use the `Backend` trait's default implementations
 
 The CPU backend (`crates/ggml-cpu`) provides SIMD-accelerated matrix operations:
 
-| Operation | SIMD | Notes |
-|-----------|------|-------|
-| `mat_vec` | AVX / SSE4.2 | Block-tiled, 2.5–3.2× speedup for large matrices |
-| `mat_vec_quant` | Scalar | Dequantizes Q4_0/Q4_1/Q8_0 block-by-block |
-| All other ops | Scalar | Via `ggml::defaults` implementations |
+| Operation       | SIMD         | Notes                                            |
+| --------------- | ------------ | ------------------------------------------------ |
+| `mat_vec`       | AVX / SSE4.2 | Block-tiled, 2.5–3.2× speedup for large matrices |
+| `mat_vec_quant` | Scalar       | Dequantizes Q4_0/Q4_1/Q8_0 block-by-block        |
+| All other ops   | Scalar       | Via `ggml::defaults` implementations             |
 
 ## Source References
 
-| File | Description |
-|------|-------------|
-| `crates/ggml/src/backend.rs` | `Backend` trait (105 methods) |
-| `crates/ggml/src/defaults.rs` | Default CPU implementations for all 103 non-required Backend methods |
-| `crates/ggml-cpu/src/backend.rs` | CPU backend with SIMD matvec override |
-| `crates/ggml-cuda/src/lib.rs` | CUDA backend with cuBLAS matvec |
+| File                             | Description                                                          |
+| -------------------------------- | -------------------------------------------------------------------- |
+| `crates/ggml/src/backend.rs`     | `Backend` trait (105 methods)                                        |
+| `crates/ggml/src/defaults.rs`    | Default CPU implementations for all 103 non-required Backend methods |
+| `crates/ggml-cpu/src/backend.rs` | CPU backend with SIMD matvec override                                |
+| `crates/ggml-cuda/src/lib.rs`    | CUDA backend with cuBLAS matvec                                      |

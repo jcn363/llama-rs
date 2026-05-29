@@ -13,13 +13,11 @@ rayon = { workspace = true }
 half = { workspace = true }
 memmap2 = { workspace = true }
 thiserror = { workspace = true }
-serde = { workspace = true, features = ["derive"] }
 
 [dev-dependencies]
 criterion = { workspace = true }
 llama-core = { workspace = true }
 memmap2 = { workspace = true }
-serde = { workspace = true, features = ["derive"] }
 thiserror = { workspace = true }
 ggml = { workspace = true }
 error = { workspace = true }
