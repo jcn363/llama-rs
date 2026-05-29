@@ -87,6 +87,8 @@ pub fn get_builtin_template(architecture: &str) -> &'static str {
 ///
 /// # Examples
 /// ```
+/// use common::chat_templates::render_with_architecture;
+///
 /// // Use the built‑in "llama" template
 /// let out = render_with_architecture("sys", "hi", "llama", None).unwrap();
 /// assert!(out.contains("[INST] hi [/INST]"));

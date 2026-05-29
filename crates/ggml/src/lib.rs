@@ -29,12 +29,6 @@
 /// new crate that implements [`Backend`] and registering it with the registry.
 pub mod backend;
 
-/// Operation types for the ggml computation graph.
-///
-/// Defines the various operations that can be performed in the computation graph.
-/// Each variant corresponds to a specific tensor operation.
-pub mod op_type;
-
 /// Data-type enumeration and conversion helpers.
 ///
 /// This module defines the `DType` enum and provides conversion helpers.

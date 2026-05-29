@@ -24,8 +24,7 @@ pub use llama_core::backend::{BackendInfo, QuantType};
 /// Enumeration of all GGML operation types.
 ///
 /// Each variant corresponds to a tensor operation that a backend can
-/// accelerate.  Use [`execute_op`] to dispatch on this enum, or call
-/// the corresponding method on [`Backend`] directly.
+/// accelerate.  Call the corresponding method on [`Backend`] directly.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[non_exhaustive]
 pub enum OpType {
