@@ -188,6 +188,17 @@ fn context_usage_color(pct: f64) -> Color {
     }
 }
 
+/// Calculate context usage percentage (0.0-100.0).
+///
+/// Returns 0.0 if context_limit is 0 to avoid division by zero.
+fn context_usage_pct(total_tokens: usize, context_limit: usize) -> f64 {
+    if context_limit > 0 {
+        (total_tokens as f64 / context_limit as f64) * 100.0
+    } else {
+        0.0
+    }
+}
+
 /// Application state.
 #[derive(Debug)]
 pub struct LlamaApp {
@@ -572,24 +583,22 @@ pub fn update(state: &mut LlamaApp, message: Message) -> Task<Message> {
             }
             let p = &mut state.panes[pane];
             p.total_tokens = count;
-            let limit = p.context_limit;
-            let pct = if limit > 0 {
-                (count as f64 / limit as f64) * 100.0
-            } else {
-                0.0
-            };
+            let pct = context_usage_pct(count, p.context_limit);
             if pct > 95.0 {
                 state.status = format!(
                     "⚠️ Pane {} context at {}/{} tokens ({:.0}%) — consider clearing history",
-                    pane, count, limit, pct
+                    pane, count, p.context_limit, pct
                 );
             } else if pct > 80.0 {
                 state.status = format!(
                     "⚠️ Pane {} context at {}/{} tokens ({:.0}%) — approaching limit",
-                    pane, count, limit, pct
+                    pane, count, p.context_limit, pct
                 );
             } else if count > 0 {
-                state.status = format!("Pane {} tokens: {}/{} ({:.0}%)", pane, count, limit, pct);
+                state.status = format!(
+                    "Pane {} tokens: {}/{} ({:.0}%)",
+                    pane, count, p.context_limit, pct
+                );
             }
             Task::none()
         }
@@ -1069,7 +1078,7 @@ fn handle_key_press(key: keyboard::Key, modifiers: keyboard::Modifiers) -> Optio
     match key {
         keyboard::Key::Named(NamedKey::Escape) => Some(Message::CloseSettings),
         keyboard::Key::Named(NamedKey::F11) => Some(Message::ToggleFullscreen),
-        // Ctrl+N → New Chat
+        // Ctrl combinations
         keyboard::Key::Character(text) if ctrl => match text.as_ref() {
             "n" => Some(Message::NewChat(0)),
             "e" => Some(Message::ExportJson),
@@ -1102,52 +1111,60 @@ pub fn subscription(state: &LlamaApp) -> Subscription<Message> {
 fn view_model_picker(state: &LlamaApp) -> Element<'_, Message> {
     let mut children = vec![
         iced::widget::text("llama-rs")
-            .size(42)
+            .size(48)
             .color(colors::BLUE)
             .into(),
         iced::widget::text("LLM Inference Engine — Rust")
-            .size(16)
+            .size(20)
             .color(colors::GRAY)
             .into(),
-        iced::widget::text("").size(12).into(),
+        iced::widget::text("").size(16).into(),
     ];
 
     if !state.status.is_empty() {
         children.push(
             iced::widget::text(&state.status)
-                .size(14)
+                .size(16)
                 .color(colors::RED)
                 .into(),
         );
-        children.push(iced::widget::text("").size(6).into());
+        children.push(iced::widget::text("").size(12).into());
     }
+
+    children.push(
+        iced::widget::text("Models")
+            .size(20)
+            .color(colors::WHITE)
+            .into(),
+    );
+    children.push(iced::widget::text("").size(12).into());
 
     if state.models.is_empty() {
         children.push(
             iced::widget::text("No models found. Add a GGUF model:")
                 .size(16)
-                .color(Color::from_rgba8(0xC0, 0xC0, 0xC0, 1.0))
+                .color(colors::GRAY)
                 .into(),
         );
-        children.push(iced::widget::text("").size(8).into());
+        children.push(iced::widget::text("").size(12).into());
         children.push(
             iced::widget::text("• Place .gguf files in ~/.local/share/llama-ui/models/")
-                .size(13)
+                .size(14)
                 .color(colors::GRAY)
                 .into(),
         );
         children.push(
             iced::widget::text("• Or click \"Browse\" to select a file")
-                .size(13)
+                .size(14)
                 .color(colors::GRAY)
                 .into(),
         );
-        children.push(iced::widget::text("").size(8).into());
+        children.push(iced::widget::text("").size(16).into());
         children.push(
-            button(iced::widget::text("Browse for GGUF File").size(16))
+            button(iced::widget::text("Browse for GGUF File").size(18))
                 .style(llama_ui_core::theme::secondary_button_style)
                 .on_press(Message::BrowseModel)
-                .padding(iced::Padding::from([10, 24]))
+                .padding(iced::Padding::from([12, 28]))
                 .width(Fill)
                 .into(),
         );
@@ -1155,25 +1172,25 @@ fn view_model_picker(state: &LlamaApp) -> Element<'_, Message> {
         children.push(
             iced::widget::text(format!("Select a model ({} available)", state.models.len()))
                 .size(16)
-                .color(Color::from_rgba8(0xC0, 0xC0, 0xC0, 1.0))
+                .color(colors::GRAY)
                 .into(),
         );
-        children.push(iced::widget::text("").size(8).into());
+        children.push(iced::widget::text("").size(12).into());
 
         for (i, model) in state.models.iter().enumerate() {
             let is_selected = i == state.active_pane;
             let btn = button(
                 column(vec![
                     iced::widget::text(&model.name)
-                        .size(18)
+                        .size(20)
                         .color(Color::WHITE)
                         .into(),
                     iced::widget::text(model.path.to_string_lossy())
-                        .size(11)
+                        .size(12)
                         .color(colors::GRAY)
                         .into(),
                 ])
-                .spacing(4),
+                .spacing(6),
             )
             .style(if is_selected {
                 llama_ui_core::theme::success_button_style
@@ -1181,26 +1198,26 @@ fn view_model_picker(state: &LlamaApp) -> Element<'_, Message> {
                 llama_ui_core::theme::primary_button_style
             })
             .on_press(Message::ModelPickerSelected(i))
-            .padding(iced::Padding::from([10, 16]))
+            .padding(iced::Padding::from([14, 20]))
             .width(Fill);
             children.push(btn.into());
         }
 
-        children.push(iced::widget::text("").size(6).into());
+        children.push(iced::widget::text("").size(16).into());
         children.push(
-            button(iced::widget::text("Browse for More...").size(14))
+            button(iced::widget::text("Browse for More...").size(16))
                 .style(llama_ui_core::theme::secondary_button_style)
                 .on_press(Message::BrowseModel)
-                .padding(iced::Padding::from([8, 16]))
+                .padding(iced::Padding::from([10, 20]))
                 .width(Fill)
                 .into(),
         );
     }
 
-    children.push(iced::widget::text("").size(16).into());
+    children.push(iced::widget::text("").size(24).into());
 
     children.push(
-        button(iced::widget::text("Start Chat").size(20))
+        button(iced::widget::text("Start Chat").size(24))
             .style(if state.models.is_empty() {
                 llama_ui_core::theme::secondary_button_style
             } else {
@@ -1211,18 +1228,18 @@ fn view_model_picker(state: &LlamaApp) -> Element<'_, Message> {
             } else {
                 Some(Message::StartChat)
             })
-            .padding(iced::Padding::from([14, 32]))
+            .padding(iced::Padding::from([16, 40]))
             .width(Fill)
             .into(),
     );
 
     iced::widget::container(
-        iced::widget::scrollable(column(children).spacing(4).width(Fill)).height(Fill),
+        iced::widget::scrollable(column(children).spacing(8).width(Fill)).height(Fill),
     )
     .style(llama_ui_core::theme::content_area_style)
     .center_x(Fill)
     .center_y(Fill)
-    .padding(40)
+    .padding(50)
     .into()
 }
 
@@ -1258,7 +1275,7 @@ fn render_pane(state: &LlamaApp, pane: usize) -> Element<'_, Message> {
 
     // ── Context overflow warning ──────────────────────────
     if p.context_limit > 0 {
-        let pct = p.total_tokens as f64 / p.context_limit as f64;
+        let pct = context_usage_pct(p.total_tokens, p.context_limit) / 100.0;
         if pct > 0.80 {
             let warning = if pct > 0.95 {
                 format!(
@@ -1276,7 +1293,7 @@ fn render_pane(state: &LlamaApp, pane: usize) -> Element<'_, Message> {
             children.push(
                 iced::widget::text(warning)
                     .size(13)
-                    .color(context_usage_color(pct))
+                    .color(context_usage_color(pct * 100.0))
                     .into(),
             );
         }
@@ -1438,14 +1455,10 @@ fn render_pane(state: &LlamaApp, pane: usize) -> Element<'_, Message> {
 
     // ── Token counter ─────────────────────────────────────
     if p.total_tokens > 0 {
-        let pct = if p.context_limit > 0 {
-            p.total_tokens as f64 / p.context_limit as f64 * 100.0
-        } else {
-            0.0
-        };
-        let counter_color = if pct > 0.95 {
+        let pct = context_usage_pct(p.total_tokens, p.context_limit);
+        let counter_color = if pct > 95.0 {
             colors::RED
-        } else if pct > 0.80 {
+        } else if pct > 80.0 {
             colors::YELLOW
         } else {
             colors::GRAY
@@ -1453,9 +1466,7 @@ fn render_pane(state: &LlamaApp, pane: usize) -> Element<'_, Message> {
         children.push(
             iced::widget::text(format!(
                 "Tokens: {}/{} ({:.0}%)",
-                p.total_tokens,
-                p.context_limit,
-                pct * 100.0
+                p.total_tokens, p.context_limit, pct
             ))
             .size(11)
             .color(counter_color)
@@ -1608,7 +1619,7 @@ fn render_pane(state: &LlamaApp, pane: usize) -> Element<'_, Message> {
 /// Chat view — renders a row of panes with a separator between them.
 fn view_chat(state: &LlamaApp) -> Element<'_, Message> {
     if state.panes.is_empty() {
-        return iced::widget::container(iced::widget::text("No panes").size(24))
+        return iced::widget::container(iced::widget::text("No panes").size(28))
             .center_x(Fill)
             .center_y(Fill)
             .into();
@@ -1617,12 +1628,12 @@ fn view_chat(state: &LlamaApp) -> Element<'_, Message> {
     let mut pane_views: Vec<Element<'_, Message>> = Vec::new();
     for i in 0..state.panes.len() {
         if !pane_views.is_empty() {
-            pane_views.push(vertical_rule(2).into());
+            pane_views.push(vertical_rule(4).into());
         }
         pane_views.push(render_pane(state, i));
     }
 
-    row(pane_views).into()
+    row(pane_views).spacing(20).into()
 }
 
 /// Loading view.
@@ -1636,7 +1647,7 @@ fn view_loading(state: &LlamaApp) -> Element<'_, Message> {
             iced::widget::text("").size(12).into(),
             iced::widget::text("Loading model...")
                 .size(20)
-                .color(Color::from_rgba8(0xC0, 0xC0, 0xC0, 1.0))
+                .color(colors::GRAY)
                 .into(),
             iced::widget::text("").size(8).into(),
             iced::widget::text(&state.status)
@@ -1706,9 +1717,9 @@ fn view_settings(state: &LlamaApp) -> Element<'_, Message> {
 
     // System info section
     children.push(
-        iced::widget::text("System Information")
-            .size(18)
-            .color(Color::from_rgba8(0xC0, 0xC0, 0xC0, 1.0))
+        iced::widget::text("No models found. Add a GGUF model:")
+            .size(16)
+            .color(colors::GRAY)
             .into(),
     );
     children.push(
@@ -1737,7 +1748,7 @@ fn view_settings(state: &LlamaApp) -> Element<'_, Message> {
     children.push(
         iced::widget::text("Keyboard Shortcuts")
             .size(18)
-            .color(Color::from_rgba8(0xC0, 0xC0, 0xC0, 1.0))
+            .color(colors::GRAY)
             .into(),
     );
     children.push(
@@ -1772,7 +1783,7 @@ fn view_settings(state: &LlamaApp) -> Element<'_, Message> {
     children.push(
         iced::widget::text("Features")
             .size(18)
-            .color(Color::from_rgba8(0xC0, 0xC0, 0xC0, 1.0))
+            .color(colors::GRAY)
             .into(),
     );
     children.push(
