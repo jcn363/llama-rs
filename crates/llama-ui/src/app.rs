@@ -4,15 +4,16 @@
 //! and context tracking. M5+ with M6 non-streaming /completion.
 
 use std::sync::Arc;
+use iced::{Element, Length, Theme, Subscription, Task, Color, window};
+use iced::Length::Fill;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
-use futures::sink::SinkExt;
 use iced::keyboard;
 use iced::keyboard::key::Named as NamedKey;
 use iced::stream;
 use iced::widget::{button, column, pick_list, row, scrollable, slider, text_input, vertical_rule};
-use iced::{Color, Element, Fill, Subscription, Task, Theme, window};
+use futures::SinkExt;
 
 use llama_ui_models::Manifest;
 use llama_ui_sandbox_client::{ResourceLimits, SandboxClient};
@@ -37,12 +38,16 @@ pub struct ChatPane {
     pub is_streaming: bool,
     /// Cancellation flag for in-flight generation.
     pub cancelled: Arc<AtomicBool>,
+    /// Whether streaming mode is enabled for this pane.
+    pub use_streaming: bool,
     /// Running token count.
     pub total_tokens: usize,
     /// Model context limit.
     pub context_limit: usize,
     /// Backend ("auto", "cpu", "cuda").
     pub backend: String,
+    /// System prompt for this pane.
+    pub system_prompt: String,
     /// Sampling temperature.
     pub temperature: f32,
     /// Top-k (0 = disabled).
@@ -53,6 +58,14 @@ pub struct ChatPane {
     pub repeat_penalty: f32,
     /// Resource limits for the sandbox.
     pub resource_limits: ResourceLimits,
+    /// Tokens generated in last completion.
+    pub last_gen_tokens: usize,
+    /// Duration of last generation in milliseconds.
+    pub last_gen_ms: u64,
+    /// Whether the system prompt editor is visible.
+    pub show_system_prompt: bool,
+    /// When the last generation started.
+    pub send_started_at: Option<Instant>,
 }
 
 impl ChatPane {
@@ -65,9 +78,11 @@ impl ChatPane {
             server_address: String::new(),
             is_streaming: false,
             cancelled: Arc::new(AtomicBool::new(false)),
+            use_streaming: true,
             total_tokens: 0,
             context_limit: 4096,
             backend: "auto".to_string(),
+            system_prompt: "You are a helpful assistant.".to_string(),
             temperature: 0.8,
             top_k: 40.0,
             top_p: 0.95,
@@ -76,6 +91,10 @@ impl ChatPane {
                 memory_mb: 4096,
                 cpu_percent: 100,
             },
+            last_gen_tokens: 0,
+            last_gen_ms: 0,
+            show_system_prompt: false,
+            send_started_at: None,
         }
     }
 }
@@ -109,7 +128,6 @@ impl Default for LlamaApp {
 
 /// Model information for display.
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 pub struct ModelInfo {
     /// Human-readable model name.
     pub name: String,
@@ -135,7 +153,6 @@ pub enum AppState {
 
 /// Messages that update the application state.
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 pub enum Message {
     /// Model selected from picker.
     ModelSelected(usize),
@@ -147,8 +164,6 @@ pub enum Message {
     Send(usize),
     /// Input text changed on a pane.
     InputChanged(usize, String),
-    /// Sandbox status message.
-    SandboxStatus(String),
     /// Error occurred.
     Error(String),
     // ─── M6 additions (pane-indexed) ─────────────────────────
@@ -176,8 +191,6 @@ pub enum Message {
     ExportPlain,
     /// Import session from file.
     ImportSession,
-    /// Session import/export error.
-    ExportError(String),
     // ─── M7: Sampler slider messages (pane-indexed) ──────────
     /// Temperature slider changed on a pane.
     TemperatureChanged(usize, f32),
@@ -199,6 +212,23 @@ pub enum Message {
     OpenSettings,
     /// Close settings screen.
     CloseSettings,
+    // ─── M13: UX improvements ────────────────────────────────
+    /// Clear chat history on a pane.
+    ClearChat(usize),
+    /// Toggle streaming mode on a pane.
+    ToggleStreaming(usize),
+    /// The model selected from the model picker (tracks selection without starting chat).
+    ModelPickerSelected(usize),
+    /// Browse for a GGUF file to add.
+    BrowseModel,
+    /// Samplers updated successfully (status display).
+    SamplersUpdated,
+    /// System prompt changed on a pane.
+    SystemPromptChanged(usize, String),
+    /// Toggle system prompt editor visibility.
+    ToggleSystemPrompt(usize),
+    /// Start a new chat (reset session) on a pane without restarting server.
+    NewChat(usize),
 }
 
 /// Update the application state.
@@ -221,9 +251,10 @@ pub fn update(state: &mut LlamaApp, message: Message) -> Task<Message> {
             }
             state.state = AppState::Loading;
             state.status = "Starting model...".to_string();
-            let model = state.models[0].clone();
+            let selected = state.active_pane.min(state.models.len().saturating_sub(1));
+            let model = state.models[selected].clone();
 
-            state.panes.push(ChatPane::new(0, &model.name));
+            state.panes.push(ChatPane::new(selected, &model.name));
             let pane = state.panes.len() - 1;
             let backend = state.panes[pane].backend.clone();
             let limits = state.panes[pane].resource_limits.clone();
@@ -302,7 +333,7 @@ pub fn update(state: &mut LlamaApp, message: Message) -> Task<Message> {
             Task::none()
         }
 
-        // ─── Send message (non-streaming) on a pane ──────────
+        // ─── Send message on a pane ──────────────────────────
         Message::Send(pane) => {
             if pane >= state.panes.len() {
                 return Task::none();
@@ -312,23 +343,7 @@ pub fn update(state: &mut LlamaApp, message: Message) -> Task<Message> {
                 return Task::none();
             }
 
-            // Build conversation history as prompt
-            let prompt = p
-                .session
-                .messages
-                .iter()
-                .map(|m| {
-                    let role = match m.role {
-                        Role::User => "User",
-                        Role::Assistant => "Assistant",
-                        Role::System => "System",
-                    };
-                    format!("{}: {}", role, m.content)
-                })
-                .chain(std::iter::once(format!("User: {}", p.input_text)))
-                .collect::<Vec<_>>()
-                .join("\n");
-
+            // Add user message to session
             p.session.add_message(ChatMessage {
                 role: Role::User,
                 content: p.input_text.clone(),
@@ -336,41 +351,145 @@ pub fn update(state: &mut LlamaApp, message: Message) -> Task<Message> {
                 token_count: None,
             });
             p.input_text.clear();
+            p.send_started_at = Some(Instant::now());
             state.status = format!("Pane {} generating...", pane);
 
-            let addr = p.server_address.clone();
-            let max_tokens = 512usize;
-            let temperature = p.temperature;
-            let top_k = p.top_k;
-            let top_p = p.top_p;
-            let repeat_penalty = p.repeat_penalty;
+            if p.use_streaming {
+                // Streaming mode: add placeholder message and trigger subscription
+                p.session.add_message(ChatMessage {
+                    role: Role::Assistant,
+                    content: String::new(),
+                    timestamp: chrono::Utc::now().to_rfc3339(),
+                    token_count: None,
+                });
+                p.is_streaming = true;
+                let addr = p.server_address.clone();
+                let cancelled = p.cancelled.clone();
+                let temperature = p.temperature;
+                let top_k = p.top_k;
+                let top_p = p.top_p;
+                let repeat_penalty = p.repeat_penalty;
 
-            Task::perform(
-                async move {
-                    let client = reqwest::Client::new();
-                    let resp = client
-                        .post(format!("{}/completion", addr))
-                        .json(&serde_json::json!({
-                            "prompt": prompt,
-                            "max_tokens": max_tokens,
-                            "stream": false,
-                            "temperature": temperature,
-                            "top_k": top_k,
-                            "top_p": top_p,
-                            "repeat_penalty": repeat_penalty,
-                        }))
-                        .send()
-                        .await
-                        .map_err(|e| e.to_string())?;
-                    let body: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
-                    let content = body["content"].as_str().unwrap_or("").to_string();
-                    Ok::<String, String>(content)
-                },
-                move |result| match result {
-                    Ok(content) => Message::CompletionReceived(pane, content),
-                    Err(e) => Message::Error(e),
-                },
-            )
+                // Build prompt from conversation history
+                let prompt = p
+                    .session
+                    .messages
+                    .iter()
+                    .filter(|m| !m.content.is_empty())
+                    .map(|m| {
+                        let role = match m.role {
+                            Role::User => "User",
+                            Role::Assistant => "Assistant",
+                            Role::System => "System",
+                        };
+                        format!("{}: {}", role, m.content)
+                    })
+                    .collect::<Vec<_>>()
+                    .join("\n");
+
+                Task::perform(
+                    async move {
+                        let client = reqwest::Client::new();
+                        let resp = client
+                            .post(format!("{}/completion", addr))
+                            .json(&serde_json::json!({
+                                "prompt": prompt,
+                                "max_tokens": 512,
+                                "stream": true,
+                                "temperature": temperature,
+                                "top_k": top_k,
+                                "top_p": top_p,
+                                "repeat_penalty": repeat_penalty,
+                            }))
+                            .send()
+                            .await
+                            .map_err(|e| e.to_string())?;
+                        let mut byte_stream = resp.bytes_stream();
+                        let mut full_content = String::new();
+                        use futures::StreamExt;
+                        while let Some(chunk) = byte_stream.next().await {
+                            if cancelled.load(Ordering::Relaxed) {
+                                break;
+                            }
+                            match chunk {
+                                Ok(bytes) => {
+                                    let text = String::from_utf8_lossy(&bytes);
+                                    for line in text.lines() {
+                                        if let Some(data) = line.strip_prefix("data: ") {
+                                            if let Ok(val) =
+                                                serde_json::from_str::<serde_json::Value>(data)
+                                            {
+                                                if val["stop"].as_bool().unwrap_or(false) {
+                                                    return Ok::<String, String>(full_content);
+                                                }
+                                                if let Some(content) = val["content"].as_str() {
+                                                    full_content.push_str(content);
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                Err(_) => break,
+                            }
+                        }
+                        Ok::<String, String>(full_content)
+                    },
+                    move |result| match result {
+                        Ok(content) => Message::CompletionReceived(pane, content),
+                        Err(e) => Message::Error(e),
+                    },
+                )
+            } else {
+                // Non-streaming mode
+                let prompt = p
+                    .session
+                    .messages
+                    .iter()
+                    .map(|m| {
+                        let role = match m.role {
+                            Role::User => "User",
+                            Role::Assistant => "Assistant",
+                            Role::System => "System",
+                        };
+                        format!("{}: {}", role, m.content)
+                    })
+                    .collect::<Vec<_>>()
+                    .join("\n");
+
+                let addr = p.server_address.clone();
+                let temperature = p.temperature;
+                let top_k = p.top_k;
+                let top_p = p.top_p;
+                let repeat_penalty = p.repeat_penalty;
+
+                Task::perform(
+                    async move {
+                        let client = reqwest::Client::new();
+                        let resp = client
+                            .post(format!("{}/completion", addr))
+                            .json(&serde_json::json!({
+                                "prompt": prompt,
+                                "max_tokens": 512,
+                                "stream": false,
+                                "temperature": temperature,
+                                "top_k": top_k,
+                                "top_p": top_p,
+                                "repeat_penalty": repeat_penalty,
+                            }))
+                            .send()
+                            .await
+                            .map_err(|e| e.to_string())?;
+                        let body: serde_json::Value =
+                            resp.json().await.map_err(|e| e.to_string())?;
+                        let content = body["content"].as_str().unwrap_or("").to_string();
+                        Ok::<String, String>(content)
+                    },
+                    move |result| match result {
+                        Ok(content) => Message::CompletionReceived(pane, content),
+                        Err(e) => Message::Error(e),
+                    },
+                )
+            }
         }
 
         // ─── Completion received (non-streaming) on a pane ─────
@@ -379,12 +498,36 @@ pub fn update(state: &mut LlamaApp, message: Message) -> Task<Message> {
                 return Task::none();
             }
             let p = &mut state.panes[pane];
-            p.session.add_message(ChatMessage {
-                role: Role::Assistant,
-                content: content.clone(),
-                timestamp: chrono::Utc::now().to_rfc3339(),
-                token_count: None,
-            });
+            p.is_streaming = false;
+
+            // Compute generation timing stats
+            if let Some(start) = p.send_started_at.take() {
+                p.last_gen_ms = start.elapsed().as_millis() as u64;
+                // Rough token estimate: ~4 chars per token for English
+                p.last_gen_tokens = content.len().div_ceil(4);
+            }
+
+            // If the last message is an empty assistant message (from streaming placeholder),
+            // update it in-place; otherwise append a new one.
+            if let Some(last) = p.session.messages.last_mut() {
+                if matches!(last.role, Role::Assistant) && last.content.is_empty() {
+                    last.content = content.clone();
+                } else {
+                    p.session.add_message(ChatMessage {
+                        role: Role::Assistant,
+                        content: content.clone(),
+                        timestamp: chrono::Utc::now().to_rfc3339(),
+                        token_count: None,
+                    });
+                }
+            } else {
+                p.session.add_message(ChatMessage {
+                    role: Role::Assistant,
+                    content: content.clone(),
+                    timestamp: chrono::Utc::now().to_rfc3339(),
+                    token_count: None,
+                });
+            }
             state.status = String::new();
 
             let addr = p.server_address.clone();
@@ -517,12 +660,6 @@ pub fn update(state: &mut LlamaApp, message: Message) -> Task<Message> {
             Task::none()
         }
 
-        // ─── Sandbox status ──────────────────────────────────
-        Message::SandboxStatus(status) => {
-            state.status = format!("Sandbox: {}", status);
-            Task::none()
-        }
-
         // ─── Error ───────────────────────────────────────────
         Message::Error(err) => {
             state.state = AppState::Error(err);
@@ -624,7 +761,6 @@ pub fn update(state: &mut LlamaApp, message: Message) -> Task<Message> {
             }
             Task::none()
         }
-        Message::ExportError(_) => Task::none(),
 
         // ─── M7: Sampler slider changes on a pane ────────────
         Message::TemperatureChanged(pane, val) => {
@@ -693,6 +829,86 @@ pub fn update(state: &mut LlamaApp, message: Message) -> Task<Message> {
             state.state = AppState::Chat;
             Task::none()
         }
+
+        // ─── M13: UX improvements ────────────────────────────────
+        Message::ClearChat(pane) => {
+            if pane >= state.panes.len() {
+                return Task::none();
+            }
+            let p = &mut state.panes[pane];
+            let model_name = state
+                .models
+                .get(p.selected_model)
+                .map(|m| m.name.as_str())
+                .unwrap_or("unknown");
+            p.session = Session::new(model_name);
+            p.total_tokens = 0;
+            state.status = format!("Pane {} chat cleared.", pane);
+            Task::none()
+        }
+        Message::ToggleStreaming(pane) => {
+            if pane < state.panes.len() {
+                state.panes[pane].use_streaming = !state.panes[pane].use_streaming;
+                let mode = if state.panes[pane].use_streaming {
+                    "streaming"
+                } else {
+                    "non-streaming"
+                };
+                state.status = format!("Pane {} set to {} mode.", pane, mode);
+            }
+            Task::none()
+        }
+        Message::ModelPickerSelected(idx) => {
+            state.active_pane = idx;
+            Task::none()
+        }
+        Message::BrowseModel => {
+            if let Some(path) = rfd::FileDialog::new()
+                .add_filter("GGUF Model", &["gguf"])
+                .pick_file()
+            {
+                let name = path
+                    .file_stem()
+                    .map(|s| s.to_string_lossy().to_string())
+                    .unwrap_or_else(|| "imported".to_string());
+                state.models.push(ModelInfo {
+                    name,
+                    path: path.clone(),
+                });
+                state.status = format!("Added model: {}", path.display());
+            }
+            Task::none()
+        }
+        Message::SamplersUpdated => Task::none(),
+        Message::SystemPromptChanged(pane, text) => {
+            if pane < state.panes.len() {
+                state.panes[pane].system_prompt = text;
+            }
+            Task::none()
+        }
+        Message::ToggleSystemPrompt(pane) => {
+            if pane < state.panes.len() {
+                state.panes[pane].show_system_prompt = !state.panes[pane].show_system_prompt;
+            }
+            Task::none()
+        }
+        Message::NewChat(pane) => {
+            if pane >= state.panes.len() {
+                return Task::none();
+            }
+            let p = &mut state.panes[pane];
+            let model_name = state
+                .models
+                .get(p.selected_model)
+                .map(|m| m.name.as_str())
+                .unwrap_or("unknown");
+            p.session = Session::new(model_name);
+            p.total_tokens = 0;
+            p.last_gen_tokens = 0;
+            p.last_gen_ms = 0;
+            state.status = format!("Pane {} — new chat started.", pane);
+            Task::none()
+        }
     }
 }
 
@@ -726,7 +942,7 @@ fn fire_update_sampler(state: &LlamaApp, pane: usize) -> Task<Message> {
             Ok::<String, String>(body.to_string())
         },
         |result| match result {
-            Ok(_) => Message::SandboxStatus("Samplers updated".to_string()),
+            Ok(_) => Message::SamplersUpdated,
             Err(e) => Message::Error(e),
         },
     )
@@ -904,14 +1120,14 @@ pub fn subscription(state: &LlamaApp) -> Subscription<Message> {
 fn view_model_picker(state: &LlamaApp) -> Element<'_, Message> {
     let mut children = vec![
         iced::widget::text("llama-rs")
-            .size(36)
+            .size(42)
             .color(Color::from_rgba8(0x4A, 0x90, 0xE2, 1.0))
             .into(),
-        iced::widget::text("LLM Inference Engine")
+        iced::widget::text("LLM Inference Engine — Rust")
             .size(16)
             .color(Color::from_rgba8(0xA0, 0xA0, 0xA0, 1.0))
             .into(),
-        iced::widget::text("").size(8).into(),
+        iced::widget::text("").size(12).into(),
     ];
 
     if !state.status.is_empty() {
@@ -921,19 +1137,36 @@ fn view_model_picker(state: &LlamaApp) -> Element<'_, Message> {
                 .color(Color::from_rgba8(0xE2, 0x4A, 0x4A, 1.0))
                 .into(),
         );
+        children.push(iced::widget::text("").size(6).into());
     }
 
     if state.models.is_empty() {
         children.push(
-            iced::widget::text("No models found. Place .gguf files in:")
-                .size(14)
+            iced::widget::text("No models found. Add a GGUF model:")
+                .size(16)
+                .color(Color::from_rgba8(0xC0, 0xC0, 0xC0, 1.0))
+                .into(),
+        );
+        children.push(iced::widget::text("").size(8).into());
+        children.push(
+            iced::widget::text("• Place .gguf files in ~/.local/share/llama-ui/models/")
+                .size(13)
                 .color(Color::from_rgba8(0xA0, 0xA0, 0xA0, 1.0))
                 .into(),
         );
         children.push(
-            iced::widget::text("~/.local/share/llama-ui/models/")
-                .size(12)
-                .color(Color::from_rgba8(0x80, 0x80, 0x80, 1.0))
+            iced::widget::text("• Or click \"Browse\" to select a file")
+                .size(13)
+                .color(Color::from_rgba8(0xA0, 0xA0, 0xA0, 1.0))
+                .into(),
+        );
+        children.push(iced::widget::text("").size(8).into());
+        children.push(
+            button(iced::widget::text("Browse for GGUF File").size(16))
+                .style(llama_ui_core::theme::secondary_button_style)
+                .on_press(Message::BrowseModel)
+                .padding(iced::Padding::from([10, 24]))
+                .width(Fill)
                 .into(),
         );
     } else {
@@ -946,6 +1179,7 @@ fn view_model_picker(state: &LlamaApp) -> Element<'_, Message> {
         children.push(iced::widget::text("").size(8).into());
 
         for (i, model) in state.models.iter().enumerate() {
+            let is_selected = i == state.active_pane;
             let btn = button(
                 column(vec![
                     iced::widget::text(&model.name)
@@ -959,12 +1193,26 @@ fn view_model_picker(state: &LlamaApp) -> Element<'_, Message> {
                 ])
                 .spacing(4),
             )
-            .style(llama_ui_core::theme::primary_button_style)
-            .on_press(Message::ModelSelected(i))
+            .style(if is_selected {
+                llama_ui_core::theme::success_button_style
+            } else {
+                llama_ui_core::theme::primary_button_style
+            })
+            .on_press(Message::ModelPickerSelected(i))
             .padding(iced::Padding::from([10, 16]))
             .width(Fill);
             children.push(btn.into());
         }
+
+        children.push(iced::widget::text("").size(6).into());
+        children.push(
+            button(iced::widget::text("Browse for More...").size(14))
+                .style(llama_ui_core::theme::secondary_button_style)
+                .on_press(Message::BrowseModel)
+                .padding(iced::Padding::from([8, 16]))
+                .width(Fill)
+                .into(),
+        );
     }
 
     children.push(iced::widget::text("").size(16).into());
@@ -997,60 +1245,158 @@ fn render_pane(state: &LlamaApp, pane: usize) -> Element<'_, Message> {
     let p = &state.panes[pane];
     let mut children = Vec::new();
 
-    // Context overflow warning
+    // ── Header: model name + controls ──────────────────────
+    let model_name = state
+        .models
+        .get(p.selected_model)
+        .map(|m| m.name.as_str())
+        .unwrap_or("unknown");
+    children.push(
+        row![
+            iced::widget::text(format!("Pane {} — {}", pane, model_name))
+                .size(16)
+                .color(Color::from_rgba8(0xE0, 0xE0, 0xE0, 1.0)),
+            iced::widget::container(iced::widget::text("").size(1))
+                .width(Fill)
+                .height(iced::Length::Fixed(1.0))
+                .style(|_theme: &iced::Theme| iced::widget::container::Style {
+                    background: Some(Color::from_rgba8(0x60, 0x60, 0x60, 0.5).into()),
+                    border: iced::Border::default(),
+                    text_color: None,
+                    shadow: iced::Shadow::default(),
+                }),
+        ]
+        .spacing(8)
+        .into(),
+    );
+
+    // ── Context overflow warning ──────────────────────────
     if p.context_limit > 0 {
         let pct = p.total_tokens as f64 / p.context_limit as f64;
         if pct > 0.80 {
             let warning = if pct > 0.95 {
                 format!(
-                    "⚠️ Context at {}/{} tokens — consider clearing history",
+                    "Context at {}/{} tokens — consider clearing history",
                     p.total_tokens, p.context_limit
                 )
             } else {
                 format!(
-                    "⚠️ Context at {}/{} tokens ({:.0}%) — approaching limit",
+                    "Context at {}/{} tokens ({:.0}%)",
                     p.total_tokens,
                     p.context_limit,
                     pct * 100.0
                 )
             };
-            children.push(iced::widget::text(warning).size(13).into());
+            let color = if pct > 0.95 {
+                Color::from_rgba8(0xE2, 0x4A, 0x4A, 1.0)
+            } else {
+                Color::from_rgba8(0xE2, 0xC0, 0x4A, 1.0)
+            };
+            children.push(iced::widget::text(warning).size(13).color(color).into());
         }
     }
 
-    // Backend selector
+    // ── Context usage progress bar ────────────────────────
+    if p.context_limit > 0 {
+        let pct = (p.total_tokens as f32 / p.context_limit as f32).min(1.0);
+        let bar_color = if pct > 0.95 {
+            Color::from_rgba8(0xE2, 0x4A, 0x4A, 0.9)
+        } else if pct > 0.80 {
+            Color::from_rgba8(0xE2, 0xC0, 0x4A, 0.9)
+        } else {
+            Color::from_rgba8(0x4A, 0x90, 0xE2, 0.9)
+        };
+        children.push(
+            iced::widget::container(iced::widget::text("").size(1))
+                .style(move |_theme: &iced::Theme| iced::widget::container::Style {
+                    background: Some(bar_color.into()),
+                    border: iced::Border {
+                        radius: 2.0.into(),
+                        width: 0.0,
+                        color: Color::TRANSPARENT,
+                    },
+                    text_color: None,
+                    shadow: iced::Shadow::default(),
+                })
+                .width(Fill)
+                .height(iced::Length::Fixed(4.0))
+                .into(),
+        );
+    }
+
+    // ── Controls row: backend, streaming, settings, fullscreen ──
     children.push(
         row![
-            iced::widget::text("Backend:").size(14),
+            iced::widget::text("Backend:").size(13),
             pick_list(
                 vec!["auto", "cpu", "cuda"],
                 Some(p.backend.as_str()),
                 move |s: &str| Message::BackendChanged(pane, s.to_string()),
             )
-            .width(150),
-        ]
-        .spacing(8)
-        .into(),
-    );
-
-    // Settings + Full-screen buttons
-    children.push(
-        row![
-            button(iced::widget::text("⚙ Settings").size(12))
+            .width(100),
+            iced::widget::text("│")
+                .size(13)
+                .color(Color::from_rgba8(0x60, 0x60, 0x60, 1.0)),
+            iced::widget::text(if p.use_streaming {
+                "⚡ Stream"
+            } else {
+                "📄 Block"
+            })
+            .size(13),
+            button(iced::widget::text("Toggle").size(11))
+                .on_press(Message::ToggleStreaming(pane))
+                .padding(iced::Padding::from([2, 8])),
+            iced::widget::text("│")
+                .size(13)
+                .color(Color::from_rgba8(0x60, 0x60, 0x60, 1.0)),
+            button(iced::widget::text("💬 System").size(11))
+                .on_press(Message::ToggleSystemPrompt(pane))
+                .padding(iced::Padding::from([2, 8])),
+            button(iced::widget::text("🔄 New Chat").size(11))
+                .on_press(Message::NewChat(pane))
+                .padding(iced::Padding::from([2, 8])),
+            iced::widget::text("│")
+                .size(13)
+                .color(Color::from_rgba8(0x60, 0x60, 0x60, 1.0)),
+            button(iced::widget::text("⚙ Settings").size(11))
                 .on_press(Message::OpenSettings)
-                .padding(4),
-            button(iced::widget::text("⛶ Fullscreen").size(12))
+                .padding(iced::Padding::from([2, 8])),
+            button(iced::widget::text("⛶ Fullscreen").size(11))
                 .on_press(Message::ToggleFullscreen)
-                .padding(4),
+                .padding(iced::Padding::from([2, 8])),
         ]
-        .spacing(8)
+        .spacing(6)
         .into(),
     );
 
-    // Resource limit sliders
+    // ── System prompt editor (toggled) ──────────────────────
+    if p.show_system_prompt {
+        children.push(
+            iced::widget::container(
+                column(vec![
+                    iced::widget::text("System Prompt:")
+                        .size(12)
+                        .color(Color::from_rgba8(0xA0, 0xA0, 0xA0, 1.0))
+                        .into(),
+                    text_input("Enter system prompt...", &p.system_prompt)
+                        .on_input(move |s| Message::SystemPromptChanged(pane, s))
+                        .padding(8)
+                        .size(13)
+                        .into(),
+                ])
+                .spacing(4),
+            )
+            .style(llama_ui_core::theme::user_message_style)
+            .padding(iced::Padding::from([6, 8]))
+            .width(Fill)
+            .into(),
+        );
+    }
+
+    // ── Resource limit sliders ────────────────────────────
     children.push(
         row![
-            iced::widget::text(format!("Mem: {} MB", p.resource_limits.memory_mb)).size(12),
+            iced::widget::text(format!("Mem: {} MB", p.resource_limits.memory_mb)).size(11),
             slider(
                 256.0..=32768.0,
                 p.resource_limits.memory_mb as f32,
@@ -1064,7 +1410,7 @@ fn render_pane(state: &LlamaApp, pane: usize) -> Element<'_, Message> {
     );
     children.push(
         row![
-            iced::widget::text(format!("CPU: {}%", p.resource_limits.cpu_percent)).size(12),
+            iced::widget::text(format!("CPU: {}%", p.resource_limits.cpu_percent)).size(11),
             slider(
                 10.0..=400.0,
                 f32::from(p.resource_limits.cpu_percent),
@@ -1077,12 +1423,17 @@ fn render_pane(state: &LlamaApp, pane: usize) -> Element<'_, Message> {
         .into(),
     );
 
-    // Messages
+    // ── Messages ──────────────────────────────────────────
     for msg in &p.session.messages {
         let (role_label, role_color) = match msg.role {
             Role::User => ("You", Color::from_rgba8(0x4A, 0x90, 0xE2, 1.0)),
             Role::Assistant => ("AI", Color::from_rgba8(0x4A, 0xE2, 0x6A, 1.0)),
             Role::System => ("System", Color::from_rgba8(0xA0, 0xA0, 0xA0, 1.0)),
+        };
+        let display_content = if msg.content.is_empty() && matches!(msg.role, Role::Assistant) {
+            "Generating...".to_string()
+        } else {
+            msg.content.clone()
         };
         let msg_container = iced::widget::container(
             column(vec![
@@ -1090,7 +1441,7 @@ fn render_pane(state: &LlamaApp, pane: usize) -> Element<'_, Message> {
                     .size(12)
                     .color(role_color)
                     .into(),
-                iced::widget::text(&msg.content).size(14).into(),
+                iced::widget::text(display_content).size(14).into(),
             ])
             .spacing(4),
         )
@@ -1105,28 +1456,55 @@ fn render_pane(state: &LlamaApp, pane: usize) -> Element<'_, Message> {
         children.push(styled_msg.into());
     }
 
-    // Token counter
+    // ── Token counter ─────────────────────────────────────
     if p.total_tokens > 0 {
+        let pct = if p.context_limit > 0 {
+            (p.total_tokens as f64 / p.context_limit as f64) * 100.0
+        } else {
+            0.0
+        };
+        let counter_color = if pct > 95.0 {
+            Color::from_rgba8(0xE2, 0x4A, 0x4A, 1.0)
+        } else if pct > 80.0 {
+            Color::from_rgba8(0xE2, 0xC0, 0x4A, 1.0)
+        } else {
+            Color::from_rgba8(0xA0, 0xA0, 0xA0, 1.0)
+        };
         children.push(
             iced::widget::text(format!(
                 "Tokens: {}/{} ({:.0}%)",
-                p.total_tokens,
-                p.context_limit,
-                if p.context_limit > 0 {
-                    (p.total_tokens as f64 / p.context_limit as f64) * 100.0
-                } else {
-                    0.0
-                }
+                p.total_tokens, p.context_limit, pct
             ))
-            .size(12)
+            .size(11)
+            .color(counter_color)
             .into(),
         );
     }
 
-    // Sampler sliders
+    // ── Generation stats (tok/s) ──────────────────────────
+    if p.last_gen_tokens > 0 && p.last_gen_ms > 0 {
+        let tok_per_sec = (p.last_gen_tokens as f64 / (p.last_gen_ms as f64 / 1000.0)) as u64;
+        children.push(
+            iced::widget::text(format!(
+                "Last gen: {} tokens in {}ms ({} tok/s)",
+                p.last_gen_tokens, p.last_gen_ms, tok_per_sec
+            ))
+            .size(11)
+            .color(Color::from_rgba8(0x80, 0x80, 0x80, 1.0))
+            .into(),
+        );
+    }
+
+    // ── Sampler sliders ───────────────────────────────────
+    children.push(
+        iced::widget::text("Sampling")
+            .size(12)
+            .color(Color::from_rgba8(0x80, 0x80, 0x80, 1.0))
+            .into(),
+    );
     children.push(
         row![
-            iced::widget::text(format!("T: {:.2}", p.temperature)).size(12),
+            iced::widget::text(format!("T: {:.2}", p.temperature)).size(11),
             slider(0.0..=2.0, p.temperature, move |v| {
                 Message::TemperatureChanged(pane, v)
             })
@@ -1138,7 +1516,7 @@ fn render_pane(state: &LlamaApp, pane: usize) -> Element<'_, Message> {
     );
     children.push(
         row![
-            iced::widget::text(format!("K: {}", p.top_k)).size(12),
+            iced::widget::text(format!("K: {}", p.top_k)).size(11),
             slider(0.0..=100.0, p.top_k, move |v| Message::TopKChanged(pane, v))
                 .step(1.0)
                 .width(Fill),
@@ -1148,7 +1526,7 @@ fn render_pane(state: &LlamaApp, pane: usize) -> Element<'_, Message> {
     );
     children.push(
         row![
-            iced::widget::text(format!("P: {:.2}", p.top_p)).size(12),
+            iced::widget::text(format!("P: {:.2}", p.top_p)).size(11),
             slider(0.00..=1.00, p.top_p, move |v| Message::TopPChanged(pane, v))
                 .step(0.01)
                 .width(Fill),
@@ -1158,7 +1536,7 @@ fn render_pane(state: &LlamaApp, pane: usize) -> Element<'_, Message> {
     );
     children.push(
         row![
-            iced::widget::text(format!("RP: {:.2}", p.repeat_penalty)).size(12),
+            iced::widget::text(format!("RP: {:.2}", p.repeat_penalty)).size(11),
             slider(1.00..=2.00, p.repeat_penalty, move |v| {
                 Message::RepeatPenaltyChanged(pane, v)
             })
@@ -1169,27 +1547,40 @@ fn render_pane(state: &LlamaApp, pane: usize) -> Element<'_, Message> {
         .into(),
     );
 
-    // Export/Import buttons
+    // ── Export/Import/Clear buttons ───────────────────────
     children.push(
         row![
-            button(iced::widget::text("Export JSON").size(12))
+            button(iced::widget::text("📋 JSON").size(11))
                 .on_press(Message::ExportJson)
-                .padding(6),
-            button(iced::widget::text("Export MD").size(12))
+                .padding(iced::Padding::from([4, 8])),
+            button(iced::widget::text("📝 MD").size(11))
                 .on_press(Message::ExportMarkdown)
-                .padding(6),
-            button(iced::widget::text("Export TXT").size(12))
+                .padding(iced::Padding::from([4, 8])),
+            button(iced::widget::text("📄 TXT").size(11))
                 .on_press(Message::ExportPlain)
-                .padding(6),
-            button(iced::widget::text("Import").size(12))
+                .padding(iced::Padding::from([4, 8])),
+            button(iced::widget::text("📂 Import").size(11))
                 .on_press(Message::ImportSession)
-                .padding(6),
+                .padding(iced::Padding::from([4, 8])),
+            iced::widget::container(iced::widget::text("").size(1))
+                .width(Fill)
+                .height(iced::Length::Fixed(1.0))
+                .style(|_theme: &iced::Theme| iced::widget::container::Style {
+                    background: Some(Color::from_rgba8(0x60, 0x60, 0x60, 0.5).into()),
+                    border: iced::Border::default(),
+                    text_color: None,
+                    shadow: iced::Shadow::default(),
+                }),
+            button(iced::widget::text("🗑 Clear Chat").size(11))
+                .style(llama_ui_core::theme::danger_button_style)
+                .on_press(Message::ClearChat(pane))
+                .padding(iced::Padding::from([4, 8])),
         ]
-        .spacing(6)
+        .spacing(4)
         .into(),
     );
 
-    // Input area
+    // ── Input area ────────────────────────────────────────
     children.push(
         text_input("Type your message...", &p.input_text)
             .on_input(move |s| Message::InputChanged(pane, s))
@@ -1199,29 +1590,27 @@ fn render_pane(state: &LlamaApp, pane: usize) -> Element<'_, Message> {
             .into(),
     );
 
-    // Send / Cancel buttons row
+    // ── Send / Cancel buttons ─────────────────────────────
     if p.is_streaming {
         children.push(
             button(iced::widget::text("■ Stop").size(16))
+                .style(llama_ui_core::theme::danger_button_style)
                 .on_press(Message::CancelGeneration(pane))
-                .padding(10)
+                .padding(iced::Padding::from([8, 16]))
+                .width(Fill)
                 .into(),
         );
     } else {
+        let send_label = if p.use_streaming {
+            "▶ Send (Stream)"
+        } else {
+            "▶ Send"
+        };
         children.push(
-            button(iced::widget::text("Send").size(16))
+            button(iced::widget::text(send_label).size(16))
+                .style(llama_ui_core::theme::primary_button_style)
                 .on_press(Message::Send(pane))
-                .padding(10)
-                .into(),
-        );
-    }
-
-    // Status bar at bottom
-    if !state.status.is_empty() {
-        children.push(
-            iced::widget::container(iced::widget::text(&state.status).size(12))
-                .style(llama_ui_core::theme::status_bar_style)
-                .padding(iced::Padding::from([6, 12]))
+                .padding(iced::Padding::from([8, 16]))
                 .width(Fill)
                 .into(),
         );
@@ -1258,17 +1647,27 @@ fn view_chat(state: &LlamaApp) -> Element<'_, Message> {
 fn view_loading(state: &LlamaApp) -> Element<'_, Message> {
     iced::widget::container(
         column(vec![
-            iced::widget::text("Loading...")
-                .size(28)
+            iced::widget::text("llama-rs")
+                .size(32)
                 .color(Color::from_rgba8(0x4A, 0x90, 0xE2, 1.0))
+                .into(),
+            iced::widget::text("").size(12).into(),
+            iced::widget::text("Loading model...")
+                .size(20)
+                .color(Color::from_rgba8(0xC0, 0xC0, 0xC0, 1.0))
                 .into(),
             iced::widget::text("").size(8).into(),
             iced::widget::text(&state.status)
-                .size(16)
+                .size(14)
                 .color(Color::from_rgba8(0xA0, 0xA0, 0xA0, 1.0))
                 .into(),
+            iced::widget::text("").size(8).into(),
+            iced::widget::text("This may take a moment on first run.")
+                .size(12)
+                .color(Color::from_rgba8(0x80, 0x80, 0x80, 1.0))
+                .into(),
         ])
-        .spacing(8),
+        .spacing(4),
     )
     .style(llama_ui_core::theme::content_area_style)
     .center_x(Fill)
@@ -1280,15 +1679,25 @@ fn view_loading(state: &LlamaApp) -> Element<'_, Message> {
 fn view_error(err: &str) -> Element<'_, Message> {
     iced::widget::container(
         column(vec![
+            iced::widget::text("llama-rs")
+                .size(32)
+                .color(Color::from_rgba8(0x4A, 0x90, 0xE2, 1.0))
+                .into(),
+            iced::widget::text("").size(8).into(),
             iced::widget::text("Error")
-                .size(28)
+                .size(24)
                 .color(Color::from_rgba8(0xE2, 0x4A, 0x4A, 1.0))
                 .into(),
             iced::widget::text("").size(8).into(),
-            iced::widget::text(err)
-                .size(16)
-                .color(Color::from_rgba8(0xE2, 0x4A, 0x4A, 1.0))
-                .into(),
+            iced::widget::container(
+                iced::widget::text(err)
+                    .size(14)
+                    .color(Color::from_rgba8(0xE2, 0x4A, 0x4A, 1.0)),
+            )
+            .style(llama_ui_core::theme::system_message_style)
+            .padding(iced::Padding::from([8, 12]))
+            .width(Fill)
+            .into(),
             iced::widget::text("").size(16).into(),
             button(iced::widget::text("Back to Model Picker").size(16))
                 .style(llama_ui_core::theme::primary_button_style)
@@ -1327,6 +1736,9 @@ fn view_settings(state: &LlamaApp) -> Element<'_, Message> {
     children.push(
         iced::widget::container(
             column(vec![
+                iced::widget::text(format!("Version: {}", env!("CARGO_PKG_VERSION")))
+                    .size(14)
+                    .into(),
                 iced::widget::text(format!("Active Panes: {}", state.panes.len()))
                     .size(14)
                     .into(),
@@ -1353,11 +1765,16 @@ fn view_settings(state: &LlamaApp) -> Element<'_, Message> {
     children.push(
         iced::widget::container(
             column(vec![
-                iced::widget::text("Esc — Close Settings").size(14).into(),
+                iced::widget::text("Esc — Close Settings / Return to Chat")
+                    .size(14)
+                    .into(),
                 iced::widget::text("F11 — Toggle Full-screen")
                     .size(14)
                     .into(),
                 iced::widget::text("Enter — Send message (in text input)")
+                    .size(14)
+                    .into(),
+                iced::widget::text("Ctrl+Enter — Also sends message")
                     .size(14)
                     .into(),
             ])
@@ -1370,9 +1787,9 @@ fn view_settings(state: &LlamaApp) -> Element<'_, Message> {
     );
     children.push(iced::widget::text("").size(12).into());
 
-    // General section
+    // Features section
     children.push(
-        iced::widget::text("General")
+        iced::widget::text("Features")
             .size(18)
             .color(Color::from_rgba8(0xC0, 0xC0, 0xC0, 1.0))
             .into(),
@@ -1380,19 +1797,24 @@ fn view_settings(state: &LlamaApp) -> Element<'_, Message> {
     children.push(
         iced::widget::container(
             column(vec![
-                iced::widget::text("Full-screen: toggle with F11 or the button in the chat view.")
+                iced::widget::text("Streaming & non-streaming modes per pane")
                     .size(14)
                     .into(),
-                iced::widget::text(
-                    "Resource limits (memory/CPU) are set per-pane in the chat view.",
-                )
-                .size(14)
-                .into(),
-                iced::widget::text(
-                    "Backend selection (auto/cpu/cuda) is available in each chat pane.",
-                )
-                .size(14)
-                .into(),
+                iced::widget::text("Per-pane backend selection (auto/cpu/cuda)")
+                    .size(14)
+                    .into(),
+                iced::widget::text("Per-pane resource limits (memory/CPU)")
+                    .size(14)
+                    .into(),
+                iced::widget::text("Session export (JSON, Markdown, Plain text)")
+                    .size(14)
+                    .into(),
+                iced::widget::text("Dual-pane mode for model comparison")
+                    .size(14)
+                    .into(),
+                iced::widget::text("Real-time context usage tracking")
+                    .size(14)
+                    .into(),
             ])
             .spacing(4),
         )

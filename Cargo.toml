@@ -15,7 +15,7 @@ members = [
     "crates/llama-ui-models",
     "crates/llama-ui-session",
     "crates/llama-ui-sandbox-client",
-    "crates/llama-ui",
+    # "crates/llama-ui",
     "crates/llama-ui-core",
 ]
 
@@ -45,8 +45,8 @@ error = { path = "crates/error" }
 llama-ui-models = { path = "crates/llama-ui-models" }
 llama-ui-session = { path = "crates/llama-ui-session" }
 llama-ui-sandbox-client = { path = "crates/llama-ui-sandbox-client" }
-llama-ui = { path = "crates/llama-ui" }
-    llama-ui-core = { path = "crates/llama-ui-core" }
+# llama-ui = { path = "crates/llama-ui" }
+llama-ui-core = { path = "crates/llama-ui-core" }
 
 # External dependencies
 thiserror = "2"
