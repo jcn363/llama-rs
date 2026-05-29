@@ -20,6 +20,27 @@ use llama_ui_sandbox_client::{ResourceLimits, SandboxClient};
 use llama_ui_session::{ChatMessage, Role, Session};
 use std::path::PathBuf;
 
+// ─── Color constants ────────────────────────────────────────────────────────
+
+/// Application color palette.
+mod colors {
+    use iced::Color;
+
+    /// Primary blue (buttons, highlights).
+    pub const BLUE: Color = Color::from_rgba(0.29, 0.56, 0.89, 1.0);
+    /// Green (success, assistant messages).
+    pub const GREEN: Color = Color::from_rgba(0.29, 0.89, 0.42, 1.0);
+    /// Red (danger, errors).
+    pub const RED: Color = Color::from_rgba(0.89, 0.29, 0.29, 1.0);
+    /// Yellow (warnings, context near limit).
+    pub const YELLOW: Color = Color::from_rgba(0.89, 0.75, 0.29, 1.0);
+    /// Bright white (primary text).
+    pub const WHITE: Color = Color::from_rgba(1.0, 1.0, 1.0, 1.0);
+    pub const GRAY: Color = Color::from_rgba(0.63, 0.63, 0.63, 1.0);
+    pub const GRAY_DARK: Color = Color::from_rgba(0.50, 0.50, 0.50, 1.0);
+    pub const SEPARATOR: Color = Color::from_rgba(0.38, 0.38, 0.38, 0.5);
+}
+
 /// Application state.
 /// Per-pane state for dual-model support (M10).
 #[derive(Debug)]
@@ -96,6 +117,74 @@ impl ChatPane {
             show_system_prompt: false,
             send_started_at: None,
         }
+    }
+}
+
+// ─── Helper functions ───────────────────────────────────────────────────────
+
+/// Build a conversation prompt from session messages for the completion API.
+///
+/// Formats messages as `"Role: content"` separated by newlines.
+/// Empty assistant messages (streaming placeholders) are filtered out.
+/// If `current_input` is provided, it is appended as a final user message.
+fn build_prompt(messages: &[ChatMessage], current_input: Option<&str>) -> String {
+    let mut parts: Vec<String> = messages
+        .iter()
+        .filter(|m| !m.content.is_empty())
+        .map(|m| {
+            let role = match m.role {
+                Role::User => "User",
+                Role::Assistant => "Assistant",
+                Role::System => "System",
+            };
+            format!("{}: {}", role, m.content)
+        })
+        .collect();
+    if let Some(input) = current_input {
+        if !input.is_empty() {
+            parts.push(format!("User: {}", input));
+        }
+    }
+    parts.join("\n")
+}
+
+/// Fire a tokenize request to get the current token count for a pane's session.
+fn fire_tokenize_request(addr: String, messages: Vec<ChatMessage>, pane: usize) -> Task<Message> {
+    let full_text: String = messages
+        .iter()
+        .map(|m| m.content.as_str())
+        .collect::<Vec<_>>()
+        .join("\n");
+    Task::perform(
+        async move {
+            let client = reqwest::Client::new();
+            let resp = client
+                .post(format!("{}/tokenize", addr))
+                .json(&serde_json::json!({ "text": full_text }))
+                .send()
+                .await
+                .map_err(|e| e.to_string())?;
+            let body: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
+            let count = body["count"].as_u64().unwrap_or(0) as usize;
+            Ok::<usize, String>(count)
+        },
+        move |result| match result {
+            Ok(count) => Message::TokenCounted(pane, count),
+            Err(e) => Message::Error(e),
+        },
+    )
+}
+
+/// Return the color for a context-usage percentage.
+///
+/// Blue < 80%, yellow 80–95%, red > 95%.
+fn context_usage_color(pct: f64) -> Color {
+    if pct > 0.95 {
+        colors::RED
+    } else if pct > 0.80 {
+        colors::YELLOW
+    } else {
+        colors::BLUE
     }
 }
 
@@ -338,22 +427,7 @@ pub fn update(state: &mut LlamaApp, message: Message) -> Task<Message> {
                 let top_p = p.top_p;
                 let repeat_penalty = p.repeat_penalty;
 
-                // Build prompt from conversation history
-                let prompt = p
-                    .session
-                    .messages
-                    .iter()
-                    .filter(|m| !m.content.is_empty())
-                    .map(|m| {
-                        let role = match m.role {
-                            Role::User => "User",
-                            Role::Assistant => "Assistant",
-                            Role::System => "System",
-                        };
-                        format!("{}: {}", role, m.content)
-                    })
-                    .collect::<Vec<_>>()
-                    .join("\n");
+                let prompt = build_prompt(&p.session.messages, None);
 
                 Task::perform(
                     async move {
@@ -409,20 +483,7 @@ pub fn update(state: &mut LlamaApp, message: Message) -> Task<Message> {
                 )
             } else {
                 // Non-streaming mode
-                let prompt = p
-                    .session
-                    .messages
-                    .iter()
-                    .map(|m| {
-                        let role = match m.role {
-                            Role::User => "User",
-                            Role::Assistant => "Assistant",
-                            Role::System => "System",
-                        };
-                        format!("{}: {}", role, m.content)
-                    })
-                    .collect::<Vec<_>>()
-                    .join("\n");
+                let prompt = build_prompt(&p.session.messages, None);
 
                 let addr = p.server_address.clone();
                 let temperature = p.temperature;
@@ -499,32 +560,9 @@ pub fn update(state: &mut LlamaApp, message: Message) -> Task<Message> {
             state.status = String::new();
 
             let addr = p.server_address.clone();
-            let full_text = p
-                .session
-                .messages
-                .iter()
-                .map(|m| m.content.as_str())
-                .collect::<Vec<_>>()
-                .join("\n");
+            let messages = p.session.messages.clone();
 
-            Task::perform(
-                async move {
-                    let client = reqwest::Client::new();
-                    let resp = client
-                        .post(format!("{}/tokenize", addr))
-                        .json(&serde_json::json!({ "text": full_text }))
-                        .send()
-                        .await
-                        .map_err(|e| e.to_string())?;
-                    let body: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
-                    let count = body["count"].as_u64().unwrap_or(0) as usize;
-                    Ok::<usize, String>(count)
-                },
-                move |result| match result {
-                    Ok(count) => Message::TokenCounted(pane, count),
-                    Err(e) => Message::Error(e),
-                },
-            )
+            fire_tokenize_request(addr, messages, pane)
         }
 
         // ─── Token count updated for a pane ──────────────────
@@ -592,32 +630,9 @@ pub fn update(state: &mut LlamaApp, message: Message) -> Task<Message> {
             state.status = String::new();
 
             let addr = p.server_address.clone();
-            let full_text = p
-                .session
-                .messages
-                .iter()
-                .map(|m| m.content.as_str())
-                .collect::<Vec<_>>()
-                .join("\n");
+            let messages = p.session.messages.clone();
 
-            Task::perform(
-                async move {
-                    let client = reqwest::Client::new();
-                    let resp = client
-                        .post(format!("{}/tokenize", addr))
-                        .json(&serde_json::json!({ "text": full_text }))
-                        .send()
-                        .await
-                        .map_err(|e| e.to_string())?;
-                    let body: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
-                    let count = body["count"].as_u64().unwrap_or(0) as usize;
-                    Ok::<usize, String>(count)
-                },
-                move |result| match result {
-                    Ok(count) => Message::TokenCounted(pane, count),
-                    Err(e) => Message::Error(e),
-                },
-            )
+            fire_tokenize_request(addr, messages, pane)
         }
 
         // ─── Input changed on a pane ─────────────────────────
@@ -968,21 +983,7 @@ fn pane_subscription(pane: usize, p: &ChatPane) -> Subscription<Message> {
     let top_p = p.top_p;
     let repeat_penalty = p.repeat_penalty;
 
-    let prompt = p
-        .session
-        .messages
-        .iter()
-        .map(|m| {
-            let role = match m.role {
-                Role::User => "User",
-                Role::Assistant => "Assistant",
-                Role::System => "System",
-            };
-            format!("{}: {}", role, m.content)
-        })
-        .chain(std::iter::once(format!("User: {}", p.input_text)))
-        .collect::<Vec<_>>()
-        .join("\n");
+    let prompt = build_prompt(&p.session.messages, Some(&p.input_text));
 
     let id = format!("sse-{}-{}", pane, p.session.messages.len());
 
@@ -1057,10 +1058,23 @@ fn pane_subscription(pane: usize, p: &ChatPane) -> Subscription<Message> {
 }
 
 /// Map keyboard shortcuts to messages.
-fn handle_key_press(key: keyboard::Key, _: keyboard::Modifiers) -> Option<Message> {
+///
+/// Supported shortcuts:
+/// - `Escape` — Close settings / return to chat
+/// - `F11` — Toggle full-screen
+/// - `Ctrl+N` — Start a new chat on the active pane
+/// - `Ctrl+E` — Export session as JSON
+fn handle_key_press(key: keyboard::Key, modifiers: keyboard::Modifiers) -> Option<Message> {
+    let ctrl = modifiers.control();
     match key {
         keyboard::Key::Named(NamedKey::Escape) => Some(Message::CloseSettings),
         keyboard::Key::Named(NamedKey::F11) => Some(Message::ToggleFullscreen),
+        // Ctrl+N → New Chat
+        keyboard::Key::Character(text) if ctrl => match text.as_ref() {
+            "n" => Some(Message::NewChat(0)),
+            "e" => Some(Message::ExportJson),
+            _ => None,
+        },
         _ => None,
     }
 }
@@ -1089,11 +1103,11 @@ fn view_model_picker(state: &LlamaApp) -> Element<'_, Message> {
     let mut children = vec![
         iced::widget::text("llama-rs")
             .size(42)
-            .color(Color::from_rgba8(0x4A, 0x90, 0xE2, 1.0))
+            .color(colors::BLUE)
             .into(),
         iced::widget::text("LLM Inference Engine — Rust")
             .size(16)
-            .color(Color::from_rgba8(0xA0, 0xA0, 0xA0, 1.0))
+            .color(colors::GRAY)
             .into(),
         iced::widget::text("").size(12).into(),
     ];
@@ -1102,7 +1116,7 @@ fn view_model_picker(state: &LlamaApp) -> Element<'_, Message> {
         children.push(
             iced::widget::text(&state.status)
                 .size(14)
-                .color(Color::from_rgba8(0xE2, 0x4A, 0x4A, 1.0))
+                .color(colors::RED)
                 .into(),
         );
         children.push(iced::widget::text("").size(6).into());
@@ -1119,13 +1133,13 @@ fn view_model_picker(state: &LlamaApp) -> Element<'_, Message> {
         children.push(
             iced::widget::text("• Place .gguf files in ~/.local/share/llama-ui/models/")
                 .size(13)
-                .color(Color::from_rgba8(0xA0, 0xA0, 0xA0, 1.0))
+                .color(colors::GRAY)
                 .into(),
         );
         children.push(
             iced::widget::text("• Or click \"Browse\" to select a file")
                 .size(13)
-                .color(Color::from_rgba8(0xA0, 0xA0, 0xA0, 1.0))
+                .color(colors::GRAY)
                 .into(),
         );
         children.push(iced::widget::text("").size(8).into());
@@ -1156,7 +1170,7 @@ fn view_model_picker(state: &LlamaApp) -> Element<'_, Message> {
                         .into(),
                     iced::widget::text(model.path.to_string_lossy())
                         .size(11)
-                        .color(Color::from_rgba8(0xA0, 0xA0, 0xA0, 1.0))
+                        .color(colors::GRAY)
                         .into(),
                 ])
                 .spacing(4),
@@ -1192,7 +1206,11 @@ fn view_model_picker(state: &LlamaApp) -> Element<'_, Message> {
             } else {
                 llama_ui_core::theme::success_button_style
             })
-            .on_press(Message::StartChat)
+            .on_press_maybe(if state.models.is_empty() {
+                None
+            } else {
+                Some(Message::StartChat)
+            })
             .padding(iced::Padding::from([14, 32]))
             .width(Fill)
             .into(),
@@ -1223,12 +1241,12 @@ fn render_pane(state: &LlamaApp, pane: usize) -> Element<'_, Message> {
         row![
             iced::widget::text(format!("Pane {} — {}", pane, model_name))
                 .size(16)
-                .color(Color::from_rgba8(0xE0, 0xE0, 0xE0, 1.0)),
+                .color(colors::WHITE),
             iced::widget::container(iced::widget::text("").size(1))
                 .width(Fill)
                 .height(iced::Length::Fixed(1.0))
                 .style(|_theme: &iced::Theme| iced::widget::container::Style {
-                    background: Some(Color::from_rgba8(0x60, 0x60, 0x60, 0.5).into()),
+                    background: Some(colors::SEPARATOR.into()),
                     border: iced::Border::default(),
                     text_color: None,
                     shadow: iced::Shadow::default(),
@@ -1255,29 +1273,29 @@ fn render_pane(state: &LlamaApp, pane: usize) -> Element<'_, Message> {
                     pct * 100.0
                 )
             };
-            let color = if pct > 0.95 {
-                Color::from_rgba8(0xE2, 0x4A, 0x4A, 1.0)
-            } else {
-                Color::from_rgba8(0xE2, 0xC0, 0x4A, 1.0)
-            };
-            children.push(iced::widget::text(warning).size(13).color(color).into());
+            children.push(
+                iced::widget::text(warning)
+                    .size(13)
+                    .color(context_usage_color(pct))
+                    .into(),
+            );
         }
     }
 
     // ── Context usage progress bar ────────────────────────
     if p.context_limit > 0 {
         let pct = (p.total_tokens as f32 / p.context_limit as f32).min(1.0);
-        let bar_color = if pct > 0.95 {
-            Color::from_rgba8(0xE2, 0x4A, 0x4A, 0.9)
-        } else if pct > 0.80 {
-            Color::from_rgba8(0xE2, 0xC0, 0x4A, 0.9)
-        } else {
-            Color::from_rgba8(0x4A, 0x90, 0xE2, 0.9)
-        };
+        let bar_color = context_usage_color(pct as f64);
         children.push(
             iced::widget::container(iced::widget::text("").size(1))
                 .style(move |_theme: &iced::Theme| iced::widget::container::Style {
-                    background: Some(bar_color.into()),
+                    background: Some(
+                        iced::Color {
+                            a: 0.9,
+                            ..bar_color
+                        }
+                        .into(),
+                    ),
                     border: iced::Border {
                         radius: 2.0.into(),
                         width: 0.0,
@@ -1302,9 +1320,7 @@ fn render_pane(state: &LlamaApp, pane: usize) -> Element<'_, Message> {
                 move |s: &str| Message::BackendChanged(pane, s.to_string()),
             )
             .width(100),
-            iced::widget::text("│")
-                .size(13)
-                .color(Color::from_rgba8(0x60, 0x60, 0x60, 1.0)),
+            iced::widget::text("│").size(13).color(colors::GRAY_DARK),
             iced::widget::text(if p.use_streaming {
                 "⚡ Stream"
             } else {
@@ -1314,18 +1330,14 @@ fn render_pane(state: &LlamaApp, pane: usize) -> Element<'_, Message> {
             button(iced::widget::text("Toggle").size(11))
                 .on_press(Message::ToggleStreaming(pane))
                 .padding(iced::Padding::from([2, 8])),
-            iced::widget::text("│")
-                .size(13)
-                .color(Color::from_rgba8(0x60, 0x60, 0x60, 1.0)),
+            iced::widget::text("│").size(13).color(colors::GRAY_DARK),
             button(iced::widget::text("💬 System").size(11))
                 .on_press(Message::ToggleSystemPrompt(pane))
                 .padding(iced::Padding::from([2, 8])),
             button(iced::widget::text("🔄 New Chat").size(11))
                 .on_press(Message::NewChat(pane))
                 .padding(iced::Padding::from([2, 8])),
-            iced::widget::text("│")
-                .size(13)
-                .color(Color::from_rgba8(0x60, 0x60, 0x60, 1.0)),
+            iced::widget::text("│").size(13).color(colors::GRAY_DARK),
             button(iced::widget::text("⚙ Settings").size(11))
                 .on_press(Message::OpenSettings)
                 .padding(iced::Padding::from([2, 8])),
@@ -1344,7 +1356,7 @@ fn render_pane(state: &LlamaApp, pane: usize) -> Element<'_, Message> {
                 column(vec![
                     iced::widget::text("System Prompt:")
                         .size(12)
-                        .color(Color::from_rgba8(0xA0, 0xA0, 0xA0, 1.0))
+                        .color(colors::GRAY)
                         .into(),
                     text_input("Enter system prompt...", &p.system_prompt)
                         .on_input(move |s| Message::SystemPromptChanged(pane, s))
@@ -1394,9 +1406,9 @@ fn render_pane(state: &LlamaApp, pane: usize) -> Element<'_, Message> {
     // ── Messages ──────────────────────────────────────────
     for msg in &p.session.messages {
         let (role_label, role_color) = match msg.role {
-            Role::User => ("You", Color::from_rgba8(0x4A, 0x90, 0xE2, 1.0)),
-            Role::Assistant => ("AI", Color::from_rgba8(0x4A, 0xE2, 0x6A, 1.0)),
-            Role::System => ("System", Color::from_rgba8(0xA0, 0xA0, 0xA0, 1.0)),
+            Role::User => ("You", colors::BLUE),
+            Role::Assistant => ("AI", colors::GREEN),
+            Role::System => ("System", colors::GRAY),
         };
         let display_content = if msg.content.is_empty() && matches!(msg.role, Role::Assistant) {
             "Generating...".to_string()
@@ -1427,21 +1439,23 @@ fn render_pane(state: &LlamaApp, pane: usize) -> Element<'_, Message> {
     // ── Token counter ─────────────────────────────────────
     if p.total_tokens > 0 {
         let pct = if p.context_limit > 0 {
-            (p.total_tokens as f64 / p.context_limit as f64) * 100.0
+            p.total_tokens as f64 / p.context_limit as f64 * 100.0
         } else {
             0.0
         };
-        let counter_color = if pct > 95.0 {
-            Color::from_rgba8(0xE2, 0x4A, 0x4A, 1.0)
-        } else if pct > 80.0 {
-            Color::from_rgba8(0xE2, 0xC0, 0x4A, 1.0)
+        let counter_color = if pct > 0.95 {
+            colors::RED
+        } else if pct > 0.80 {
+            colors::YELLOW
         } else {
-            Color::from_rgba8(0xA0, 0xA0, 0xA0, 1.0)
+            colors::GRAY
         };
         children.push(
             iced::widget::text(format!(
                 "Tokens: {}/{} ({:.0}%)",
-                p.total_tokens, p.context_limit, pct
+                p.total_tokens,
+                p.context_limit,
+                pct * 100.0
             ))
             .size(11)
             .color(counter_color)
@@ -1458,7 +1472,7 @@ fn render_pane(state: &LlamaApp, pane: usize) -> Element<'_, Message> {
                 p.last_gen_tokens, p.last_gen_ms, tok_per_sec
             ))
             .size(11)
-            .color(Color::from_rgba8(0x80, 0x80, 0x80, 1.0))
+            .color(colors::GRAY_DARK)
             .into(),
         );
     }
@@ -1467,7 +1481,7 @@ fn render_pane(state: &LlamaApp, pane: usize) -> Element<'_, Message> {
     children.push(
         iced::widget::text("Sampling")
             .size(12)
-            .color(Color::from_rgba8(0x80, 0x80, 0x80, 1.0))
+            .color(colors::GRAY_DARK)
             .into(),
     );
     children.push(
@@ -1534,7 +1548,7 @@ fn render_pane(state: &LlamaApp, pane: usize) -> Element<'_, Message> {
                 .width(Fill)
                 .height(iced::Length::Fixed(1.0))
                 .style(|_theme: &iced::Theme| iced::widget::container::Style {
-                    background: Some(Color::from_rgba8(0x60, 0x60, 0x60, 0.5).into()),
+                    background: Some(colors::SEPARATOR.into()),
                     border: iced::Border::default(),
                     text_color: None,
                     shadow: iced::Shadow::default(),
@@ -1617,7 +1631,7 @@ fn view_loading(state: &LlamaApp) -> Element<'_, Message> {
         column(vec![
             iced::widget::text("llama-rs")
                 .size(32)
-                .color(Color::from_rgba8(0x4A, 0x90, 0xE2, 1.0))
+                .color(colors::BLUE)
                 .into(),
             iced::widget::text("").size(12).into(),
             iced::widget::text("Loading model...")
@@ -1627,12 +1641,12 @@ fn view_loading(state: &LlamaApp) -> Element<'_, Message> {
             iced::widget::text("").size(8).into(),
             iced::widget::text(&state.status)
                 .size(14)
-                .color(Color::from_rgba8(0xA0, 0xA0, 0xA0, 1.0))
+                .color(colors::GRAY)
                 .into(),
             iced::widget::text("").size(8).into(),
             iced::widget::text("This may take a moment on first run.")
                 .size(12)
-                .color(Color::from_rgba8(0x80, 0x80, 0x80, 1.0))
+                .color(colors::GRAY_DARK)
                 .into(),
         ])
         .spacing(4),
@@ -1649,23 +1663,19 @@ fn view_error(err: &str) -> Element<'_, Message> {
         column(vec![
             iced::widget::text("llama-rs")
                 .size(32)
-                .color(Color::from_rgba8(0x4A, 0x90, 0xE2, 1.0))
+                .color(colors::BLUE)
                 .into(),
             iced::widget::text("").size(8).into(),
             iced::widget::text("Error")
                 .size(24)
-                .color(Color::from_rgba8(0xE2, 0x4A, 0x4A, 1.0))
+                .color(colors::RED)
                 .into(),
             iced::widget::text("").size(8).into(),
-            iced::widget::container(
-                iced::widget::text(err)
-                    .size(14)
-                    .color(Color::from_rgba8(0xE2, 0x4A, 0x4A, 1.0)),
-            )
-            .style(llama_ui_core::theme::system_message_style)
-            .padding(iced::Padding::from([8, 12]))
-            .width(Fill)
-            .into(),
+            iced::widget::container(iced::widget::text(err).size(14).color(colors::RED))
+                .style(llama_ui_core::theme::system_message_style)
+                .padding(iced::Padding::from([8, 12]))
+                .width(Fill)
+                .into(),
             iced::widget::text("").size(16).into(),
             button(iced::widget::text("Back to Model Picker").size(16))
                 .style(llama_ui_core::theme::primary_button_style)
@@ -1689,7 +1699,7 @@ fn view_settings(state: &LlamaApp) -> Element<'_, Message> {
     children.push(
         iced::widget::text("Settings")
             .size(28)
-            .color(Color::from_rgba8(0x4A, 0x90, 0xE2, 1.0))
+            .color(colors::BLUE)
             .into(),
     );
     children.push(iced::widget::text("").size(8).into());
@@ -1739,10 +1749,13 @@ fn view_settings(state: &LlamaApp) -> Element<'_, Message> {
                 iced::widget::text("F11 — Toggle Full-screen")
                     .size(14)
                     .into(),
-                iced::widget::text("Enter — Send message (in text input)")
+                iced::widget::text("Ctrl+N — New Chat (reset session)")
                     .size(14)
                     .into(),
-                iced::widget::text("Ctrl+Enter — Also sends message")
+                iced::widget::text("Ctrl+E — Export Session as JSON")
+                    .size(14)
+                    .into(),
+                iced::widget::text("Enter — Send message (in text input)")
                     .size(14)
                     .into(),
             ])
