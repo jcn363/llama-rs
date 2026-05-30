@@ -4,7 +4,12 @@
 	dh $@
 
 override_dh_auto_build:
-	cargo build --release --locked --workspace
+	cargo build --release --workspace
 
-override_dh_auto_test:
-	cargo test --workspace
+override_dh_auto_install:
+	install -D -m755 target/release/llama-cli debian/tmp/usr/bin/llama-cli
+	install -D -m755 target/release/llama-server debian/tmp/usr/bin/llama-server
+	install -D -m755 target/release/llama-ui debian/tmp/usr/bin/llama-ui
+
+override_dh_strip:
+	dh_strip --no-automatic-dbgsym

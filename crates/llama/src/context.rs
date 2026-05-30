@@ -16,6 +16,7 @@ use crate::profile::ProfileResult;
 use crate::{Model, NormType};
 use ggml::backend::{Backend, QuantType};
 use gguf::GgmlType;
+use gguf::GgufError;
 
 /// Map a [`gguf::GgmlType`] to [`ggml::backend::QuantType`] if we have a kernel for it.
 fn quant_type_from_ggml(t: GgmlType) -> Option<QuantType> {

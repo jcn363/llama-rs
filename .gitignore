@@ -33,3 +33,11 @@ server.log
 .vscode/
 *.lock
 *.deb
+
+# Debian build artifacts
+/debian/tmp/
+/debian/.debhelper/
+/debian/debhelper-build-stamp
+/debian/files
+/debian/*.substvars
+/pkg/

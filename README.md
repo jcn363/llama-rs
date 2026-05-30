@@ -100,7 +100,7 @@ The design features:
 
 ```bash
 # Install from .deb package
-sudo dpkg -i llama-rs_0.1.0_amd64.deb
+sudo dpkg -i llama-rs_0.1.0-1_amd64.deb
 
 # Or build from source
 cargo build --release --workspace
@@ -383,7 +383,7 @@ A `.deb` package is provided for easy installation on Debian-based systems:
 
 ```bash
 # Install the package
-sudo dpkg -i llama-rs_0.1.0_amd64.deb
+sudo dpkg -i llama-rs_0.1.0-1_amd64.deb
 
 # Verify installation
 llama-cli --version

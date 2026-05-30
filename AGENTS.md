@@ -1,7 +1,7 @@
 # AGENTS.md
 
 ## Workspace
-- Workspace members (from `Cargo.toml`): `.uncensored/rust_persistence`, `crates/gguf`, `crates/ggml`, `crates/ggml-cpu`, `crates/ggml-cuda`, `crates/llama`, `crates/common`, `crates/llama-cli`, `crates/llama-server`.
+- Workspace members (from `Cargo.toml`): `crates/gguf`, `crates/ggml`, `crates/ggml-cpu`, `crates/ggml-cuda`, `crates/llama-core`, `crates/llama`, `crates/common`, `crates/config`, `crates/error`, `crates/llama-cli`, `crates/llama-server`, `crates/llama-ui-models`, `crates/llama-ui-session`, `crates/llama-ui-sandbox-client`, `crates/llama-ui`, `crates/llama-ui-core`.
 
 ## Build & Test Commands
 - `cargo fmt --all -- --check` – format check (CI step).
@@ -16,6 +16,7 @@
 ## Binaries / Entry Points
 - CLI: `./target/release/llama-cli -m model.gguf -p "prompt" -n 128`
 - Server: `./target/release/llama-server -m model.gguf --host 0.0.0.0 --port 8080`
+- UI: `./target/release/llama-ui`
 
 ## CI / Environment
 - Runs on Ubuntu with Rust stable toolchain; installs `clippy` and `rustfmt`.

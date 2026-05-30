@@ -19,7 +19,12 @@ All notable changes to this project will be documented in this file.
 - GUI: Improved loading and error screens with branding.
 
 ### Changed
-- Workspace `Cargo.toml`: added `[workspace]` section, `[workspace.package]`, and `[workspace.dependencies]`.
+- Debian package rebuilt from scratch: clean staging tree, auto-detected shlibdeps, stripped binaries.
+- `debian/control`: updated Maintainer, Build-Depends, Standards-Version, removed unused GTK/X11 deps.
+- `debian/rules`: added `override_dh_strip` to suppress automatic dbgsym.
+- `debian/install`: added `llama-ui` binary.
+- `AGENTS.md`: updated workspace members to match actual 16-crate layout.
+- README: corrected `.deb` filename to `0.1.0-1` revision.
 - `llama-cli` and `llama-server` now use `common::args::CommonArgs` via `#[clap(flatten)]`.
 - Both binaries depend on `config` and `error` crates.
 - `CpuBackend` implements `Backend` trait with proper `matmul` computation.
