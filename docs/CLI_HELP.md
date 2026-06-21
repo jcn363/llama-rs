@@ -122,9 +122,9 @@ When `--threads 0` (default), the CPU backend auto-detects the number of logical
 | Variable | Description |
 |----------|-------------|
 | `RUST_LOG` | Controls log verbosity (e.g., `debug`, `info`, `warn`, `error`). Default: `info`. |
-| `LLAMA_MODEL_PATH` | Default model path if `--model` is omitted. |
-| `LLAMA_NUM_THREADS` | Override thread count. |
-| `LLAMA_BACKEND` | Default backend (`cpu` or `cuda`). |
+| `LLAMA_MODEL_PATH` | Default model path if `--model` is omitted. *(Planned — not yet implemented)* |
+| `LLAMA_NUM_THREADS` | Override thread count. *(Planned — not yet implemented)* |
+| `LLAMA_BACKEND` | Default backend (`cpu` or `cuda`). *(Planned — not yet implemented)* |
 
 ## Exit Codes
 

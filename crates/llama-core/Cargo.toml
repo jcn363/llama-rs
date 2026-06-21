@@ -11,4 +11,3 @@ repository.workspace = true
 memmap2 = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 thiserror = { workspace = true }
-error = { workspace = true }

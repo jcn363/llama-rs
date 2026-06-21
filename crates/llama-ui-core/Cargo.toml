@@ -1,5 +1,6 @@
 [package]
 name = "llama-ui-core"
+description = "Shared UI types, theme configuration, and error types for llama-rs desktop GUI"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

@@ -24,7 +24,7 @@ llama-rs is a modular Rust workspace for LLM inference with a native desktop GUI
 
 ```
 llama-rs/
-├── Cargo.toml                  # Workspace root (16 members)
+├── Cargo.toml                  # Workspace root (17 members)
 ├── rustfmt.toml                # max_width=100, tab_spaces=4, reorder_imports
 ├── deny.toml                   # License policy (MIT, Apache-2.0, Unlicense)
 ├── .cargo/config.toml          # --target-cpu=bdver1
@@ -52,7 +52,7 @@ llama-rs/
 └── media/                       # Screenshots, diagrams
 ```
 
-The architecture enforces strict separation of concerns across 16 crates, organized into three layers:
+The architecture enforces strict separation of concerns across 17 crates, organized into three layers:
 
 1. **Foundation** — GGUF parsing, tensor operations, compute backends, core inference traits
 2. **Inference** — LLM inference engine, sampling, KV cache management
@@ -103,11 +103,11 @@ The architecture enforces strict separation of concerns across 16 crates, organi
 │   └─ error (error types)                                        │
 │                                                                 │
 │ common (shared utilities)                                       │
-│   ├─ error (error types)                                        │
-│   └─ config (configuration)                                     │
+│   └─ error (error types)                                        │
 │                                                                 │
 │ config (configuration management)                               │
-│   └─ error (error types)                                        │
+│   ├─ common (argument parsing)                                  │
+│   └─ serde (serialization)                                      │
 │                                                                 │
 │ error (unified error handling)                                  │
 └─────────────────────────────────────────────────────────────────┘
@@ -192,26 +192,26 @@ User Saves Session
 
 #### `gguf` (GGUF v3 Parser)
 - **Responsibility**: Parse GGUF file format, extract tensors, metadata
-- **Key Types**: `GgufFile`, `Tensor`, `MetadataValue`
-- **Dependencies**: `error`
+- **Key Types**: `GgufReader`, `TensorInfo`, `GgufValue`
+- **Dependencies**: `llama-core`, `error`, `thiserror`, `bytemuck`, `byteorder`, `memmap2`, `rayon`, `half`
 - **Tests**: Unit tests for parsing, dequantization, metadata extraction
 
 #### `ggml` (Tensor Library)
 - **Responsibility**: Core tensor operations, computation graphs, dtype support
-- **Key Types**: `Tensor`, `DType`, `ComputeGraph`
-- **Dependencies**: `error`
+- **Key Types**: `Tensor`, `DType`, `Graph`
+- **Dependencies**: `llama-core`, `bytemuck`, `half`, `libm`
 - **Tests**: Unit tests for tensor operations, dtype conversions
 
 #### `ggml-cpu` (CPU Backend)
 - **Responsibility**: AVX/SSE4.2 SIMD matmul, block-tiling, CPU inference
-- **Key Functions**: `matmul_f32`, `matmul_q4`, `dot_product`
-- **Dependencies**: `ggml`, `error`
+- **Key Functions**: `matmul_f32`, `dot_f32`
+- **Dependencies**: `ggml`
 - **Tests**: Benchmarks, correctness tests, SIMD verification
 
 #### `ggml-cuda` (CUDA Backend)
 - **Responsibility**: cuBLAS matmul, VRAM tracking, GPU inference
-- **Key Functions**: `matmul_cuda`, `vram_available`
-- **Dependencies**: `ggml`, `error`, `cudarc`
+- **Key Functions**: `matmul_cuda`, `free_vram`
+- **Dependencies**: `ggml`, `cudarc`, `error`
 - **Tests**: GPU-only tests (skipped if CUDA unavailable)
 
 #### `error` (Unified Error Handling)
@@ -222,21 +222,21 @@ User Saves Session
 
 #### `llama-core` (Core Inference Traits)
 - **Responsibility**: Core inference traits and shared types used across inference and application layers
-- **Key Types**: `Model`, `InferenceContext`, `KvCache`, `SamplingConfig` (re-exported)
+- **Key Types**: `Model`, `InferenceContext`, `KvCache`
 - **Dependencies**: `error`
 - **Tests**: Unit tests for trait definitions and shared types
 
 #### `config` (Configuration Management)
 - **Responsibility**: Load/save configuration from environment and TOML
-- **Key Types**: `Config`, `UiConfig`
-- **Dependencies**: `error`
+- **Key Types**: `Config`
+- **Dependencies**: `common`, `serde`, `tracing`, `toml`
 - **Tests**: Unit tests for config loading, TOML serialization
 
 #### `common` (Shared Utilities)
 - **Responsibility**: Sampling config, chat templates, argument parsing
-- **Key Types**: `SamplingConfig`, `ChatTemplate`
-- **Key Functions**: `render_chat_template`, `get_builtin_template`
-- **Dependencies**: `error`, `config`, `minijinja`
+- **Key Types**: `SamplingConfig`
+- **Key Functions**: `render_chat_template`
+- **Dependencies**: `error`, `minijinja`
 - **Tests**: Unit tests for sampling, template rendering
 
 ### Inference Layer
@@ -245,7 +245,7 @@ User Saves Session
 - **Responsibility**: Transformer forward pass, attention, KV cache, token generation
 - **Key Types**: `Model`, `InferenceContext`, `KvCache`
 - **Key Functions**: `generate`, `forward_pass`, `sample_logits`, `encode`
-- **Dependencies**: `gguf`, `ggml`, `ggml-cpu`, `ggml-cuda`, `common`, `error`
+- **Dependencies**: `gguf`, `ggml`, `ggml-cpu`, `ggml-cuda` (optional), `common`
 - **Tests**: Unit tests for inference, attention, KV cache; integration tests with tiny models
 
 ### Application Layer
@@ -253,7 +253,7 @@ User Saves Session
 #### `llama-cli` (Interactive CLI)
 - **Responsibility**: Command-line interface for text generation
 - **Key Functions**: `main`, argument parsing, prompt loop
-- **Dependencies**: `llama`, `common`, `error`
+- **Dependencies**: `llama`, `common`
 - **Tests**: Integration tests with tiny models
 
 #### `llama-server` (HTTP REST API)
@@ -262,29 +262,28 @@ User Saves Session
   - `POST /completion` — Generate tokens (streaming or non-streaming)
   - `GET /health` — Server health check
   - `POST /tokenize` — Tokenize prompt
-  - `POST /samplers` — Update sampling parameters
+  - `GET /samplers` — Get current sampling parameters
   - `GET /v1/models` — List available models
-- **Dependencies**: `llama`, `common`, `error`, `tokio`, `axum`, `tower`
+- **Dependencies**: `llama`, `common`, `tokio`, `axum`, `tower`
 - **Tests**: Integration tests with HTTP client
 
 #### `llama-ui` (Desktop GUI)
 - **Responsibility**: Multi-pane chat interface, model management, session persistence
 - **Key Components**:
-  - `app.rs` — Main application state machine, update/view/subscription logic
-  - `theme.rs` — Custom button style module (delegates to `llama_ui_core::theme`)
+  - `app.rs` — Main application state machine, update/view/subscription logic (includes inline button styles delegating to `llama_ui_core::theme`)
 - **Key Features**:
   - Streaming & non-streaming modes per pane
   - Context usage progress bar with color-coded warnings
   - Clear chat, session export/import, model browsing
   - Per-pane backend selection (auto/cpu/cuda)
   - Per-pane resource limits (memory/CPU)
-- **Dependencies**: `llama-ui-models`, `llama-ui-session`, `llama-ui-sandbox-client`, `common`, `error`, `iced`, `tokio`
+- **Dependencies**: `llama-ui-core`, `llama-ui-models`, `llama-ui-session`, `llama-ui-sandbox-client`, `common`, `iced`, `tokio`
 - **Tests**: Unit tests for model picker rendering
 
 #### `llama-ui-core` (Shared UI Types)
 - **Responsibility**: Shared UI types, theme, and error types for the desktop GUI
 - **Key Types**: Theme configuration, UI error types, shared component types
-- **Dependencies**: `error`
+- **Dependencies**: `iced`, `thiserror`, `serde_json`
 - **Tests**: Unit tests for theme and type definitions
 
 #### `llama-ui-models` (Model Discovery)
@@ -298,14 +297,14 @@ User Saves Session
 - **Responsibility**: Manage chat messages, export to JSON/Markdown/plain text
 - **Key Types**: `Session`, `ChatMessage`, `Role`
 - **Key Functions**: `add_message`, `export_json`, `export_markdown`, `export_plain`
-- **Dependencies**: `common`, `error`
+- **Dependencies**: `llama-ui-core`, `common`
 - **Tests**: Unit tests for session management, export formats
 
 #### `llama-ui-sandbox-client` (Sandbox Server Spawning)
 - **Responsibility**: Spawn llama-server subprocess with resource limits
 - **Key Types**: `SandboxClient`, `ResourceLimits`
 - **Key Functions**: `spawn`, `wait_for_ready`, `health_check`
-- **Dependencies**: `error`, `tokio`, `reqwest`, `nix`
+- **Dependencies**: `llama-ui-core`, `tokio`, `reqwest`, `nix`
 - **Tests**: Unit tests for spawn logic, resource limit application
 
 ## Key Design Decisions

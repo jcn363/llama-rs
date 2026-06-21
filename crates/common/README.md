@@ -65,7 +65,6 @@ struct MyArgs {
 ## Dependencies
 
 - `error` crate (unified error types)
-- `config` crate (configuration management)
 - `clap` (argument parsing)
 - `minijinja` (template rendering)
-- `serde` / `serde_json` (serialization)
+- `serde` (serialization)

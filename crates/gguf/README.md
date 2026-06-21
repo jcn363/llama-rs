@@ -4,8 +4,10 @@ Handles the GGUF model file format used for Llama models.
 
 ## Key Public APIs
 
-- `gguf::reader::Reader` – parse GGUF files.
-- `gguf::writer::Writer` – write GGUF files.
+- `gguf::GgufReader` – parse GGUF files with memory-mapped I/O.
+- `gguf::TensorInfo`, `gguf::MmapTensor` – tensor metadata and access.
+- `gguf::GgufValue`, `gguf::GgmlType`, `gguf::GgufType` – metadata and type enums.
+- `gguf::GgufError`, `gguf::GgufResult` – error handling.
 
 ## Features
 

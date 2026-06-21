@@ -218,7 +218,7 @@ data: {"content": "", "stop": true}
 | `content` | `string` | A single decoded token. Empty string on the final stop chunk. |
 | `stop` | `bool` | `false` for content chunks, `true` for the final termination chunk. |
 
-**Implementation note:** The server collects all tokens in a blocking thread first, then converts the collection into an SSE stream. The client does not see tokens until generation completes.
+**Implementation note:** The server generates all tokens in a spawn_blocking task, collects them into a Vec, then wraps the result as an SSE event stream. Clients receive all tokens at once when generation completes.
 
 ---
 
