@@ -69,7 +69,7 @@ impl ModelConfig {
     /// Parses the `backend` and `cache_strategy` strings from
     /// [`common::args::CommonArgs`] into their enum equivalents.
     /// Threads default to 0 (auto-detect) and are resolved by
-    /// [`CpuBackend`](crate::CpuBackend) at construction time.
+    /// [`CpuBackend`](ggml_cpu::CpuBackend) at construction time.
     pub fn from_common_args(common: &common::args::CommonArgs) -> Self {
         let backend_type = match common.backend.as_str() {
             "cpu" => BackendType::Cpu,

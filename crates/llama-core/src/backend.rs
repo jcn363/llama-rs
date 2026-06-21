@@ -1,6 +1,7 @@
 //! Hardware backend types shared across backend implementations.
 
-/// Supported quantized tensor types for use with [`Backend::mat_vec_quant`].
+/// Supported quantized tensor types for use with
+/// `Backend::mat_vec_quant` (the `ggml::backend::Backend` trait).
 ///
 /// Each variant corresponds to a GGML quantization format with known
 /// block structure (block size in elements, block size in bytes).

@@ -117,18 +117,18 @@ cargo build --workspace
 cargo build --release --workspace
 
 # Run CLI
-./target/release/llama-cli -m model.gguf -p "Hello, world!" -n 128
+./target/release/llama-cli --model model.gguf --prompt "Hello, world!" --n-predict 128
 
 # Run server
-./target/release/llama-server -m model.gguf --host 0.0.0.0 --port 8080
+./target/release/llama-server --model model.gguf --host 0.0.0.0 --port 8080
 
 # Test
 cargo test --workspace
 
 # Benchmarks
 cargo bench -p ggml-cpu --bench cpu_bench
-cargo bench -p llama --bench kv_cache
-cargo bench -p llama --bench attention
+cargo bench -p llama --bench kv_cache_bench
+cargo bench -p llama --bench attention_bench
 ```
 
 ## Desktop UI (llama-ui)
@@ -231,7 +231,7 @@ struct MyArgs {
 
 - **GGUF v3 parser**: Full support for 13 metadata types, 42 tensor types, memory-mapped I/O, and all quantization types used by Ollama (Q8_K, Q1_0, Q2_K, Q3_K, Q4_K, Q5_K, Q6_K, Q8_0, Q8_1, Q4_0, Q4_1, Q5_0, Q5_1, IQ_XXS, IQ_XS, IQ_S, IQ_M) with dedicated imatrix module for importance matrix quantizations
 - **SIMD matmul**: AVX 8-wide (32 floats/iter) → SSE4.2 4-wide (16 floats/iter) → scalar fallback
-- **CUDA backend**: cuBLAS matmul, VRAM tracking (enabled by default, requires CUDA toolkit)
+- **CUDA backend**: cuBLAS matmul, VRAM tracking (opt-in via `--features cuda`, requires CUDA toolkit)
 - **Inference engine**: RMSNorm, RoPE with dynamic scaling (Linear/NTK/Dynamic NTK), multi-head attention with GQA, SwiGLU FFN (GELU for Gemma, ReLU² for Phi-3), KV cache with prefix caching and configurable strategies, flash attention, QK-norm (Gemma2), sliding window attention (Mistral)
 - **Sampling**: Greedy, temperature, top-k, top-p (nucleus)
 - **Multi-architecture support**: Llama, Mistral, Phi2/3, Gemma/Gemma2, Qwen2, StableLM
@@ -245,27 +245,27 @@ struct MyArgs {
 **llama-cli** — Interactive text generation:
 
 ```text
-llama-cli -m model.gguf [-p "prompt"] [-n 128] [-t 0] [-c 512]
+llama-cli --model model.gguf [--prompt "prompt"] [--n-predict 128] [--threads 0] [--ctx-size 512]
 ```
 
-- `-m, --model` — Path to GGUF model file (required)
-- `-p, --prompt` — Input prompt (empty for interactive mode)
-- `-n, --n-predict` — Maximum tokens to generate (default: 128)
-- `-t, --threads` — Worker threads (0 = auto-detect)
-- `-c, --ctx-size` — Context window size (default: 512)
+- `--model` — Path to GGUF model file (required)
+- `--prompt` — Input prompt (empty for interactive mode)
+- `--n-predict` — Maximum tokens to generate (default: 128)
+- `--threads` — Worker threads (0 = auto-detect)
+- `--ctx-size` — Context window size (default: 512)
 - `--verbose` — Enable debug logging
 
 **llama-server** — HTTP inference API:
 
 ```text
-llama-server -m model.gguf [--host 127.0.0.1] [--port 8080]
+llama-server --model model.gguf [--host 127.0.0.1] [--port 8080]
 ```
 
-- `-m, --model` — Path to GGUF model file (required)
+- `--model` — Path to GGUF model file (required)
 - `--host` — Bind address (default: 127.0.0.1)
-- `-p, --port` — Listen port (default: 8080)
-- `-t, --threads` — Worker threads (0 = auto-detect)
-- `-c, --ctx-size` — Context window size (default: 512)
+- `--port` — Listen port (default: 8080)
+- `--threads` — Worker threads (0 = auto-detect)
+- `--ctx-size` — Context window size (default: 512)
 
 **Endpoints:**
 
@@ -286,8 +286,8 @@ llama-server -m model.gguf [--host 127.0.0.1] [--port 8080]
 | `cargo test [test_name] -- --nocapture`     | Run a single test with output                        |
 | `cargo bench -p ggml-cpu --bench cpu_bench` | Run CPU benchmarks                                   |
 | `cargo bench -p llama --bench profiling`    | Run profiling benchmarks                             |
-| `cargo bench -p llama --bench kv_cache`     | Run KV cache benchmarks                              |
-| `cargo bench -p llama --bench attention`    | Run attention (RoPE scaling + flash attn) benchmarks |
+| `cargo bench -p llama --bench kv_cache_bench` | Run KV cache benchmarks                              |
+| `cargo bench -p llama --bench attention_bench` | Run attention (RoPE scaling + flash attn) benchmarks |
 
 ### Linting & Formatting
 
@@ -302,10 +302,10 @@ llama-server -m model.gguf [--host 127.0.0.1] [--port 8080]
 
 ### CUDA Build
 
-CUDA is enabled by default (requires NVIDIA GPU + CUDA toolkit). To build without CUDA:
+CUDA is opt-in via `--features cuda` (requires NVIDIA GPU + CUDA toolkit). To build without CUDA:
 
 ```bash
-cargo build --release --no-default-features
+cargo build --release --no-default-features -p llama
 ```
 
 ## Build Configuration

@@ -22,11 +22,11 @@
 
 /// Hardware backend trait for tensor operations.
 ///
-/// Defines the [`Backend`] trait that all hardware backends (CPU, CUDA, etc.)
+/// Defines the [`Backend`](crate::backend::Backend) trait that all hardware backends (CPU, CUDA, etc.)
 /// must implement.
 ///
 /// This is the plugin interface: adding a new hardware backend means creating a
-/// new crate that implements [`Backend`] and registering it with the registry.
+/// new crate that implements [`Backend`](crate::backend::Backend) and registering it with the registry.
 pub mod backend;
 
 /// Data-type enumeration and conversion helpers.

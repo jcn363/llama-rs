@@ -6,13 +6,13 @@ Command-line interface for interactive text generation using GGUF models.
 
 ```bash
 # Interactive mode (reads prompt from stdin)
-llama-cli -m model.gguf
+llama-cli --model model.gguf
 
 # Single prompt
-llama-cli -m model.gguf -p "Hello, world!" -n 128
+llama-cli --model model.gguf --prompt "Hello, world!" --n-predict 128
 
 # With custom sampling
-llama-cli -m model.gguf -p "Write a haiku" --temperature 0.5 --top-k 20 --seed 42
+llama-cli --model model.gguf --prompt "Write a haiku" --temperature 0.5 --top-k 20 --seed 42
 ```
 
 ## Source
@@ -27,12 +27,12 @@ The binary flattens `common::args::CommonArgs` and adds three CLI-specific flags
 
 | Flag | Short | Type | Default | Description |
 |------|-------|------|---------|-------------|
-| `--model` | `-m` | `String` | — | **Required.** Path to GGUF model file. |
+| `--model` | — | `String` | — | **Required.** Path to GGUF model file. |
 | `--prompt` | `-p` | `String` | `""` | Prompt text. Empty = interactive mode. |
 | `--n-predict` | `-n` | `usize` | `128` | Max tokens to generate. |
 | `--verbose` | — | `bool` | `false` | Enable debug logging. |
 
-Plus all `CommonArgs` flags (see [common/README.md](../common/README.md)).
+Plus all `CommonArgs` flags (see [common/README.md](../common/README.md)). **Note:** `CommonArgs` flags only have long forms (no short flags).
 
 ## Build
 

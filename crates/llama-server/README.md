@@ -5,7 +5,7 @@ HTTP server exposing LLM inference via a REST API. Built with **axum 0.8** and *
 ## Usage
 
 ```bash
-llama-server -m model.gguf --host 0.0.0.0 --port 8080
+llama-server --model model.gguf --host 0.0.0.0 --port 8080
 ```
 
 ## Source
@@ -18,11 +18,11 @@ llama-server -m model.gguf --host 0.0.0.0 --port 8080
 
 | Flag | Short | Type | Default | Description |
 |------|-------|------|---------|-------------|
-| `--model` | `-m` | `String` | — | **Required.** Path to GGUF model file. |
+| `--model` | — | `String` | — | **Required.** Path to GGUF model file. |
 | `--host` | — | `String` | `127.0.0.1` | Host address to bind to. |
 | `--port` | `-p` | `u16` | `8080` | Port to listen on. |
 
-Plus all `CommonArgs` flags (see [common/README.md](../common/README.md)).
+Plus all `CommonArgs` flags (see [common/README.md](../common/README.md)). **Note:** `CommonArgs` flags only have long forms (no short flags).
 
 ## API Endpoints
 

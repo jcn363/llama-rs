@@ -1,20 +1,22 @@
 //! Hardware backend trait for tensor operations.
 //!
-//! Defines the [`Backend`] trait that all hardware backends (CPU, CUDA, etc.)
+//! Defines the [`Backend`](crate::backend::Backend) trait that all hardware backends (CPU, CUDA, etc.)
 //! must implement.
 //!
 //! This is the plugin interface: adding a new hardware backend means creating a
-//! new crate that implements [`Backend`] and registering it with the registry.
+//! new crate that implements [`Backend`](crate::backend::Backend) and registering it with the registry.
 //!
 //! # Quantized types
 //!
-//! The [`QuantType`](llama_core::QuantType) enum and [`Backend::mat_vec_quant`] method support
-//! quantized weight formats (Q4_0, Q8_0, Q4_1).  Backends can override
+//! The [`QuantType`](llama_core::QuantType) enum and
+//! [`Backend::mat_vec_quant`](crate::backend::Backend::mat_vec_quant) method
+//! support quantized weight formats (Q4_0, Q8_0, Q4_1).  Backends can override
 //! `mat_vec_quant` with format-specific kernels for 2–4× throughput
 //! improvement over dequantize-then-compute.
 //!
-//! [`QuantType`] and [`BackendInfo`] are re-exported from `llama_core` for
-//! convenience (see the re-exports at the bottom of this module).
+//! [`QuantType`](crate::backend::QuantType) and
+//! [`BackendInfo`](crate::backend::BackendInfo) are re-exported from
+//! `llama_core` for convenience (see the re-exports at the bottom of this module).
 
 use crate::tensor::Tensor;
 

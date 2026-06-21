@@ -42,7 +42,7 @@ fn dequantize_block(block: &[u8], quant_type: QuantType, out: &mut [f32]) {
 ///
 /// Dequantizes each row block-by-block and computes dot products.
 /// This is a portable fallback — backends with format-specific kernels
-/// should override [`Backend::mat_vec_quant`].
+/// should override [`Backend::mat_vec_quant`](crate::backend::Backend::mat_vec_quant).
 pub fn default_mat_vec_quant(
     weight: &[u8],
     quant_type: QuantType,

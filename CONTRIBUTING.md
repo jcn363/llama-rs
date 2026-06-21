@@ -30,10 +30,10 @@ For an optimized release build:
 cargo build --release --workspace
 ```
 
-CUDA support is enabled by default (requires CUDA toolkit). To build without CUDA:
+CUDA support is opt-in via `--features cuda` (requires CUDA toolkit). To build without CUDA:
 
 ```bash
-cargo build --release --no-default-features -p ggml-cuda
+cargo build --release --no-default-features -p llama
 ```
 
 ## Testing
