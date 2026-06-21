@@ -11,6 +11,9 @@ server.log
 # CodeGraph MCP database
 .codegraph/
 
+# graphify knowledge graph output
+graphify-out/
+
 # Editor / OS junk
 .DS_Store
 *~

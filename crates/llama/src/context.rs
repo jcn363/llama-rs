@@ -16,7 +16,6 @@ use crate::profile::ProfileResult;
 use crate::{Model, NormType};
 use ggml::backend::{Backend, QuantType};
 use gguf::GgmlType;
-use gguf::GgufError;
 
 /// Map a [`gguf::GgmlType`] to [`ggml::backend::QuantType`] if we have a kernel for it.
 fn quant_type_from_ggml(t: GgmlType) -> Option<QuantType> {
@@ -236,11 +235,15 @@ impl InferenceContext {
             toks.truncate(self.config.n_ctx);
         }
 
-         // Phase 1: Prepare KV cache according to strategy.
-         // IMPORTANT: drop the lock before Phase 2 (prefill), because
-         // forward_pass() also acquires the KV cache write lock.
-         {
-             let mut kv_cache = self.model.kv_cache.write().expect("RwLock poisoned - this indicates a bug in the code");
+        // Phase 1: Prepare KV cache according to strategy.
+        // IMPORTANT: drop the lock before Phase 2 (prefill), because
+        // forward_pass() also acquires the KV cache write lock.
+        {
+            let mut kv_cache = self
+                .model
+                .kv_cache
+                .write()
+                .expect("RwLock poisoned - this indicates a bug in the code");
             match self.config.cache_strategy {
                 CacheStrategy::Prefix => {
                     // Find longest common prefix between new prompt and cached tokens
@@ -470,7 +473,11 @@ impl InferenceContext {
                     }
                 }
 
-                let mut kv_cache = self.model.kv_cache.write().expect("RwLock poisoned - this indicates a bug in the code");
+                let mut kv_cache = self
+                    .model
+                    .kv_cache
+                    .write()
+                    .expect("RwLock poisoned - this indicates a bug in the code");
                 let position_offset = kv_cache.get_layer_ref(layer_idx).cur_len;
                 let attn_output = multi_head_attention_with_cache(
                     n_head,

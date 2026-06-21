@@ -197,16 +197,11 @@ fn inference_should_generate_tokens() {
 
 ## Clippy & Linting
 
-### Workspace Lints
-- All crates allow `clippy::pedantic` globally
-- Individual crates opt in with `#![deny(clippy::pedantic)]`
-- Explicit allow-list for exceptions
-
-```rust
-// In lib.rs or main.rs
-#![deny(clippy::pedantic)]
-#![allow(clippy::module_name_repetitions)]  // Exception
-```
+### Clippy Configuration
+- No workspace-level lint config in `[workspace.lints]`
+- Only `ggml-cuda` enables `#![deny(clippy::pedantic)]` at the crate level
+- Individual crates may opt in or allow specific lints
+- CI runs `cargo clippy --workspace -- -D warnings` which treats all warnings as errors
 
 ### CI Check
 ```bash

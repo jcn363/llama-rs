@@ -47,7 +47,7 @@ Before reviewing, familiarize yourself with Apollo's Rust best practices. Read A
 
 ### Linting
 
-Run regularly: `cargo clippy --all-targets --all-features --locked -- -D warnings`
+Run regularly: `cargo clippy --workspace -- -D warnings`
 
 Key lints to watch:
 
@@ -57,7 +57,7 @@ Key lints to watch:
 
 Use `#[expect(clippy::lint)]` over `#[allow(...)]` with justification comment.
 
-> **llama-rs notes:** The workspace uses a different lint command: `cargo clippy --workspace -- -D warnings`. Clippy pedantic lints are allowed at the workspace level (`Cargo.toml:51-53`) — individual crates opt in with `#![deny(clippy::pedantic)]` and explicit allow-lists. See `CODE_STYLE.md#Clippy-Lints`. Uses `#[expect(dead_code)]` over `#[allow(dead_code)]` per the modern convention.
+> **llama-rs notes:** The workspace uses: `cargo clippy --workspace -- -D warnings`. There is no workspace-level lint config — only `ggml-cuda` enables `#![deny(clippy::pedantic)]` at the crate level. See `CODE_STYLE.md#Clippy-Linting`. Uses `#[expect(dead_code)]` over `#[allow(dead_code)]` per the modern convention.
 
 ### Testing
 
@@ -146,7 +146,7 @@ The Rust Library Team maintains a comprehensive set of API design guidelines. Ke
 - Destructors must never fail; provide a separate `close()` method that returns `Result` ([C-DTOR-FAIL])
 - Destructors should not block; provide explicit shutdown methods ([C-DTOR-BLOCK])
 
-> **llama-rs notes:** The project uses `assert_eq!` with explicit shape error messages for argument validation (e.g., `matmul.rs:25-27`). Rust API Guidelines naming: conversion methods use `as_`/`to_`/`into_` prefixes. Feature name uses the recommended `dep:` syntax (`cuda = ["dep:cudarc"]`). The `GgufError` type implements `std::error::Error` via `thiserror` and is `Send + Sync + 'static`. See `ARCHITECTURE.md#Core-Components` for the full crate breakdown.
+> **llama-rs notes:** The project uses `assert_eq!` with explicit shape error messages for argument validation (e.g., `matmul.rs:25-27`). Rust API Guidelines naming: conversion methods use `as_`/`to_`/`into_` prefixes. Feature gate uses the simple syntax: `cuda = ["cudarc"]` (not `dep:` prefix). The `GgufError` type implements `std::error::Error` via `thiserror` and is `Send + Sync + 'static`. See `ARCHITECTURE.md#Core-Components` for the full crate breakdown.
 
 ### A.2 Cargo & Workspace Management
 
@@ -168,7 +168,7 @@ The Rust Library Team maintains a comprehensive set of API design guidelines. Ke
 - Test with `--no-default-features` in CI to catch breakage.
 - Document available features at the crate level (`//!` in `lib.rs`) or in README.
 
-> **llama-rs notes:** Workspace uses `resolver = "2"` (not `"3"`) despite edition 2024 — this is a deliberate choice for compatibility. Features follow the naming rule: `cuda` feature enables CUDA (`dep:cudarc` syntax). The `cuda` feature is now enabled by default (`default = ["cuda"]` in `ggml-cuda/Cargo.toml`). Workspace uses `[workspace.dependencies]`, `[workspace.package]`, and `[workspace.lints]` for shared configuration — see `Cargo.toml`.
+> **llama-rs notes:** Workspace uses `resolver = "2"` (not `"3"`) despite edition 2024 — this is a deliberate choice for compatibility. Features follow the naming rule: `cuda` feature enables CUDA (`dep:cudarc` syntax). The `cuda` feature is now enabled by default (`default = ["cuda"]` in `ggml-cuda/Cargo.toml`). Workspace uses `[workspace.dependencies]` and `[workspace.package]` for shared configuration — see `Cargo.toml`. Note: no `[workspace.lints]` section; lint config is per-crate.
 
 **Profiles & Build Optimization**
 - Use `lto = "thin"` for most release builds; `lto = "fat"` for final distribution builds.
@@ -176,7 +176,7 @@ The Rust Library Team maintains a comprehensive set of API design guidelines. Ke
 - Use `debug = 1` in release for line-number-only backtraces without full perf loss.
 - Configure `.cargo/config.toml` for target-specific settings, network timeouts, and build parallelization.
 
-> **llama-rs notes:** Release profile: `opt-level = 3`, `lto = "thin"`, `codegen-units = 1`, `strip = "debuginfo"` (`Cargo.toml:55-59`). The `.cargo/config.toml` sets `target-cpu=bdver1` for AMD Opteron 3280 — see `CODE_STYLE.md`. No custom profiling profile defined (uses default release).
+> **llama-rs notes:** Release profile: `lto = true`, `panic = "abort"` (no explicit `opt-level`, `codegen-units`, or `strip`). See `Cargo.toml`. The `.cargo/config.toml` sets `target-cpu=bdver1` for AMD Opteron 3280 — see `CODE_STYLE.md`. No custom profiling profile defined (uses default release).
 
 > **llama-rs notes:** Crates are organized under `crates/` by domain following the recommended layout. Uses modern `submodule.rs` style (no `mod.rs`). Struct definitions placed in `lib.rs`, `impl` blocks in named files (`model.rs`, `reader.rs`) — see `CODE_STYLE.md#File-Organization`. Visibility follows narrowest-modifier rule: `pub(crate)` for internal utilities, `pub` only for intentional public API. Re-exports via `pub use` in `lib.rs` decouple file structure from API surface.
 

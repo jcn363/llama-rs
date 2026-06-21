@@ -32,7 +32,7 @@ llama-rs/
 ├── crates/
 │   ├── error/                  # Unified error handling — Error enum, Result<T> alias
 │   ├── config/                 # Configuration management — Config struct, env-based loading
-│   ├── gguf/                   # GGUF v3 file parser (no deps on other internal crates)
+│   ├── gguf/                   # GGUF v3 file parser with memory-mapped I/O
 │   ├── ggml/                   # Core tensor types + computation graph + Backend trait (depends on nothing)
 │   ├── ggml-cpu/               # CPU backend: implements Backend trait, SIMD matmul (depends on ggml)
 │   ├── ggml-cuda/              # CUDA backend: implements Backend trait, cuBLAS (depends on ggml, requires CUDA toolkit)
@@ -52,11 +52,11 @@ llama-rs/
 └── media/                       # Screenshots, diagrams
 ```
 
-The architecture enforces strict separation of concerns across 14 crates, organized into three layers:
+The architecture enforces strict separation of concerns across 16 crates, organized into three layers:
 
-1. **Foundation** — GGUF parsing, tensor operations, compute backends
+1. **Foundation** — GGUF parsing, tensor operations, compute backends, core inference traits
 2. **Inference** — LLM inference engine, sampling, KV cache management
-3. **Application** — CLI, HTTP server, desktop GUI, session management
+3. **Application** — CLI, HTTP server, desktop GUI, session management, shared UI types
 
 ## Crate Dependency Graph
 
@@ -84,8 +84,7 @@ The architecture enforces strict separation of concerns across 14 crates, organi
 │   ├─ ggml-cpu (CPU backend)                                     │
 │   ├─ ggml-cuda (CUDA backend)                                   │
 │   ├─ gguf (model loading)                                       │
-│   ├─ common (sampling, error handling)                          │
-│   └─ config (configuration)                                     │
+│   └─ common (sampling, error handling)                          │
 ├─────────────────────────────────────────────────────────────────┤
 │ Foundation Layer                                                │
 ├─────────────────────────────────────────────────────────────────┤
@@ -221,6 +220,12 @@ User Saves Session
 - **Dependencies**: None (foundational)
 - **Tests**: Unit tests for error formatting
 
+#### `llama-core` (Core Inference Traits)
+- **Responsibility**: Core inference traits and shared types used across inference and application layers
+- **Key Types**: `Model`, `InferenceContext`, `KvCache`, `SamplingConfig` (re-exported)
+- **Dependencies**: `error`
+- **Tests**: Unit tests for trait definitions and shared types
+
 #### `config` (Configuration Management)
 - **Responsibility**: Load/save configuration from environment and TOML
 - **Key Types**: `Config`, `UiConfig`
@@ -275,6 +280,12 @@ User Saves Session
   - Per-pane resource limits (memory/CPU)
 - **Dependencies**: `llama-ui-models`, `llama-ui-session`, `llama-ui-sandbox-client`, `common`, `error`, `iced`, `tokio`
 - **Tests**: Unit tests for model picker rendering
+
+#### `llama-ui-core` (Shared UI Types)
+- **Responsibility**: Shared UI types, theme, and error types for the desktop GUI
+- **Key Types**: Theme configuration, UI error types, shared component types
+- **Dependencies**: `error`
+- **Tests**: Unit tests for theme and type definitions
 
 #### `llama-ui-models` (Model Discovery)
 - **Responsibility**: Scan for GGUF files, extract metadata, build manifest
