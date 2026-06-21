@@ -4,6 +4,8 @@
 //! crates in the workspace, extracted to avoid duplication and circular
 //! dependencies.
 
+#![deny(missing_docs)]
+
 use memmap2::Mmap;
 use std::sync::Arc;
 use thiserror::Error;
@@ -11,8 +13,14 @@ use thiserror::Error;
 /// Error types for core operations.
 #[derive(Debug, Error)]
 pub enum CoreError {
+    /// Tensor data extends beyond the memory-mapped file bounds.
     #[error("tensor data extends beyond mmap (need {need}, have {have})")]
-    MmapBoundsExceeded { need: usize, have: usize },
+    MmapBoundsExceeded {
+        /// Required number of bytes.
+        need: usize,
+        /// Available number of bytes in the mmap.
+        have: usize,
+    },
 }
 
 // ... rest of file ...
