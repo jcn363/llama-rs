@@ -10,6 +10,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
 use futures::SinkExt;
+use futures::StreamExt;
 use iced::keyboard;
 use iced::keyboard::key::Named as NamedKey;
 use iced::stream;
@@ -254,8 +255,6 @@ pub enum AppState {
 /// Messages that update the application state.
 #[derive(Debug, Clone)]
 pub enum Message {
-    /// Model selected from picker.
-    ModelSelected(usize),
     /// Start first chat pane with selected model.
     StartChat,
     /// Send message on a pane.
@@ -319,29 +318,19 @@ pub enum Message {
     ModelPickerSelected(usize),
     /// Browse for a GGUF file to add.
     BrowseModel,
-    /// Samplers updated successfully (status display).
-    SamplersUpdated,
     /// System prompt changed on a pane.
     SystemPromptChanged(usize, String),
     /// Toggle system prompt editor visibility.
     ToggleSystemPrompt(usize),
     /// Start a new chat (reset session) on a pane without restarting server.
     NewChat(usize),
+    /// Return to the model picker view from an error or settings screen.
+    BackToModelPicker,
 }
 
 /// Update the application state.
 pub fn update(state: &mut LlamaApp, message: Message) -> Task<Message> {
     match message {
-        // ─── Model selection ─────────────────────────────────
-        Message::ModelSelected(idx) => {
-            // Update model in all panes that use this index
-            for p in &mut state.panes {
-                p.selected_model = idx;
-                // Don't restart sandbox — user must start a new chat
-            }
-            Task::none()
-        }
-
         // ─── Start chat: spawn first pane's sandbox ──────────
         Message::StartChat => {
             if state.models.is_empty() {
@@ -423,7 +412,8 @@ pub fn update(state: &mut LlamaApp, message: Message) -> Task<Message> {
             state.status = format!("Pane {} generating...", pane);
 
             if p.use_streaming {
-                // Streaming mode: add placeholder message and trigger subscription
+                // Streaming mode: add placeholder assistant message and let
+                // `pane_subscription` handle the actual SSE request.
                 p.session.add_message(ChatMessage {
                     role: Role::Assistant,
                     content: String::new(),
@@ -431,69 +421,9 @@ pub fn update(state: &mut LlamaApp, message: Message) -> Task<Message> {
                     token_count: None,
                 });
                 p.is_streaming = true;
-                let addr = p.server_address.clone();
-                let cancelled = p.cancelled.clone();
-                let temperature = p.temperature;
-                let top_k = p.top_k;
-                let top_p = p.top_p;
-                let repeat_penalty = p.repeat_penalty;
-
-                let prompt = build_prompt(&p.session.messages, None);
-
-                Task::perform(
-                    async move {
-                        let client = reqwest::Client::new();
-                        let resp = client
-                            .post(format!("{}/completion", addr))
-                            .json(&serde_json::json!({
-                                "prompt": prompt,
-                                "max_tokens": 512,
-                                "stream": true,
-                                "temperature": temperature,
-                                "top_k": top_k,
-                                "top_p": top_p,
-                                "repeat_penalty": repeat_penalty,
-                            }))
-                            .send()
-                            .await
-                            .map_err(|e| e.to_string())?;
-                        let mut byte_stream = resp.bytes_stream();
-                        let mut full_content = String::new();
-                        use futures::StreamExt;
-                        while let Some(chunk) = byte_stream.next().await {
-                            if cancelled.load(Ordering::Relaxed) {
-                                break;
-                            }
-                            match chunk {
-                                Ok(bytes) => {
-                                    let text = String::from_utf8_lossy(&bytes);
-                                    for line in text.lines() {
-                                        if let Some(data) = line.strip_prefix("data: ") {
-                                            if let Ok(val) =
-                                                serde_json::from_str::<serde_json::Value>(data)
-                                            {
-                                                if val["stop"].as_bool().unwrap_or(false) {
-                                                    return Ok::<String, String>(full_content);
-                                                }
-                                                if let Some(content) = val["content"].as_str() {
-                                                    full_content.push_str(content);
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                                Err(_) => break,
-                            }
-                        }
-                        Ok::<String, String>(full_content)
-                    },
-                    move |result| match result {
-                        Ok(content) => Message::CompletionReceived(pane, content),
-                        Err(e) => Message::Error(e),
-                    },
-                )
+                Task::none()
             } else {
-                // Non-streaming mode
+                // Non-streaming mode: one-shot request via Task::perform
                 let prompt = build_prompt(&p.session.messages, None);
 
                 let addr = p.server_address.clone();
@@ -871,7 +801,6 @@ pub fn update(state: &mut LlamaApp, message: Message) -> Task<Message> {
             }
             Task::none()
         }
-        Message::SamplersUpdated => Task::none(),
         Message::SystemPromptChanged(pane, text) => {
             if pane < state.panes.len() {
                 state.panes[pane].system_prompt = text;
@@ -901,43 +830,19 @@ pub fn update(state: &mut LlamaApp, message: Message) -> Task<Message> {
             state.status = format!("Pane {} — new chat started.", pane);
             Task::none()
         }
+        Message::BackToModelPicker => {
+            state.state = AppState::ModelPicker;
+            state.status = String::new();
+            Task::none()
+        }
     }
 }
 
-/// Send the current sampler config to the pane's server.
-fn fire_update_sampler(state: &LlamaApp, pane: usize) -> Task<Message> {
-    if pane >= state.panes.len() || state.panes[pane].server_address.is_empty() {
-        return Task::none();
-    }
-    let p = &state.panes[pane];
-    let addr = p.server_address.clone();
-    let temperature = p.temperature;
-    let top_k = p.top_k;
-    let top_p = p.top_p;
-    let repeat_penalty = p.repeat_penalty;
-
-    Task::perform(
-        async move {
-            let client = reqwest::Client::new();
-            let resp = client
-                .post(format!("{}/samplers", addr))
-                .json(&serde_json::json!({
-                    "temperature": temperature,
-                    "top_k": top_k,
-                    "top_p": top_p,
-                    "repeat_penalty": repeat_penalty,
-                }))
-                .send()
-                .await
-                .map_err(|e| e.to_string())?;
-            let body: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
-            Ok::<String, String>(body.to_string())
-        },
-        |result| match result {
-            Ok(_) => Message::SamplersUpdated,
-            Err(e) => Message::Error(e),
-        },
-    )
+/// Sampler values are embedded in each `/completion` request, so there is
+/// no need to push them server-side.  The server's `GET /samplers` endpoint
+/// is informational only.
+fn fire_update_sampler(_state: &LlamaApp, _pane: usize) -> Task<Message> {
+    Task::none()
 }
 
 /// Open a save-dialog and call the given export function on the active pane's session.
@@ -1021,7 +926,6 @@ fn pane_subscription(pane: usize, p: &ChatPane) -> Subscription<Message> {
                 {
                     Ok(response) => {
                         let mut byte_stream = response.bytes_stream();
-                        use futures::StreamExt;
                         while let Some(chunk) = byte_stream.next().await {
                             if cancelled.load(Ordering::Relaxed) {
                                 break;
@@ -1100,7 +1004,10 @@ pub fn subscription(state: &LlamaApp) -> Subscription<Message> {
         subs.push(pane_subscription(i, p));
     }
     match subs.len() {
-        1 => subs.into_iter().next().unwrap(),
+        1 => subs
+            .into_iter()
+            .next()
+            .expect("infallible: len was just checked as 1"),
         _ => Subscription::batch(subs),
     }
 }
@@ -1293,7 +1200,7 @@ fn render_pane(state: &LlamaApp, pane: usize) -> Element<'_, Message> {
             children.push(
                 iced::widget::text(warning)
                     .size(13)
-                    .color(context_usage_color(pct * 100.0))
+                    .color(context_usage_color(pct))
                     .into(),
             );
         }
@@ -1690,7 +1597,7 @@ fn view_error(err: &str) -> Element<'_, Message> {
             iced::widget::text("").size(16).into(),
             button(iced::widget::text("Back to Model Picker").size(16))
                 .style(llama_ui_core::theme::primary_button_style)
-                .on_press(Message::ModelSelected(0))
+                .on_press(Message::BackToModelPicker)
                 .padding(iced::Padding::from([10, 20]))
                 .into(),
         ])
@@ -1717,7 +1624,7 @@ fn view_settings(state: &LlamaApp) -> Element<'_, Message> {
 
     // System info section
     children.push(
-        iced::widget::text("No models found. Add a GGUF model:")
+        iced::widget::text("System Info")
             .size(16)
             .color(colors::GRAY)
             .into(),

@@ -127,8 +127,9 @@ Accessible from any chat pane via the "Settings" button.
 |-----|--------|
 | `Escape` | Close settings panel / return to chat |
 | `F11` | Toggle full-screen mode |
+| `Ctrl+N` | Start a new chat on the active pane |
+| `Ctrl+E` | Export session as JSON |
 | `Enter` | Send message (in active text input) |
-| `Ctrl+Enter` | Send message (same as Enter) |
 
 ## Streaming Modes
 
@@ -158,7 +159,7 @@ Each pane has independent sampling controls via sliders:
 | Top-p (P) | 0.00 – 1.00 | 0.95 | Nucleus sampling threshold; 1.0 = disabled |
 | Repeat Penalty (RP) | 1.00 – 2.00 | 1.10 | Penalty for repeated tokens; 1.0 = no penalty |
 
-Changes are applied to the server in real-time via the `/samplers` endpoint.
+Sampler values are included in each completion request; the server's `/samplers` endpoint is informational only.
 
 ## Resource Limits
 
@@ -232,7 +233,7 @@ Each pane has an editable system prompt:
 - Each pane operates independently — you can compare two models simultaneously
 - Resource limits apply per-pane
 
-**Note:** Dual-pane mode is available via the `AddPane` message (code-level API). The UI may not expose a direct button for this in all versions.
+**Note:** A second pane can be added by starting a new chat from the model picker while one pane is already active.
 
 ## Sandbox Server Management
 

@@ -1,4 +1,21 @@
-#![allow(missing_docs)]
+//! GGUF v3 file format parser with memory-mapped I/O.
+//!
+//! This crate handles reading the GGUF (GGML Universal Format) file format
+//! used to store quantized/trained models. It provides a memory-mapped reader
+//! (`GgufReader`) with metadata accessors, tensor info lookup, and
+//! dequantization support for all standard quantization types.
+//!
+//! # Example
+//!
+//! ```no_run
+//! use gguf::GgufReader;
+//!
+//! let reader = GgufReader::from_file("model.gguf").unwrap();
+//! let n_layers = reader.get_usize("llama.block_count").unwrap();
+//! println!("Model has {} layers", n_layers);
+//! ```
+
+#![deny(missing_docs)]
 use memmap2::Mmap;
 use std::sync::Arc;
 
