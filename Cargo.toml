@@ -45,7 +45,6 @@ error = { path = "crates/error" }
 llama-ui-models = { path = "crates/llama-ui-models" }
 llama-ui-session = { path = "crates/llama-ui-session" }
 llama-ui-sandbox-client = { path = "crates/llama-ui-sandbox-client" }
-# llama-ui = { path = "crates/llama-ui" }
 llama-ui-core = { path = "crates/llama-ui-core" }
 
 # External dependencies
@@ -60,7 +59,6 @@ bytemuck = "1"
 half = { version = "2.3", features = ["bytemuck"] }
 bumpalo = "3"
 cudarc = { version = "0.19", default-features = true }
-byteorder = "1"
 memmap2 = "0.9"
 criterion = { version = "0.5", features = ["html_reports"] }
 anyhow = "1"
@@ -74,6 +72,4 @@ llama-ui = { path = "crates/llama-ui" }
 reqwest = { version = "0.12", features = ["stream", "json"] }
 toml = "0.5"
 futures = "0.3"
-tokio-stream = "0.1"
-tower = "0.5"
 tower-http = { version = "0.6", features = ["cors"] }

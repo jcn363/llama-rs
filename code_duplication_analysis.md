@@ -9,10 +9,10 @@ Analysis of the llama-rs workspace reveals several opportunities for code consol
 ### 1. Error Handling (High Priority - Critical Duplication)
 
 **Current State:**
-- Central error type defined in `crates/common/src/lib.rs` (28 lines)
-- `crates/error/src/lib.rs` simply re-exports common error (1 line)
-- **But** 6+ crates define their own error types using `thiserror::Error`:
-  - `llama-core`: `CoreError` (1 variant)
+- Central error type defined in `crates/error/src/lib.rs` (25+ lines, 8 variants)
+- `crates/common/src/lib.rs` re-exports `error::Error` and `error::Result` (2 lines)
+- **But** 5+ crates define their own error types using `thiserror::Error`:
+  - `llama-ui-session`: `ExportError` (2 variants)
   - `llama-ui-session`: `ExportError` (2 variants)
   - `llama-ui-sandbox-client`: `SandboxError` (6 variants)
   - `gguf`: `GgufError` (7 variants)
@@ -46,7 +46,7 @@ gguf::GgufError::Io(#[from] io::Error)                       // Line 11
 
 **Current State:**
 - `crates/config/src/lib.rs`: Defines `Config` (CLI) and `UiConfig` (GUI)
-- `crates/llama-ui-session/src/lib.rs`: Defines `SamplerConfigSnapshot` (lines 54-77)
+- `crates/llama-ui-session/src/lib.rs`: Flattens `common::SamplingConfig` (not a separate type)
 
 **Duplication Examples:**
 Identical sampling configuration fields:

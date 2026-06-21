@@ -14,7 +14,6 @@ ggml-cpu = { workspace = true }
 ggml-cuda = { workspace = true, optional = true }
 gguf = { workspace = true }
 common = { workspace = true }
-thiserror = { workspace = true }
 tracing = { workspace = true }
 rayon = { workspace = true }
 serde = { workspace = true, features = ["derive"] }

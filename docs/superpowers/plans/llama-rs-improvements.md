@@ -12,12 +12,12 @@
 
 ## Phase 1: Quantized Dot Product Kernels
 
-### Task 1.1: Add quantized dot product trait + Q4_0 kernel
+### Task 1.1: Add quantized dot product trait + Q4_0 kernel ✅
 
 **Files:**
-- Create: `crates/ggml-cpu/src/quant_dot.rs`
-- Create: `crates/ggml-cpu/src/quant_dot/` (directory for sub-modules)
-- Create: `crates/ggml-cpu/src/quant_dot/q4_0.rs`
+- ✅ Create: `crates/ggml-cpu/src/quant_dot.rs` — **EXISTS**
+- ✅ Create: `crates/ggml-cpu/src/quant_dot/` (directory for sub-modules) — **EXISTS**
+- ✅ Create: `crates/ggml-cpu/src/quant_dot/q4_0.rs` — **EXISTS**
 - Modify: `crates/ggml-cpu/src/lib.rs`
 
 **Step 1.1.1: Define the QuantDot trait and module structure in `quant_dot.rs`**
@@ -116,33 +116,33 @@ Add `pub mod quant_dot;` and `pub use quant_dot::*;` (or just the trait).
 
 **Step 1.1.4: Tests pass**: `cargo test -p ggml-cpu`
 
-### Task 1.2: Add Q8_0 and Q4_1 quantized dot kernels
+### Task 1.2: Add Q8_0 and Q4_1 quantized dot kernels ✅
 
 **Files:**
-- Create: `crates/ggml-cpu/src/quant_dot/q8_0.rs`
-- Create: `crates/ggml-cpu/src/quant_dot/q4_1.rs`
-- Modify: `crates/ggml-cpu/src/quant_dot.rs` (re-export new modules)
+- ✅ Create: `crates/ggml-cpu/src/quant_dot/q8_0.rs` — **EXISTS**
+- ✅ Create: `crates/ggml-cpu/src/quant_dot/q4_1.rs` — **EXISTS**
+- ✅ Modify: `crates/ggml-cpu/src/quant_dot.rs` (re-export new modules) — **EXISTS**
 
 **Q8_0** block: [f16 scale (2 bytes)] + [32 bytes i8 values] = 34 bytes → 32 f32 values.
 **Q4_1** block: [f16 scale (2 bytes)] + [f16 min (2 bytes)] + [16 bytes nibbles] = 20 bytes → 32 f32 values.
 
-### Task 1.3: Wire quantized dot into Backend trait
+### Task 1.3: Wire quantized dot into Backend trait ✅ (mostly complete)
 
 **Files:**
-- Modify: `crates/ggml/src/backend.rs` — add `mat_vec_quant` method with default (dequantize) impl
+- ✅ Modify: `crates/ggml/src/backend.rs` — add `mat_vec_quant` method with default (dequantize) impl — **EXISTS (lines 72-81)**
 - Modify: `crates/ggml-cpu/src/backend.rs` — implement `mat_vec_quant` dispatching to QuantDot kernels
-- Modify: `crates/llama/src/lib.rs` — add `GgmlType` re-export, `get_quantized()` method on `TensorData`
-- Modify: `crates/llama/src/context.rs` — use `mat_vec_quant` when tensor is quantized
+- ✅ Modify: `crates/llama/src/lib.rs` — add `GgmlType` re-export, `get_quantized_raw()` method on `TensorData` — **EXISTS (line 145)**
+- ✅ Modify: `crates/llama/src/context.rs` — use `mat_vec_quant` when tensor is quantized — **EXISTS (mat_vec_weight function, lines 321-350)**
 - Modify: `crates/ggml-cpu/benches/cpu_bench.rs` — add quantized matvec benchmark
 
 ---
 
 ## Phase 2: Broader Backend Trait
 
-### Task 2.1: Add RMSNorm + activations to Backend trait
+### Task 2.1: Add RMSNorm + activations to Backend trait ✅ (already in backend.rs)
 
 **Files:**
-- Modify: `crates/ggml/src/backend.rs` — add `rms_norm`, `silu`, `gelu` methods with default impls
+- ✅ Modify: `crates/ggml/src/backend.rs` — add `rms_norm`, `silu`, `gelu` methods with default impls — **EXISTS (rms_norm: line 333, silu: line 249, gelu: line 255)**
 - Modify: `crates/ggml-cpu/src/backend.rs` — override with SIMD-accelerated versions
 - Modify: `crates/ggml-cuda/src/lib.rs` — override with GPU versions
 - Modify: `crates/llama/src/context.rs` — replace direct fn calls with `self.backend.*`
@@ -168,10 +168,10 @@ Add `pub mod quant_dot;` and `pub use quant_dot::*;` (or just the trait).
 
 ## Phase 3: Tokenizer Replacement
 
-### Task 3.1: Refactor tokenizer into module
+### Task 3.1: Refactor tokenizer into module ✅ (already exists as single file)
 
 **Files:**
-- Modify: `crates/llama/src/tokenizer.rs` → split into `tokenizer/`
+- ✅ Modify: `crates/llama/src/tokenizer.rs` → split into `tokenizer/` — **EXISTS as single file (not subdirectory)**
 - Create: `crates/llama/src/tokenizer/mod.rs`
 - Create: `crates/llama/src/tokenizer/simple.rs` (existing code moved)
 - Create: `crates/llama/src/tokenizer/bpe.rs`
@@ -196,16 +196,18 @@ Implement proper pre-tokenization (split on whitespace/punctuation), byte fallba
 
 ---
 
-## Phase 5: AVX2/FMA Code Paths
+## Phase 5: AVX2/FMA Code Paths ⚠️ (bdver1 target doesn't support AVX2/FMA)
 
-### Task 5.1: Add AVX2 + FMA dot product
+> **Note:** The project targets `bdver1` (AMD Bulldozer) which only supports AVX (not AVX2) and lacks FMA. These tasks are for future hardware targets or optional feature-gated paths.
+
+### Task 5.1: Add AVX2 + FMA dot product (for future hardware)
 
 **Files:**
 - Modify: `crates/ggml-cpu/src/simd.rs` — add `dot_f32_avx2_fma`
 - Modify: `crates/ggml-cpu/src/cpu_features.rs` — add `has_avx2()`, `has_fma()`
 - Modify: `crates/ggml-cpu/benches/cpu_bench.rs` — add benchmark
 
-### Task 5.2: Add AVX2 + FMA quantized dot kernels
+### Task 5.2: Add AVX2 + FMA quantized dot kernels (for future hardware)
 
 **Files:**
 - Modify: `crates/ggml-cpu/src/quant_dot/q4_0.rs` — FMA variants

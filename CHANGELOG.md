@@ -23,7 +23,7 @@ All notable changes to this project will be documented in this file.
 - `debian/control`: updated Maintainer, Build-Depends, Standards-Version, removed unused GTK/X11 deps.
 - `debian/rules`: added `override_dh_strip` to suppress automatic dbgsym.
 - `debian/install`: added `llama-ui` binary.
-- `AGENTS.md`: updated workspace members to match actual 16-crate layout.
+- `AGENTS.md`: updated workspace members to match actual 17-crate layout.
 - README: corrected `.deb` filename to `0.1.0-1` revision.
 - `llama-cli` and `llama-server` now use `common::args::CommonArgs` via `#[clap(flatten)]`.
 - Both binaries depend on `config` and `error` crates.
@@ -40,7 +40,7 @@ All notable changes to this project will be documented in this file.
 - GUI: Enhanced pane header showing model name and controls.
 - GUI: Send button shows streaming mode indicator.
 - GUI: Improved chat message display with "Generating..." placeholder for in-progress responses.
-- Documentation: Fixed workspace member count (16 crates).
+- Documentation: Fixed workspace member count (17 crates).
 - Documentation: Fixed ARCHITECTURE.md directory structure to list all crates.
 - Documentation: Fixed CONTRIBUTING.md with correct repository URL.
 

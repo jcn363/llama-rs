@@ -1,13 +1,29 @@
 # llama‑rs Usage Guide
 
 ## Overview
-`llama-rs` provides a Rust implementation of LLaMA‑style language models with optional CUDA acceleration. The workspace is a Cargo workspace with several crates:
-- `ggml` – core tensor library (CPU only)
-- `ggml-cpu` – CPU‑only backend
-- `ggml-cuda` – CUDA‑accelerated backend
-- `llama` – high‑level model API (inference, profiling, KV‑cache)
-- `llama-cli` – command‑line interface
-- `llama-server` – HTTP server exposing the model
+`llama-rs` provides a Rust implementation of LLaMA‑style language models with optional CUDA acceleration. The workspace is a Cargo workspace with 17 crates:
+
+**Foundation Layer:**
+- `error` – unified error handling
+- `config` – configuration management
+- `gguf` – GGUF v3 file parser with memory-mapped I/O
+- `ggml` – core tensor types, computation graph, `Backend` trait
+- `ggml-cpu` – CPU backend (AVX/SSE4.2 SIMD matmul)
+- `ggml-cuda` – CUDA backend (cuBLAS matmul, requires CUDA toolkit)
+- `llama-core` – core inference traits and shared types (`Model`, `InferenceContext`, `KvCache`)
+
+**Inference Layer:**
+- `llama` – inference engine (transformer forward pass, attention, KV cache, sampling)
+- `common` – shared utilities (sampling config, chat templates, argument parsing)
+
+**Application Layer:**
+- `llama-cli` – interactive CLI binary
+- `llama-server` – HTTP REST API server (Axum, SSE streaming)
+- `llama-ui-core` – shared UI types, theme, error types
+- `llama-ui-models` – model discovery, manifest, GGUF metadata extraction
+- `llama-ui-session` – chat history, session persistence, export (JSON/MD/plain)
+- `llama-ui-sandbox-client` – sandboxed server spawning with resource limits
+- `llama-ui` – desktop GUI (Iced 0.13, multi-pane chat)
 
 ## Building
 ```bash
@@ -31,7 +47,18 @@ cargo build --release --no-default-features -p ggml-cuda
 - `-n` – number of tokens to generate.
 
 ### Batch inference
-The `Model` struct now exposes `run_batch(prompts: &[&str]) -> Vec<String>` which runs each prompt sequentially using the existing `infer` implementation. This is a placeholder for true batched inference; it provides a convenient API for callers that need to process many prompts.
+The `Model` struct exposes `run_batch(self, prompts: &[&str]) -> Vec<Vec<usize>>` which runs each prompt sequentially using `InferenceContext::generate()`. This consumes the model and returns token ID sequences (not decoded strings). For streaming or repeated generation, use `InferenceContext` directly:
+
+```rust
+let model = Arc::new(Model::load_from_gguf("model.gguf", false)?);
+let mut ctx = InferenceContext::new(model, ModelConfig::default());
+let tokens = ctx.generate("Your prompt", 128)?;           // Returns Vec<usize>
+let text = ctx.decode(&tokens);                           // Decode to String
+
+// Or generate from pre-encoded tokens (for prefix caching):
+let prompt_tokens = ctx.encode("Your prompt");
+let new_tokens = ctx.generate_from_tokens(&prompt_tokens, 128)?;
+```
 
 ## Server mode
 ```bash
@@ -47,15 +74,23 @@ and returns a JSON response with the generated text.
 `ProfileResult` now implements `serde::Serialize`/`Deserialize` and provides a `to_json(&self) -> String` helper. The profiling benchmark (`crates/llama/benches/profiling.rs`) checks that the JSON round‑trip works.
 
 ## KV‑Cache strategies
-`KvCacheManager` supports three strategies:
+`KvCacheManager` supports four strategies via the `CacheStrategy` enum:
 - `Full` – store the entire context (default).
+- `Prefix` – prefix caching: trim during generation for long contexts, keeping common prefix.
 - `SlidingWindow { size: usize }` – keep only the most recent `size` tokens.
-- `PrefixOnly` – keep only the prompt prefix, discarding generated tokens.
-Create a manager with a custom strategy:
+- `PrefixOnly` – keep only the initial prompt prefix, discarding generated tokens.
+
+Create a manager with a custom strategy (requires all cache dimensions):
 ```rust
-let manager = KvCacheManager::with_strategy(CacheStrategy::SlidingWindow { size: 1024 });
+let manager = KvCacheManager::with_strategy(
+    n_layers,      // number of transformer layers
+    max_seq,       // maximum sequence length
+    n_head_kv,     // number of key/value heads (GQA/MQA)
+    head_dim,      // dimension per head
+    CacheStrategy::SlidingWindow { size: 1024 },
+);
 ```
-The manager automatically enforces the strategy after each push.
+The strategy is configured via `ModelConfig::cache_strategy` and applied automatically during `InferenceContext::generate()`.
 
 ## Benchmarks
 - **CPU backend**: `crates/ggml-cpu/benches/cpu_bench.rs`

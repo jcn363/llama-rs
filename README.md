@@ -25,7 +25,7 @@ A Rust port of [llama.cpp](https://github.com/ggml-org/llama.cpp), optimized for
 | [Contributing](CONTRIBUTING.md)    | Build, test, lint commands; contribution workflow                                              |
 | [Security](SECURITY.md)            | Threat model and vulnerability reporting                                                       |
 
-The workspace splits concerns across 16 domain crates, each handling a specific subsystem:
+The workspace splits concerns across 17 domain crates, each handling a specific subsystem:
 
 ```text
 llama-rs/
@@ -51,7 +51,7 @@ llama-rs/
 ├── test-models/       # Test GGUF files (downloaded separately, gitignored)
 ├── media/             # Visual identity system and design assets
 ├── debian/            # Debian packaging files
-├── Cargo.toml         # Workspace root (16 members)
+├── Cargo.toml         # Workspace root (17 members)
 ├── rustfmt.toml       # Formatting: max_width=100, 4-space indent
 └── deny.toml          # License policy (MIT, Apache-2.0, Unlicense)
 ```
@@ -138,7 +138,7 @@ A native Rust desktop application for interactive LLM inference with a polished,
 ### Building llama-ui
 
 ```bash
-# Build the UI (requires iced 0.13.1)
+# Build the UI (requires iced 0.13)
 cargo build -p llama-ui --release
 
 # Run the UI
@@ -170,7 +170,7 @@ See [Architecture & Major Crates](docs/architecture_and_crates.md) for a detaile
 
 The UI is built on:
 
-- **`llama-ui`** — Main application (iced 0.13.1 function-based API)
+- **`llama-ui`** — Main application (iced 0.13 function-based API)
 - **`llama-ui-models`** — Model discovery and metadata
 - **`llama-ui-session`** — Chat history and export (JSON/MD/plain)
 - **`llama-ui-sandbox-client`** — Sandbox server spawning with resource limits
@@ -305,7 +305,7 @@ llama-server -m model.gguf [--host 127.0.0.1] [--port 8080]
 CUDA is enabled by default (requires NVIDIA GPU + CUDA toolkit). To build without CUDA:
 
 ```bash
-cargo build --release --no-default-features -p ggml-cuda
+cargo build --release --no-default-features
 ```
 
 ## Build Configuration
@@ -375,7 +375,7 @@ if !model_path.exists() {
 | 12    | ✅     | KV cache strategies (prefix caching, push_batch, O(1) reset)   |
 | 13    | ✅     | Parallel matmul threshold, configuration-driven design         |
 
-**95+ tests pass** across all crates (unit, integration, and doctests).
+**200+ tests pass** across all crates (unit, integration, and doctests).
 
 ## Debian Package
 

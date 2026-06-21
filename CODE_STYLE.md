@@ -199,7 +199,7 @@ fn inference_should_generate_tokens() {
 
 ### Clippy Configuration
 - No workspace-level lint config in `[workspace.lints]`
-- Only `ggml-cuda` enables `#![deny(clippy::pedantic)]` at the crate level
+- Only `ggml-cuda` enables `#![deny(clippy::pedantic)]` at the crate level (verified: `crates/ggml-cuda/src/lib.rs` line 24)
 - Individual crates may opt in or allow specific lints
 - CI runs `cargo clippy --workspace -- -D warnings` which treats all warnings as errors
 

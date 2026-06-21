@@ -3,9 +3,9 @@
 | Component | Crate / Library | Rationale |
 |-----------|----------------|-----------|
 | Core LLM inference | `crates/llama` | Existing — GGUF loader, sampler, inference loop. |
-| HTTP/REST sandbox IPC | `crates/llama-server` (extended in M2) | Already has `/completion` (SSE + non‑streaming), `/health`, `/v1/models`, CORS, graceful shutdown, `tokens_per_sec` metrics, structured error responses, CLI sampler params, `CacheStrategy` support. Needs fixes (§1 issues #2, #4, #5). |
+| HTTP/REST sandbox IPC | `crates/llama-server` (extended in M2) | Already has `/completion` (SSE + non‑streaming), `/health`, `/v1/models`, CORS, graceful shutdown, `tokens_per_sec` metrics, structured error responses, CLI sampler params, `CacheStrategy` support. All known issues fixed (§1 issues #2, #4, #5 ✅). |
 | GUI framework | **`iced`** (recommended, confirmed in M0) | Cross‑platform Rust; built‑in `Subscription` for SSE streaming, async commands for background work. |
-| Backend detection & selection | `crates/llama-ui::backend` (single module) | Probe `nvidia-smi`, `BackendType::Cuda`; pass `--backend` to `llama-server`. Detection + dropdown combined. |
+| Backend detection & selection | `crates/llama-ui/src/app.rs` (inline) | Probe `nvidia-smi`, `BackendType::Cuda`; pass `--backend` to `llama-server`. Detection + dropdown combined in `app.rs`. |
 | Model management | **New** `crates/llama-ui-models` | Download, manifest, scanning, GGUF metadata extraction. |
 | Session persistence & export | **New** `crates/llama-ui-session` | Chat history, prompt templates, serialisation (JSON/MD/plain). |
 | Chat template rendering | **Extended** `crates/common` | Already has `minijinja` dep. Add `chat_templates` module. Shared across CLI, server, GUI. |
